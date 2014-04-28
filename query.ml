@@ -350,8 +350,10 @@ struct
           `Record
             (List.map (fun (l, v) -> (l, stitch_new v (StringMap.find l fts))) fs)
         | `Record [("1", `Int a); ("2", `Int d)], `List (t, m) ->
-          `List (List.map (fun w -> stitch_new w t) 
-		   (lookup (Num.int_of_num a, Num.int_of_num d) m))
+          (*`List (List.map (fun w -> stitch_new w t) 
+		   (lookup (Num.int_of_num a, Num.int_of_num d) m))*)
+          `List (List.fold_left (fun l w -> stitch_new w t::l) [] 
+		   (lookup (Num.int_of_num a, Num.int_of_num d) m))       
         | _, _ -> assert false
 
   let stitch_mapped_query : Value.t list IntPairMap.t package -> Value.t = 
@@ -836,8 +838,8 @@ struct
                     (bs, tailcomp)
               | `Rec defs ->
                   eval_error "Recursive function"
-              | `Alien _ 
-              | `Alias _ -> (* just skip it *)
+(*              | `Alias _ *)
+              | `Alien _ -> (* just skip it *)
                   computation env (bs, tailcomp)
               | `Module _ -> failwith "Not implemented modules yet"
           end
