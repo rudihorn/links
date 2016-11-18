@@ -191,88 +191,88 @@ OCamlGeneratedFiles($(GENFILES))
 
 OPC[] =
   cgi
-  netencoding
-  unionfind
   getopt
+  netencoding
   PP
+  unionfind
 
 
 FILES[] =
   $(OPC)
-  notfound
-  utility
-  env
-  settings
+  $(DB_CODE)
   basicsettings
-  debug
-  performance
-  graph
-  types
-  constant
-  sourceCode
-  regex
-  sugartypes
-  parser
-  lexer
-  typeUtils
-  errors
-  instantiate
-  generalise
-  typevarcheck
-  unify
-  var
-  ir
-  tables
-  closures
-  parse
-  sugarTraversals
-  moduleUtils
+  buildTables
   chaser
-  desugarModules
-  desugarDatatypes
-  defaultAliases
-  value
-  eventHandlers
-  xmlParser
-  xmlLexer
-  parseXml
-  resolvePositions
-  refineBindings
-  desugarLAttributes
-  transformSugar
-  fixTypeAbstractions
-  desugarPages
-  desugarFormlets
-  desugarRegexes
-  desugarFors
-  desugarDbs
-  desugarFuns
-  desugarProcesses
-  desugarInners
-  desugarCP
-  typeSugar
   checkXmlQuasiquotes
-  frontend
-  dumpTypes
+  closures
   compilePatterns
-  proc
-  jsonparse
-  jsonlex
+  constant
+  database
+  debug
+  defaultAliases
+  desugarCP
+  desugarDatatypes
+  desugarDbs
+  desugarFormlets
+  desugarFors
+  desugarFuns
+  desugarInners
+  desugarLAttributes
+  desugarModules
+  desugarPages
+  desugarProcesses
+  desugarRegexes
+  dumpTypes
+  env
+  errors
+  evalir
+  eventHandlers
+  fixTypeAbstractions
+  frontend
+  generalise
+  graph
+  instantiate
+  ir
+  irtojs
   js
   json
-  database
-  linksregex
+  jsonlex
+  jsonparse
+  lexer
   lib
-  sugartoir
+  links
+  linksregex
   loader
-  $(DB_CODE)
-  irtojs
+  moduleUtils
+  notfound
+  parse
+  parseXml
+  parser
+  performance
+  proc
   query
   queryshredding
-  evalir
-  buildTables
+  refineBindings
+  regex
+  resolvePositions
+  settings
+  sourceCode
+  sugarTraversals
+  sugartoir
+  sugartypes
+  tables
+  transformSugar
+  typeSugar
+  typeUtils
+  types
+  typevarcheck
+  unify
+  utility
+  value
+  var
   webif
-  links
+  xmlLexer
+  xmlParser
 PROGRAM = links
 
 #OCAML_LIBS +=unix.cma
