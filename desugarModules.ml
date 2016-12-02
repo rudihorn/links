@@ -40,16 +40,16 @@ let get_fq_resolved_decl decl_name sg u_ast =
  *
  * If the resolution is ambiguous, then the function will raise an error.
  * *)
-let resolve name sg u_ast =
-  match ScopeGraph.resolve_reference name sg u_ast with
+let resolve name resolver scope_graph u_ast =
+  match resolver#resolve_reference name with
     | `UnsuccessfulResolution ->
         (* failwith ("Resolution of " ^ name ^ " was unsuccessful"); *)
         Uniquify.lookup_var name u_ast
     | `SuccessfulResolution decl_name ->
         (* printf "Successful resolution of name %s: %s\n" name decl_name; *)
-        get_fq_resolved_decl decl_name sg u_ast
+        get_fq_resolved_decl decl_name scope_graph u_ast
     | `AmbiguousResolution decl_names ->
-        let plain_names = List.map (fun n -> get_fq_resolved_decl n sg u_ast) decl_names in
+        let plain_names = List.map (fun n -> get_fq_resolved_decl n scope_graph u_ast) decl_names in
         failwith ("Error: ambiguous resolution for " ^ name ^ ":" ^ (print_list decl_names))
 
 
@@ -100,10 +100,9 @@ object(self)
 end
 
 
-let perform_type_renaming type_scope_graph unique_ast =
+let perform_type_renaming resolver type_scope_graph unique_ast =
   object(self)
     inherit SugarTraversals.map as super
-
     method bindingnode = function
       | `Type (n, tvs, dt) ->
         let plain_name =
@@ -113,15 +112,15 @@ let perform_type_renaming type_scope_graph unique_ast =
       | bn -> super#bindingnode bn
 
     method datatype = function
-      | `TypeApplication (n, args) ->
-          `TypeApplication (resolve n type_scope_graph unique_ast, args)
+      | `TypeApplication (name, args) ->
+            `TypeApplication (resolve name resolver type_scope_graph unique_ast, args)
       | `QualifiedTypeApplication (names, args) ->
           let name = get_last_list_value names in
-          `TypeApplication ((resolve name type_scope_graph unique_ast), args)
+          `TypeApplication (resolve name resolver type_scope_graph unique_ast, args)
       | dt -> super#datatype dt
   end
 
-let perform_renaming scope_graph unique_ast =
+let perform_renaming resolver scope_graph unique_ast =
 object(self)
   inherit SugarTraversals.map as super
 
@@ -138,12 +137,12 @@ object(self)
          * If it's not found, just put the plain one back in and the error will
          * be picked up later.*)
         (* printf "Attempting to resolve Var %s\n" name; *)
-        `Var (resolve name scope_graph unique_ast)
+        `Var (resolve name resolver scope_graph unique_ast)
     | `QualifiedVar names ->
         (* Only need to look at the final name here *)
         let name = get_last_list_value names in
         (* printf "Attempting to resolve (qualified) Var %s\n" name; *)
-        `Var (resolve name scope_graph unique_ast)
+        `Var (resolve name resolver scope_graph unique_ast)
     | pn -> super#phrasenode pn
 
   method datatype dt = dt
@@ -151,22 +150,29 @@ end
 
 
 let desugarModules scope_graph ty_scope_graph unique_ast =
-  let unique_prog = Uniquify.get_ast unique_ast in
   (*
+  printf "Starting module desugar\n";
+  printf "%!";
+  *)
+  let unique_prog = Uniquify.get_ast unique_ast in
   printf "Type Scope graph: %s\n" (ScopeGraph.show_scope_graph ty_scope_graph);
   printf "Scope graph: %s\n" (ScopeGraph.show_scope_graph scope_graph);
+  (*
   printf "Before module desugar: %s\n" (Sugartypes.Show_program.show unique_prog);
   printf "\n=============================================================\n";
   *)
+  let term_resolver = ScopeGraph.make_resolver scope_graph unique_ast in
   let desugared_terms_prog =
-    (perform_renaming scope_graph unique_ast)#program unique_prog in
+    (perform_renaming term_resolver scope_graph unique_ast)#program unique_prog in
   (*
   printf "After term desugar: %s\n" (Sugartypes.Show_program.show desugared_terms_prog);
   printf "\n=============================================================\n";
   *)
+  printf "starting type renaming\n%!";
+  let type_resolver = ScopeGraph.make_resolver ty_scope_graph unique_ast in
   let plain_prog =
-    (perform_type_renaming ty_scope_graph unique_ast)#program desugared_terms_prog in
-
+    (perform_type_renaming type_resolver ty_scope_graph unique_ast)#program desugared_terms_prog in
+  printf "got past type renaming\n%!";
   let o = (flatten_bindings ())#program plain_prog in
   let flattened_bindings = o#get_bindings in
   let flattened_prog = (flattened_bindings, snd plain_prog) in

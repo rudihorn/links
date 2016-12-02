@@ -43,9 +43,7 @@ endif
 
 AUXLIB_DIRS = $(DB_AUXLIBS)
 
-ifdef PROF
 OCAMLOPT := ocamlopt -p -inline 0
-endif
 
 #OCAMLYACC := menhir --infer --comment --explain --dump --log-grammar 1 --log-code 1 --log-automaton 2 --graph
 OCAMLYACC := ocamlyacc -v
@@ -90,8 +88,8 @@ SOURCES = $(OPC)                                \
           sugarTraversals.mli  sugarTraversals.ml       \
 					moduleUtils.mli moduleUtils.ml \
 					uniquify.mli uniquify.ml \
-					scopeGraph.mli scopeGraph.ml \
-					chaser.mli chaser.ml \
+					scopeGraph.ml \
+					chaser.ml \
 					desugarModules.mli desugarModules.ml \
           desugarDatatypes.mli desugarDatatypes.ml      \
           defaultAliases.ml                     \

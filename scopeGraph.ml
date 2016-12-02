@@ -35,7 +35,7 @@ type scope =
   { declarations : declset;
     references : StringSet.t;
     imports : StringSet.t;
-    parent_scope : scope_id option
+    parent_scope : scope_id option;
   }
 
 (* Name of a scope *)
@@ -50,13 +50,16 @@ type scope_graph =
     (* Maps references to the scopes which contain them *)
     reference_map : scope_id stringmap;
     (* Maps declarations to their fully-qualified paths *)
-    path_map : path stringmap
+    path_map : path stringmap;
+    (* Maps "thinned" names to plain names *)
+    thin_name_map : string stringmap
   }
 
 let new_scope_graph = {
   scope_map = IntMap.empty;
   reference_map = StringMap.empty;
-  path_map = StringMap.empty
+  path_map = StringMap.empty;
+  thin_name_map = StringMap.empty
 }
 
 type resolution_result = [
@@ -129,6 +132,9 @@ let add_decl_path decl_name path sg =
 let get_decl_path decl_name sg =
   StringMap.find decl_name sg.path_map
 
+let add_thinned_name thinned_name plain_name sg =
+  { sg with thin_name_map = StringMap.add thinned_name plain_name sg.thin_name_map }
+
 (* Given a declaration name and a path, creates a string of plain names.
  * For example, make_resolved_plain_name "x_1"  sg u_ast would result in
  *  A.B.C.x, assuming a mapping from x_1 |-> [A_2, B_3, C_4] in the sg's path map,
@@ -139,8 +145,12 @@ let make_resolved_plain_name decl_name sg u_ast =
   let plain_paths = List.map (fun p -> Uniquify.lookup_var p u_ast) decl_path in
   String.concat module_sep ((List.rev plain_paths) @ [plain_decl_name])
 
-(* Jettisoned (for now) type stuff. This will need to be in a separate graph.
-*)
+let make_thin_ref_name scope_id unique_name u_ast =
+  let plain_name = Uniquify.lookup_var unique_name u_ast in
+  sprintf "%s_%d" plain_name scope_id
+
+let lookup_thin_name thin_name sg =
+  StringMap.find thin_name sg.thin_name_map
 
 let rec get_last_list_element = function
   | [] -> failwith "empty list in get_last_list_element"
@@ -149,7 +159,7 @@ let rec get_last_list_element = function
 
 (* Superclass to handle SG mutations, references, and that sorta jazz *)
 
-class sg_fold init_sg_ref init_scope_id (init_path : string list) =
+class sg_fold init_sg_ref init_scope_id (init_path : string list) u_ast =
   object(self)
     inherit SugarTraversals.fold as super
     val sg = init_sg_ref
@@ -180,9 +190,12 @@ class sg_fold init_sg_ref init_scope_id (init_path : string list) =
       let sg_inst = !sg in
       let scope = lookup_scope scope_id sg_inst in
       (* Add reference to scope, and add mapping to containing scope *)
-      let scope = add_reference scope ref_name in
-      let sg_inst = add_ref_scope_mapping ref_name scope_id sg_inst in
+      let thin_ref_name = (make_thin_ref_name scope_id ref_name u_ast) in
+      let scope = add_reference scope thin_ref_name in
+      let sg_inst = add_ref_scope_mapping ref_name      scope_id sg_inst in
+      let sg_inst = add_ref_scope_mapping thin_ref_name scope_id sg_inst in
       let sg_inst = add_scope scope_id scope sg_inst in
+      let sg_inst = add_thinned_name thin_ref_name (Uniquify.lookup_var ref_name u_ast) sg_inst in
       sg := sg_inst
 
     method add_decl_to_scope decl path scope_id =
@@ -196,8 +209,11 @@ class sg_fold init_sg_ref init_scope_id (init_path : string list) =
     method add_import_to_scope import scope_id =
       let sg_inst = !sg in
       let scope = lookup_scope scope_id sg_inst in
-      let scope = add_import scope import in
+      let thin_import_name = (make_thin_ref_name scope_id import u_ast) in
+      let sg_inst = add_ref_scope_mapping thin_import_name scope_id sg_inst in
+      let scope = add_import scope thin_import_name in
       let sg_inst = add_scope scope_id scope sg_inst in
+      let sg_inst = add_thinned_name thin_import_name (Uniquify.lookup_var import u_ast) sg_inst in
       sg := sg_inst
 
     (* Qualified names *)
@@ -209,16 +225,15 @@ class sg_fold init_sg_ref init_scope_id (init_path : string list) =
       | x :: xs ->
           self#add_ref_to_scope x scope_id;
           let anon_scope_id = self#create_scope None in
-          (* CHECK: Does this also need to modify the path? *)
           self#add_import_to_scope x anon_scope_id;
           {< scope_id = anon_scope_id >}#qualified_name xs
   end
 
 
 
-class sg_term_fold init_sg_ref init_scope_id init_path =
+class sg_term_fold init_sg_ref init_scope_id init_path u_ast =
   object(self)
-    inherit sg_fold init_sg_ref init_scope_id init_path as super
+    inherit sg_fold init_sg_ref init_scope_id init_path u_ast as super
 
     method cases xs =
       self#list (fun _ (pat, phr) ->
@@ -277,13 +292,13 @@ class sg_term_fold init_sg_ref init_scope_id init_path =
    * differ to TL bindings since they aren't accessible by others. Here, we
    * follow the standard "define-before-use" scoping rules. *)
   (* At the top-level (and within modules), bindings are unordered sets. *)
-let rec binding_sg_fold init_sg_ref init_scope_id init_path =
+let rec binding_sg_fold init_sg_ref init_scope_id init_path u_ast =
   object (self)
-    inherit sg_term_fold init_sg_ref init_scope_id init_path as super
+    inherit sg_term_fold init_sg_ref init_scope_id init_path u_ast as super
     method phrasenode = function
       | `Block (bs, p) ->
           let block_scope_id = self#create_scope (Some scope_id) in
-          let o = phrase_sg_fold sg block_scope_id self#get_path in
+          let o = phrase_sg_fold sg block_scope_id self#get_path u_ast in
           let o = List.fold_left (fun o b -> (o#binding b)) o bs in
           let _ = o#phrase p in
           self
@@ -305,21 +320,21 @@ let rec binding_sg_fold init_sg_ref init_scope_id init_path =
            (* Add new declaration *)
            self#add_decl_to_scope (annotated_decl n new_scope_id) path scope_id;
            (* Process inner block with new parameters *)
-           let o = binding_sg_fold init_sg_ref new_scope_id (n :: self#get_path) in
+           let o = binding_sg_fold init_sg_ref new_scope_id (n :: self#get_path) u_ast in
            let o = List.fold_left (fun o -> o#binding) o bs in
            (* Back to our parameters *)
            self
         | bn -> super#bindingnode bn
   end
 
-and phrase_sg_fold init_sg_ref init_scope_id init_path =
+and phrase_sg_fold init_sg_ref init_scope_id init_path u_ast =
     object(self)
-      inherit sg_term_fold init_sg_ref init_scope_id init_path as super
+      inherit sg_term_fold init_sg_ref init_scope_id init_path u_ast as super
 
       method phrasenode = function
         | `Block (bs, p) ->
             let block_scope_id = self#create_scope (Some scope_id) in
-            let o = phrase_sg_fold sg block_scope_id path in
+            let o = phrase_sg_fold sg block_scope_id path u_ast in
             let o = List.fold_left (fun o -> o#binding) o bs in
             let _ = o#phrase p in
             self
@@ -345,7 +360,7 @@ and phrase_sg_fold init_sg_ref init_scope_id init_path =
           (* Add new declaration *)
           self#add_decl_to_scope (annotated_decl n new_scope_id) path scope_id;
           (* Process inner block with new parameters *)
-          let o_module_inner = binding_sg_fold init_sg_ref new_scope_id (n :: self#get_path) in
+          let o_module_inner = binding_sg_fold init_sg_ref new_scope_id (n :: self#get_path) u_ast in
           let _ = o_module_inner#list (fun o -> o#binding) bs in
           (* Back to our parameters *)
           self
@@ -359,24 +374,22 @@ let fresh_sg_ref () =
   let sg = add_scope init_scope_id init_scope sg in
   (ref sg, init_scope_id)
 
-let construct_sg_imp prog =
+let construct_sg_imp prog u_ast =
     let (sg_ref, init_scope_id) = fresh_sg_ref () in
-    let o = (phrase_sg_fold sg_ref init_scope_id [])#program prog in
+    let o = (phrase_sg_fold sg_ref init_scope_id [] u_ast)#program prog in
     o#get_sg
 
 let create_scope_graph = construct_sg_imp
 
-let construct_type_sg_imp prog =
+let construct_type_sg_imp prog u_ast =
   let (sg_ref, init_scope_id) = fresh_sg_ref () in
 
   let rec ty_sg_fold scope_id path =
     object(self)
-      inherit sg_fold sg_ref scope_id path as super
+      inherit sg_fold sg_ref scope_id path u_ast as super
 
       method bindingnode = function
         | `Type (n, _, dt) ->
-            (* I suppose it depends on whether we want types to behave like function or Var bindings.
-             * Let's treat them like defs (i.e. function bindings) for now *)
             super#add_decl_to_scope (plain_decl n) self#get_path self#get_scope_id;
             self#datatype' dt
         | `QualifiedImport ns ->
@@ -410,6 +423,27 @@ let construct_type_sg_imp prog =
 
 let create_type_scope_graph = construct_type_sg_imp
 
+
+  (*
+let thin_scope scope scope_id u_ast =
+  let new_refs =
+    StringSet.fold
+      (fun s acc -> StringSet.add (make_thin_ref_name scope_id s u_ast) acc)
+      scope.references StringSet.empty in
+  let new_imports =
+    StringSet.fold
+      (fun s acc -> StringSet.add (make_thin_ref_name scope_id s u_ast) acc)
+      scope.imports StringSet.empty in
+  { scope with references = new_refs; imports = new_imports }
+
+let thin_sg sg u_ast =
+  let new_scopes =
+    IntMap.fold
+      (fun k v acc -> IntMap.add k (thin_scope v k u_ast) acc)
+      sg.scope_map
+      IntMap.empty in
+  { sg with scope_map = new_scopes }
+*)
 
 (* Print DOT file for scope graph *)
 let show_scope_graph sg =
@@ -458,80 +492,174 @@ let shadow : decl_env -> decl_env -> scope_graph -> Uniquify.unique_ast -> decl_
     else (acc_decl_set, acc_plain_set)) e2_decls e1_decl_env
 
 (* Name resolution *)
-let resolve_name : string -> scope_graph -> Uniquify.unique_ast -> DeclSet.t
-  = fun ref_name_outer sg u_ast ->
-  let find_scope scope_id = lookup_scope scope_id sg in
-  (* Aaaaaand here we go *)
-  let rec resolve_name_inner ref_name seen_imports =
-    let containing_scope_id = lookup_containing_scope ref_name sg in
-    let plain_name = Uniquify.lookup_var ref_name u_ast in
-    let (vis_decls, _) =
-      visible_decls  (StringSet.add ref_name seen_imports) IntSet.empty containing_scope_id in
-    (* Finally filter out irrelevant ones *)
-    let relevant_vis_decls =
-      DeclSet.filter (fun (n, _d) -> (Uniquify.lookup_var n u_ast) = plain_name) vis_decls in
-    (relevant_vis_decls, StringSet.singleton plain_name)
+(*type memo_hashtbl_t = (name, (DeclSet.t * StringSet.t)) Hashtbl.t *)
+let make_resolver sg u_ast =
+  object(self)
+  method lookup key ht = (
+      try
+        let res = Hashtbl.find ht key in
+        Some(res)
+      with
+        | _ -> None
+    )
 
-  (* EnvV *)
-  and visible_decls : stringset -> intset -> int -> decl_env =
-    fun seen_imports seen_scopes scope_id ->
-    let envl_s = local_decls seen_imports seen_scopes scope_id in
-    let envp_s = parent_decls seen_imports seen_scopes scope_id in
-    shadow envl_s envp_s sg u_ast
+  method mk_decl_key seen_imports seen_scopes scope_id =
+    sprintf "%d:%s:%s" scope_id
+      (String.concat "," (List.sort compare (StringSet.elements seen_imports)))
+      (String.concat "," (List.sort compare (List.map string_of_int (IntSet.elements seen_scopes))))
 
-  (* EnvL *)
-  and local_decls seen_imports seen_scopes scope_id =
-    let envd_s = scope_decls seen_imports seen_scopes scope_id in
-    let envi_s = imported_decls seen_imports seen_scopes scope_id in
-    shadow envd_s envi_s sg u_ast
+  val local_decl_ht = Hashtbl.create 100000
+  method memoise_local_decl ld_key res = Hashtbl.add local_decl_ht ld_key res
+  method lookup_ld key = self#lookup key local_decl_ht
+  method get_ld_ht = local_decl_ht
 
-  (* EnvD *)
-  and scope_decls _seen_imports seen_scopes scope_id =
-    if IntSet.mem scope_id seen_scopes then (DeclSet.empty, StringSet.empty)
-    else
-      let decl_set = (find_scope scope_id).declarations in
-      let plain_set = DeclSet.fold (fun (decl_name, _) acc ->
-        StringSet.add (Uniquify.lookup_var decl_name u_ast) acc) decl_set StringSet.empty in
-      (decl_set, plain_set)
+  val visible_decl_ht = Hashtbl.create 100000
+  method memoise_visible_decl vd_key res = Hashtbl.add visible_decl_ht vd_key res
+  method lookup_vd key = self#lookup key visible_decl_ht
+  method get_vd_ht = visible_decl_ht
+(*
+let make_thin_ref_name scope_id unique_name u_ast =
+  let plain_name = Uniquify.lookup_var unique_name u_ast in
+  sprintf "%s_%d" plain_name scope_id
+*)
+  method resolve_reference ref =
+    let resolution_results = DeclSet.elements (self#resolve_name ref) in
+    match resolution_results with
+      | [] -> `UnsuccessfulResolution
+      | [(x, _)] -> `SuccessfulResolution x
+      | x::xs -> `AmbiguousResolution (List.map fst (x::xs))
 
-  (* EnvI *)
-  and imported_decls seen_imports seen_scopes scope_id =
-    if IntSet.mem scope_id seen_scopes then (DeclSet.empty, StringSet.empty) else
-    let scope = find_scope scope_id in
-    let unseen_imports = StringSet.diff scope.imports seen_imports in
-    (* Next up: get the associated set IDs for all import declarations *)
-    let import_scope_ids =
-      StringSet.fold (fun i acc ->
-        (* Given an import, resolve it, returning a set of possible resolutions *)
-        let (resolved_import_set, _resolved_plain_set) = resolve_name_inner i seen_imports in
-        (* For each resolved import declaration, add the associated scope ID to the set *)
-        let scope_ids = DeclSet.fold (fun i_decl ->
-          match i_decl with
-            | (_decl_name, Some (scope_id)) -> IntSet.add scope_id
-            | (decl_name, None) ->
-                let err = sprintf "Error in name resolution: import %s resolved to non-module decl %s\n" i decl_name in
-                failwith err) resolved_import_set IntSet.empty in
-        (* Union with the accumulator *)
-        IntSet.union acc scope_ids) unseen_imports IntSet.empty in
-    (* Finally, union the local environments, and we're done. *)
-    let new_seen_scopes = IntSet.add scope_id seen_scopes in
-    IntSet.fold (fun i_scope (decls_acc, plains_acc) ->
-      let (i_decls, i_plains) = local_decls seen_imports new_seen_scopes i_scope in
-      (DeclSet.union i_decls decls_acc, StringSet.union i_plains plains_acc)
-    ) import_scope_ids (DeclSet.empty, StringSet.empty)
+  method resolve_name : string -> DeclSet.t
+    = fun ref_name_outer ->
+    let memo_ht = Hashtbl.create 100000 in
+    let mk_key ref_name seen_imports =
+      ref_name ^ (String.concat "," (List.sort compare (StringSet.elements seen_imports))) in
+    let memoise_res key res = Hashtbl.add memo_ht key res in
+    let lookup_q key = self#lookup key memo_ht in
 
-  (* EnvP *)
-  and parent_decls seen_imports seen_scopes scope_id =
-    if IntSet.mem scope_id seen_scopes then (DeclSet.empty, StringSet.empty)
-    else
-      match (find_scope scope_id).parent_scope with
-        | None -> (DeclSet.empty, StringSet.empty)
-        | Some parent_scope_id ->
-            visible_decls seen_imports (IntSet.add scope_id seen_scopes) parent_scope_id in
-  (* Top-level *)
-  fst (resolve_name_inner ref_name_outer StringSet.empty)
+    let find_scope scope_id = lookup_scope scope_id sg in
+    (* Aaaaaand here we go *)
+    let rec resolve_name_inner ref_name seen_imports =
+      let seen_import_list = print_list (StringSet.elements seen_imports) in
+      (*
+      printf "Calling ref name inner for name %s and seen imports %s\n%!" ref_name seen_import_list;
+      *)
+      let containing_scope_id = lookup_containing_scope ref_name sg in
+      let key = mk_key ref_name seen_imports in
+      (*
+      (if (hs_contains ref_name seen_imports) then
+        printf "HIT: %s\n%!" key
+      else
+        add_q ref_name seen_imports);
+        *)
+      match lookup_q key with
+        | Some res ->
+            (* printf "HIT!\n"; *)
+            res
+        | None ->
+            let plain_name = lookup_thin_name ref_name sg in
+            let (vis_decls, _) =
+              visible_decls  (StringSet.add ref_name seen_imports) IntSet.empty containing_scope_id in
+            (* Finally filter out irrelevant ones *)
+            let relevant_vis_decls =
+              DeclSet.filter (fun (n, _d) -> (Uniquify.lookup_var n u_ast) = plain_name) vis_decls in
+            let res = (relevant_vis_decls, StringSet.singleton plain_name) in
+            memoise_res key res;
+            res
+
+    (* EnvV *)
+    and visible_decls : stringset -> intset -> int -> decl_env =
+      fun seen_imports seen_scopes scope_id ->
+      let key = self#mk_decl_key seen_imports seen_scopes scope_id in
+      (match self#lookup_vd key with
+        | Some res -> (* printf "VISIBLE DECL HIT: %s\n%!" key;*) res
+        | None ->
+            (* printf "VISIBLE DECL MISS: %s\n%!" key; *)
+            let envl_s = local_decls seen_imports seen_scopes scope_id in
+            let envp_s = parent_decls seen_imports seen_scopes scope_id in
+            let res = shadow envl_s envp_s sg u_ast in
+            self#memoise_visible_decl key res;
+            res)
+
+    (* EnvL *)
+    and local_decls seen_imports seen_scopes scope_id =
+      let key = self#mk_decl_key seen_imports seen_scopes scope_id in
+      (match self#lookup_ld key with
+        | Some res -> (* printf "LOCAL DECL HIT\n%!"; *) res
+        | None ->
+            let envd_s = scope_decls seen_imports seen_scopes scope_id in
+            let envi_s = imported_decls seen_imports seen_scopes scope_id in
+            let res = shadow envd_s envi_s sg u_ast in
+            self#memoise_local_decl key res;
+            res)
 
 
+          (* EnvD *)
+    and scope_decls _seen_imports seen_scopes scope_id =
+      if IntSet.mem scope_id seen_scopes then (DeclSet.empty, StringSet.empty)
+      else
+        let decl_set = (find_scope scope_id).declarations in
+        let plain_set = DeclSet.fold (fun (decl_name, _) acc ->
+          StringSet.add (Uniquify.lookup_var decl_name u_ast) acc) decl_set StringSet.empty in
+        (decl_set, plain_set)
+
+    (* EnvI *)
+    and imported_decls seen_imports seen_scopes scope_id =
+      if IntSet.mem scope_id seen_scopes then (DeclSet.empty, StringSet.empty) else
+      let scope = find_scope scope_id in
+      let unseen_imports = StringSet.diff scope.imports seen_imports in
+      (*
+      printf "Scope imports:\n";
+      let junk1 = StringSet.fold (fun _ s -> printf "%s\n" s; s) scope.imports in
+      printf "Seen imports:\n";
+      let junk2 = StringSet.fold (fun _ s -> printf "%s\n" s; s) seen_imports in
+      printf "Unseen imports:\n";
+      let junk3 = StringSet.fold (fun _ s -> printf "%s\n" s; s) unseen_imports in
+    *)
+      (* Next up: get the associated set IDs for all import declarations *)
+      let import_scope_ids =
+        StringSet.fold (fun i acc ->
+          (* Given an import, resolve it, returning a set of possible resolutions *)
+          let (resolved_import_set, _resolved_plain_set) = resolve_name_inner i seen_imports in
+          (* For each resolved import declaration, add the associated scope ID to the set *)
+          let scope_ids = DeclSet.fold (fun i_decl ->
+            match i_decl with
+              | (_decl_name, Some (scope_id)) -> IntSet.add scope_id
+              | (decl_name, None) ->
+                  let err = sprintf "Error in name resolution: import %s resolved to non-module decl %s\n" i decl_name in
+                  failwith err) resolved_import_set IntSet.empty in
+          (* Union with the accumulator *)
+          IntSet.union acc scope_ids) unseen_imports IntSet.empty in
+      (* Finally, union the local environments, and we're done. *)
+      let new_seen_scopes = IntSet.add scope_id seen_scopes in
+      IntSet.fold (fun i_scope (decls_acc, plains_acc) ->
+        let (i_decls, i_plains) = local_decls seen_imports new_seen_scopes i_scope in
+        (DeclSet.union i_decls decls_acc, StringSet.union i_plains plains_acc)
+      ) import_scope_ids (DeclSet.empty, StringSet.empty)
+
+    (* EnvP *)
+    and parent_decls seen_imports seen_scopes scope_id =
+      if IntSet.mem scope_id seen_scopes then (DeclSet.empty, StringSet.empty)
+      else
+        match (find_scope scope_id).parent_scope with
+          | None -> (DeclSet.empty, StringSet.empty)
+          | Some parent_scope_id ->
+              visible_decls seen_imports (IntSet.add scope_id seen_scopes) parent_scope_id in
+    (* Top-level *)
+    let containing_scope_id = lookup_containing_scope ref_name_outer sg in
+    let thinned_name_outer = make_thin_ref_name containing_scope_id ref_name_outer u_ast in
+    let res = fst (resolve_name_inner thinned_name_outer StringSet.empty) in
+    (*
+    printf "HT size: %d\n%!" (Hashtbl.length memo_ht);
+    printf "LD HT size: %d\n%!" (Hashtbl.length self#get_ld_ht);
+    printf "VD HT size: %d\n%!" (Hashtbl.length self#get_vd_ht);
+    *)
+    let ht_domain = Hashtbl.fold (fun k v acc -> (k ^ "\n") :: acc) memo_ht [] in
+    (*printf "MEMO HT: \n%s\n" (print_list ht_domain);*)
+    res
+  end
+
+(*
 let show_resolved_names sg unique_ast =
   let show_resolved_name ref_name =
     (* Firstly, get the resolution result, which will get us a list of
@@ -557,11 +685,4 @@ let make_and_print_scope_graph unique_ast =
   printf "%s\n" (show_scope_graph sg);
   printf "====== RESOLUTIONS ======\n";
   printf "%s\n" (show_resolved_names sg unique_ast)
-
-let resolve_reference ref sg u_ast =
-  let resolution_results = DeclSet.elements (resolve_name ref sg u_ast) in
-  match resolution_results with
-    | [] -> `UnsuccessfulResolution
-    | [(x, _)] -> `SuccessfulResolution x
-    | x::xs -> `AmbiguousResolution (List.map fst (x::xs))
-
+*)

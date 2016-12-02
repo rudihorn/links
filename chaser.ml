@@ -30,8 +30,8 @@ let unique_list xs =
   StringSet.elements (StringSet.of_list xs)
 
 
-let can_resolve_name name sg u_ast =
-  match ScopeGraph.resolve_reference name sg u_ast with
+let can_resolve_name name resolver =
+  match resolver#resolve_reference name with
     | `SuccessfulResolution _ -> true
     | `AmbiguousResolution _ -> true
     | `UnsuccessfulResolution -> false
@@ -40,15 +40,15 @@ let can_resolve_name name sg u_ast =
  * For example, given [A_1, B_2, x_3], tries to resolve A_1. If successful, it's
  * internally resolvable and we're OK. If not, then we'll need to try and import it.
  *)
-let rec can_resolve_qual_name qual_name sg u_ast =
+let rec can_resolve_qual_name qual_name resolver =
   match qual_name with
     | [] -> failwith "INTERNAL ERROR: Empty qualified name; this should never happen"
     | x::xs ->
         (* The head will be the module we'll want to try and resolve. *)
-        can_resolve_name x sg u_ast
+        can_resolve_name x resolver
 
 (* Traversal to find module import references in the current file *)
-let rec find_module_refs sg ty_sg u_ast init_import_candidates =
+let rec find_module_refs resolver sg u_ast init_import_candidates init_dependencies =
 object(self)
   inherit SugarTraversals.fold as super
   (* Imports that are not resolvable in the current file *)
@@ -59,16 +59,18 @@ object(self)
 
   method bindingnode = function
     | `QualifiedImport ns ->
-        if can_resolve_qual_name ns sg u_ast then self else
+        if can_resolve_qual_name ns resolver then self else
           let to_add = Uniquify.lookup_var (List.hd ns) u_ast in
           self#add_import_candidate to_add
     | bn -> super#bindingnode bn
 end
 
 
-let find_external_refs sg ty_sg u_ast =
+let find_external_refs sg u_ast =
+  let resolver = ScopeGraph.make_resolver sg u_ast in
   let prog = Uniquify.get_ast u_ast in
-  StringSet.elements ((find_module_refs sg ty_sg u_ast StringSet.empty)#program prog)#get_import_candidates
+  let o = ((find_module_refs resolver sg u_ast StringSet.empty StringSet.empty)#program prog) in
+  StringSet.elements o#get_import_candidates
 
 let rec add_module_bindings deps dep_map =
   match deps with
@@ -87,15 +89,17 @@ let rec add_module_bindings deps dep_map =
 
 let rec add_dependencies_inner module_name module_prog visited deps dep_map =
   if StringSet.mem module_name visited then (visited, [], dep_map) else
+  (printf "visiting %s\n" module_name;
+   printf "%!";
   let visited1 = StringSet.add module_name visited in
   let dep_map1 = StringMap.add module_name module_prog dep_map in
 
   (* Unique AST and scope graph for plain program*)
   let u_ast = Uniquify.uniquify_ast module_prog in
-  let sg = ScopeGraph.create_scope_graph (Uniquify.get_ast u_ast) in
-  let ty_sg = ScopeGraph.create_type_scope_graph (Uniquify.get_ast u_ast) in
+  let sg = ScopeGraph.create_scope_graph (Uniquify.get_ast u_ast) u_ast in
+  let ty_sg = ScopeGraph.create_type_scope_graph (Uniquify.get_ast u_ast) u_ast in
   (* With this, get import candidates *)
-  let ics = find_external_refs sg ty_sg u_ast in
+  let ics = find_external_refs sg u_ast in
   (* Next, run the dependency analysis on each one to get us an adjacency list *)
   List.fold_right (
     fun name (visited_acc, deps_acc, dep_map_acc) ->
@@ -105,18 +109,23 @@ let rec add_dependencies_inner module_name module_prog visited deps dep_map =
       let (visited_acc', deps_acc', dep_map_acc') =
         add_dependencies_inner name prog visited_acc deps_acc dep_map_acc in
       (visited_acc', deps_acc @ deps_acc', dep_map_acc')
-  ) ics (visited1, (module_name, ics) :: deps, dep_map1)
+  ) ics (visited1, (module_name, ics) :: deps, dep_map1))
 
 
 (* Top-level function: given a module name + program, return a program with
  * all necessary files added to the binding list as top-level modules. *)
 let add_dependencies module_name module_prog =
+  printf "Adding deps for %s\n" module_name;
+  printf "%!";
   let (bindings, phrase) = module_prog in
   (* Firstly, get the dependency graph *)
   let (_, deps, dep_binding_map) =
     add_dependencies_inner module_name module_prog (StringSet.empty) [] (StringMap.empty) in
   (* Next, do a topological sort to get the dependency graph and identify cyclic dependencies *)
-  let sorted_deps = Graph.topo_sort_sccs deps in
+  (* let stripped_deps = List.map (fun (mod_name, _import_candidates, deps) -> (mod_name, deps)) deps in *)
+  let sorted_deps = List.rev (Graph.topo_sort_sccs deps) in
+  printf "ordered deps: \n";
+  List.iter (fun (dep::xs) -> printf "%s" dep) sorted_deps;
   (* Each entry should be *precisely* one element (otherwise we have cycles) *)
   assert_no_cycles sorted_deps;
   (* Now, build up binding list where each opened dependency is mapped to a `Module containing
@@ -128,7 +137,7 @@ let add_dependencies module_name module_prog =
   (* Now, finally create a new SG and unique AST for the program with all inlined modules *)
   let u_ast = Uniquify.uniquify_ast transformed_prog in
   let u_prog = Uniquify.get_ast u_ast in
-  let sg = ScopeGraph.create_scope_graph u_prog in
-  let ty_sg = ScopeGraph.create_type_scope_graph u_prog in
+  let sg = ScopeGraph.create_scope_graph u_prog u_ast in
+  let ty_sg = ScopeGraph.create_type_scope_graph u_prog u_ast in
 
   (sg, ty_sg, u_ast)

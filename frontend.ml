@@ -30,9 +30,10 @@ struct
       let program =
         if ModuleUtils.contains_modules program then
           if Settings.get_value Basicsettings.modules then
+            (Printf.printf "prog contains modules, adding deps\n";
             let (scope_graph, ty_scope_graph, unique_ast) = Chaser.add_dependencies "" program in
             (* Printf.printf "%s\n" (ScopeGraph.show_scope_graph scope_graph); *)
-            DesugarModules.desugarModules scope_graph ty_scope_graph unique_ast
+            DesugarModules.desugarModules scope_graph ty_scope_graph unique_ast)
           else
             failwith ("File contains modules, but modules not enabled. Please set " ^
               "modules flag to true, or run with -m.")
