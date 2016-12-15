@@ -1,5 +1,4 @@
 (*pp deriving *)
-open Utility
 
 (** The syntax tree created by the parser. *)
 
@@ -394,7 +393,7 @@ struct
     | `Formlet (xml, yields) ->
         let binds = formlet_bound xml in
           union (phrase xml) (diff (phrase yields) binds)
-    | `FunLit (_, _, fnlit, location) -> funlit fnlit
+    | `FunLit (_, _, fnlit, _) -> funlit fnlit
     | `Iteration (generators, body, where, orderby) ->
         let xs = union_map (function
                               | `List (_, source)

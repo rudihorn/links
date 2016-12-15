@@ -151,7 +151,7 @@ let rec get_last_list_element = function
 
 class sg_fold init_sg_ref init_scope_id (init_path : string list) =
   object(self)
-    inherit SugarTraversals.fold as super
+    inherit SugarTraversals.fold
     val sg = init_sg_ref
 
     (* Current Scope ID properties *)
@@ -229,7 +229,7 @@ class sg_term_fold init_sg_ref init_scope_id init_path =
         self) xs
 
     (* Phrases are handled the same in either binding or definition mode. *)
-    method phrasenode = function
+    method! phrasenode = function
       | `Var n -> self#add_ref_to_scope n scope_id; self
       | `QualifiedVar ns -> self#qualified_name ns
       | `Switch (phr, cases, _dtopt) ->
@@ -242,7 +242,7 @@ class sg_term_fold init_sg_ref init_scope_id init_path =
           self#cases cases
       | pn -> super#phrasenode pn
 
-    method funlit (pat_list_list, phr) =
+    method! funlit (pat_list_list, phr) =
       (* Create a new scope for the phrase, and add the bindings to it *)
       (* I assume the list list thing is for curried arguments. Lets say that
        * each pattern list gets its own scope. *)
@@ -253,11 +253,11 @@ class sg_term_fold init_sg_ref init_scope_id init_path =
       let _ = o_plist_list#phrase phr in
       self
 
-    method binder (n, _, _) =
+    method! binder (n, _, _) =
       self#add_decl_to_scope (plain_decl n) path scope_id;
       self
 
-    method bindingnode = function
+    method! bindingnode = function
       | `Funs _ -> assert false
       | `Fun ((fn_name, _, _), _lin, (_tyvars, fn_funlit), _loc, _dtopt) ->
            self#add_decl_to_scope (plain_decl fn_name) path scope_id;
@@ -270,7 +270,7 @@ class sg_term_fold init_sg_ref init_scope_id init_path =
           self
       | bn -> super#bindingnode bn
 
-    method datatype _ = self
+    method! datatype _ = self
   end
 
   (* Binding policies for inside blocks (inside functions, for example)
@@ -280,7 +280,7 @@ class sg_term_fold init_sg_ref init_scope_id init_path =
 let rec binding_sg_fold init_sg_ref init_scope_id init_path =
   object (self)
     inherit sg_term_fold init_sg_ref init_scope_id init_path as super
-    method phrasenode = function
+    method! phrasenode = function
       | `Block (bs, p) ->
           let block_scope_id = self#create_scope (Some scope_id) in
           let o = phrase_sg_fold sg block_scope_id self#get_path in
@@ -289,7 +289,7 @@ let rec binding_sg_fold init_sg_ref init_scope_id init_path =
           self
       | pn -> super#phrasenode pn
 
-    method bindingnode = function
+    method! bindingnode = function
         | `Val (_tvs, pat, phr, _loc, _dtopt) ->
             (* Process phrase in this scope *)
             let _ = self#phrase phr in
@@ -316,7 +316,7 @@ and phrase_sg_fold init_sg_ref init_scope_id init_path =
     object(self)
       inherit sg_term_fold init_sg_ref init_scope_id init_path as super
 
-      method phrasenode = function
+      method! phrasenode = function
         | `Block (bs, p) ->
             let block_scope_id = self#create_scope (Some scope_id) in
             let o = phrase_sg_fold sg block_scope_id path in
@@ -325,7 +325,7 @@ and phrase_sg_fold init_sg_ref init_scope_id init_path =
             self
         | pn -> super#phrasenode pn
 
-      method bindingnode = function
+      method! bindingnode = function
         | `Val (_tvs, pat, phr, _loc, _dtopt) ->
             (* Process phrase in this scope *)
             let _ = self#phrase phr in
@@ -373,7 +373,7 @@ let construct_type_sg_imp prog =
     object(self)
       inherit sg_fold sg_ref scope_id path as super
 
-      method bindingnode = function
+      method! bindingnode = function
         | `Type (n, _, dt) ->
             (* I suppose it depends on whether we want types to behave like function or Var bindings.
              * Let's treat them like defs (i.e. function bindings) for now *)
@@ -395,7 +395,7 @@ let construct_type_sg_imp prog =
           self
         | bn -> super#bindingnode bn
 
-      method datatype = function
+      method! datatype = function
         | `TypeApplication (n, _) ->
             (* Add to references for current scope *)
             self#add_ref_to_scope n scope_id; self
@@ -446,8 +446,8 @@ type decl_env = (DeclSet.t * StringSet.t)
 
 (* Shadowing Operator *)
 let shadow : decl_env -> decl_env -> scope_graph -> Uniquify.unique_ast -> decl_env
-  = fun e1_decl_env (e2_decls, _) sg unique_ast ->
-  let (e1_decls, e1_plain_names) = e1_decl_env in
+  = fun e1_decl_env (e2_decls, _) _ unique_ast ->
+  let (_, e1_plain_names) = e1_decl_env in
   DeclSet.fold (fun e2_decl (acc_decl_set, acc_plain_set) ->
     (* Check if the plain name is in the plain names set of e1 *)
     let (e2_decl_name, _) = e2_decl in

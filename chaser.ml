@@ -1,20 +1,13 @@
 open Utility
-open Sugartypes
 open Printf
 open ModuleUtils
-open Uniquify
-open ScopeGraph
 
-type prog_map = program StringMap.t
 type filename = string
 (* Helper functions *)
 
 (* Helper function: given top-level module name, maps to expected filename *)
 let top_level_filename module_name =
-  (String.uncapitalize module_name) ^ ".links"
-
-let print_sorted_deps xs =
-  print_list (List.map print_list xs)
+  (String.uncapitalize_ascii module_name) ^ ".links"
 
 (* Given a module name and unique AST, try and locate / parse the module file *)
 let parse_module module_name =
@@ -23,12 +16,9 @@ let parse_module module_name =
 
 let assert_no_cycles = function
   | [] -> ()
-  | [x]::ys -> ()
-  | (x::xs)::ys -> failwith ("Error -- cyclic dependencies: " ^ (String.concat ", " (x :: xs)))
-
-let unique_list xs =
-  StringSet.elements (StringSet.of_list xs)
-
+  | [_]::_ -> ()
+  | (x::xs)::_ -> failwith ("Error -- cyclic dependencies: " ^ (String.concat ", " (x :: xs)))
+  | _ -> assert false
 
 let can_resolve_name name sg u_ast =
   match ScopeGraph.resolve_reference name sg u_ast with
@@ -40,15 +30,15 @@ let can_resolve_name name sg u_ast =
  * For example, given [A_1, B_2, x_3], tries to resolve A_1. If successful, it's
  * internally resolvable and we're OK. If not, then we'll need to try and import it.
  *)
-let rec can_resolve_qual_name qual_name sg u_ast =
+let can_resolve_qual_name qual_name sg u_ast =
   match qual_name with
     | [] -> failwith "INTERNAL ERROR: Empty qualified name; this should never happen"
-    | x::xs ->
+    | x::_ ->
         (* The head will be the module we'll want to try and resolve. *)
         can_resolve_name x sg u_ast
 
 (* Traversal to find module import references in the current file *)
-let rec find_module_refs sg ty_sg u_ast init_import_candidates =
+let find_module_refs sg u_ast init_import_candidates =
 object(self)
   inherit SugarTraversals.fold as super
   (* Imports that are not resolvable in the current file *)
@@ -57,7 +47,7 @@ object(self)
     {< import_candidates = StringSet.add x import_candidates >}
   method get_import_candidates = import_candidates
 
-  method bindingnode = function
+  method! bindingnode = function
     | `QualifiedImport ns ->
         if can_resolve_qual_name ns sg u_ast then self else
           let to_add = Uniquify.lookup_var (List.hd ns) u_ast in
@@ -66,9 +56,9 @@ object(self)
 end
 
 
-let find_external_refs sg ty_sg u_ast =
+let find_external_refs sg u_ast =
   let prog = Uniquify.get_ast u_ast in
-  StringSet.elements ((find_module_refs sg ty_sg u_ast StringSet.empty)#program prog)#get_import_candidates
+  StringSet.elements ((find_module_refs sg u_ast StringSet.empty)#program prog)#get_import_candidates
 
 let rec add_module_bindings deps dep_map =
   match deps with
@@ -76,12 +66,14 @@ let rec add_module_bindings deps dep_map =
     (* Don't re-inline bindings of base module *)
     | [""]::ys -> add_module_bindings ys dep_map
     | [module_name]::ys ->
-      try
-        let (bindings, _) = StringMap.find module_name dep_map in
-        (* TODO: Fix dummy position to be more meaningful, if necessary *)
-        (`Module (module_name, bindings), Sugartypes.dummy_position) :: (add_module_bindings ys dep_map)
-      with Notfound.NotFound _ ->
-        failwith "Trying to find %s in dep map containing keys: %s\n" module_name (print_list (List.map fst (StringMap.bindings dep_map)));
+       begin
+         try
+           let (bindings, _) = StringMap.find module_name dep_map in
+           (* TODO: Fix dummy position to be more meaningful, if necessary *)
+           (`Module (module_name, bindings), Sugartypes.dummy_position) :: (add_module_bindings ys dep_map)
+         with Notfound.NotFound _ ->
+           failwith (sprintf "Trying to find %s in dep map containing keys: %s\n" module_name (print_list (List.map fst (StringMap.bindings dep_map))));
+       end
     | _ -> failwith "Internal error: impossible pattern in add_module_bindings"
 
 
@@ -93,9 +85,8 @@ let rec add_dependencies_inner module_name module_prog visited deps dep_map =
   (* Unique AST and scope graph for plain program*)
   let u_ast = Uniquify.uniquify_ast module_prog in
   let sg = ScopeGraph.create_scope_graph (Uniquify.get_ast u_ast) in
-  let ty_sg = ScopeGraph.create_type_scope_graph (Uniquify.get_ast u_ast) in
   (* With this, get import candidates *)
-  let ics = find_external_refs sg ty_sg u_ast in
+  let ics = find_external_refs sg u_ast in
   (* Next, run the dependency analysis on each one to get us an adjacency list *)
   List.fold_right (
     fun name (visited_acc, deps_acc, dep_map_acc) ->

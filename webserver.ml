@@ -1,12 +1,8 @@
 open Webserver_types
 open Cohttp
 open Cohttp_lwt_unix
-open Ir
-open List
 open Lwt
-open Proc
 open Utility
-open Webif
 
 let jslibdir : string Settings.setting = Settings.add_string("jslibdir", "", `User)
 let host_name = Settings.add_string ("host", "0.0.0.0", `User)
@@ -19,7 +15,6 @@ struct
   module Webif = Webif.WebIf(Webserver)
 
   type routing_table = (bool * string * (Value.env * Value.t)) list
-  type t = routing_table * Ir.binding list * Value.env
 
   let rt : routing_table ref = ref []
   let env : (Value.env * Ir.var Env.String.t * Types.typing_environment) ref = ref (Value.empty_env, Env.String.empty, Types.empty_typing_environment)
@@ -37,9 +32,7 @@ struct
   let add_route is_directory path thread_starter =
     rt := (is_directory, path, thread_starter) :: !rt
 
-  let rec parse_request valenv params = parse_request valenv params
-
-  let rec start () =
+  let start () =
     let is_prefix_of s t = String.length s <= String.length t && s = String.sub t 0 (String.length s) in
 
     let parse_post_body s =
@@ -53,7 +46,7 @@ struct
         | Not_found -> s,"" in
       List.map one_assoc assocs in
 
-    let callback rt render_cont conn req body =
+    let callback rt render_cont _ req body =
       let query_args = List.map (fun (k, vs) -> (k, String.concat "," vs)) (Uri.query (Request.uri req)) in
       Cohttp_lwt_body.to_string body >>= fun body_string ->
       let body_args = parse_post_body body_string in
@@ -64,7 +57,7 @@ struct
       List.iter (fun (k, v) -> Debug.print (Printf.sprintf "   %s: \"%s\"" k v)) cgi_args;
       let path = Uri.path (Request.uri req) in
 
-      let run_page (dir, s, (valenv, v)) () =
+      let run_page (_, s, (valenv, v)) () =
         Eval.apply (render_cont ()) valenv (v, [`String s]) >>= fun (valenv, v) ->
         let page = Irtojs.generate_real_client_page
                      ~cgi_env:cgi_args
@@ -78,7 +71,7 @@ struct
         | [] ->
            Debug.print "No cases matched!\n";
            Server.respond_string ~status:`Not_found ~body:"<html><body><h1>Nope</h1></body></html>" ()
-        | ((dir, s, handler) :: rest) when (dir && is_prefix_of s path) || (s = path) ->
+        | ((dir, s, handler) :: _) when (dir && is_prefix_of s path) || (s = path) ->
              Debug.print (Printf.sprintf "Matched case %s\n" s);
              Webif.do_request !env cgi_args (run_page (dir, s, handler)) (render_cont ()) Lib.cohttp_server_response
         | ((_, s, _) :: rest) ->
@@ -108,8 +101,8 @@ struct
     let start_server host port rt =
 
       let render_cont () =
-        let (_, nenv, {Types.tycon_env = tycon_env}) = !env in
-        let xb, x = Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
+        let (_, nenv, {Types.tycon_env = tycon_env; _ }) = !env in
+        let _, x = Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
         let render_page = Env.String.lookup nenv "renderPage" in
         let tail = `Apply (`Variable render_page, [`Variable x]) in
         [(`Global, x, Value.empty_env, ([], tail))] in
