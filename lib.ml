@@ -1,7 +1,4 @@
-open Sys
 open List
-
-open Notfound
 
 open Value
 open Types
@@ -38,14 +35,6 @@ let value_as_string db =
   function
     | `String s -> "\'" ^ db # escape_string s ^ "\'"
     | v -> string_of_value v
-
-let cond_from_field db (k, v) =
-  "("^ k ^" = "^ value_as_string db v ^")"
-
-let single_match db =
-  function
-    | `Record fields -> "("^ (String.concat " AND " (map (cond_from_field db) fields)) ^")"
-    | r -> failwith ("Internal error: forming query from non-row (single_match): "^string_of_value r)
 
 let row_columns = function
   | `List ((`Record fields)::_) -> map fst fields
@@ -91,8 +80,6 @@ let string_op impl pure : located_primitive * Types.datatype * pure =
 let conversion_op' ~unbox ~conv ~(box :'a->Value.t): Value.t list -> Value.t =
   fun [x] -> (box (conv (unbox x)))
 
-let make_type_variable = Types.make_type_variable
-
 let conversion_op ~from ~unbox ~conv ~(box :'a->Value.t) ~into pure : located_primitive * Types.datatype * pure =
   ((`PFun (conversion_op' ~unbox:unbox ~conv:conv ~box:box) : located_primitive),
    (let q, r = Types.fresh_row_quantifier (`Any, `Any) in
@@ -124,11 +111,6 @@ and p2 fn =
   `PFun (fun [a;b] -> fn a b)
 and p3 fn =
   `PFun (fun [a;b;c] -> fn a b c)
-
-let client_only_1 fn =
-  p1 (fun _ -> failwith (Printf.sprintf "%s is not implemented on the server" fn))
-let client_only_2 fn =
-  p2 (fun _ _ -> failwith (Printf.sprintf "%s is not implemented on the server" fn))
 
 let rec equal l r =
   match l, r with
@@ -302,7 +284,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    PURE);
 
   "Send",
-  (p2 (fun pid msg ->
+  (p2 (fun _pid _msg ->
          assert(false)), (* Now handled in evalir.ml *)
    datatype "(Process ({hear:a|_}), a) ~> ()",
    IMPURE);
@@ -964,7 +946,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
      (p2 (fun table rows ->
             match table, rows with
               | `Table _, `List [] -> `Record []
-              | `Table ((db, params), table_name, _, _), _ ->
+              | `Table ((db, _params), table_name, _, _), _ ->
                   let field_names = row_columns rows in
                   let vss = row_values db rows in
                     Debug.print ("RUNNING INSERT QUERY:\n" ^ (db#make_insert_query(table_name, field_names, vss)));
@@ -989,7 +971,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
             match table, rows, returning with
               | `Table _, `List [], _ ->
                   failwith "InsertReturning: undefined for empty list of rows"
-              | `Table ((db, params), table_name, _, _), _, _ ->
+              | `Table ((db, _params), table_name, _, _), _, _ ->
                   let field_names = row_columns rows in
                   let vss = row_values db rows in
 
@@ -1122,10 +1104,14 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   (* regular expression substitutions --- don't yet support global substitutions *)
   ("stilde",
    (`Server (p2 (fun s r ->
-	let Regex.Replace (l, t) = Linksregex.Regex.ofLinks r in
-	let (regex, tmpl) = Regex.compile_ocaml l, t in
-        let string = unbox_string s in
-        box_string (Utility.decode_escapes (Str.replace_first regex tmpl string)))),
+        let open Regex in
+        match Linksregex.Regex.ofLinks r with
+	| Replace (l, t) ->
+	   let (regex, tmpl) = Regex.compile_ocaml l, t in
+           let string = unbox_string s in
+           box_string (Utility.decode_escapes (Str.replace_first regex tmpl string))
+        | Any | StartAnchor | EndAnchor | Simply _ | Seq _ | Quote _ | Group _
+          | Range _ | Alternate _ | Repeat _ -> assert false)),
     datatype "(String, Regex) ~> String",
     PURE));
 
@@ -1162,11 +1148,11 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
    (p1 (fun l ->
 		   let chars = List.map unbox_char (unbox_list l) in
 		   let len = List.length chars in
-		   let s = String.create len in
+		   let s = Bytes.create len in
 		   let rec aux i l =
 		     match l with
 		       | [] -> ()
-		       | c :: cs -> s.[i] <- c; aux (i + 1) cs
+		       | c :: cs -> Bytes.set s i c; aux (i + 1) cs
 		   in
 		     aux 0 chars;
 		     box_string s),
@@ -1439,9 +1425,9 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                   try
                     let ts = DumpTypes.program (val_of (!prelude_tyenv)) (unbox_string code) in
 
-                    let line ({Lexing.pos_lnum=l}, _, _) = l in
-                    let start ({Lexing.pos_bol=b; Lexing.pos_cnum=c}, _, _) = c-b in
-                    let finish (_, {Lexing.pos_bol=b; Lexing.pos_cnum=c}, _) = c-b in
+                    let line ({Lexing.pos_lnum=l; _}, _, _) = l in
+                    let start ({Lexing.pos_bol=b; Lexing.pos_cnum=c; _ }, _, _) = c-b in
+                    let finish (_, {Lexing.pos_bol=b; Lexing.pos_cnum=c; _}, _) = c-b in
 
                     let resolve (name, t, pos) =
                       (* HACK: we need to be more principled about foralls  *)
@@ -1470,7 +1456,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                     let port = unbox_int portv in
                     let server_addr =
                       try  Unix.inet_addr_of_string server
-                      with Failure("inet_addr_of_string") ->
+                      with Failure _ ->
                         (Unix.gethostbyname server).Unix.h_addr_list.(0) in
                     let sockaddr = Unix.ADDR_INET(server_addr, port) in
                     let domain = Unix.domain_of_sockaddr sockaddr in
@@ -1478,7 +1464,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
                     Unix.connect sock sockaddr;
                     Unix.set_nonblock sock;
                     `Variant ("Just", box_socket (Unix.in_channel_of_descr sock, Unix.out_channel_of_descr sock))
-                  with exn -> `Variant ("Nothing", `Record []))),
+                  with _ -> `Variant ("Nothing", `Record []))),
      datatype "(String, Int) ~> [|Nothing|Just:Socket|]",
      IMPURE);
     "writeToSocket",
@@ -1561,16 +1547,16 @@ let value_env : primitive option Env.Int.t =
 
 let maxvar =
   Env.String.fold
-    (fun name var x -> max var x)
+    (fun _name var x -> max var x)
     nenv 0
 
 let minvar =
   Env.String.fold
-    (fun name var x -> min var x)
+    (fun _name var x -> min var x)
     nenv maxvar
 
 let value_array : primitive option array =
-  let array = Array.create (maxvar+1) None in
+  let array = Array.make (maxvar+1) None in
   List.iter (fun (name, (p, _, _)) ->
     Array.set array (Env.String.lookup nenv name) (impl p)) env;
   array
@@ -1585,7 +1571,7 @@ let typing_env = {Types.var_env = type_env; tycon_env = alias_env; Types.effect_
 
 let primitive_names = StringSet.elements (Env.String.domain type_env)
 
-let primitive_vars = Env.String.fold (fun name var vars -> IntSet.add var vars) nenv IntSet.empty
+let primitive_vars = Env.String.fold (fun _name var vars -> IntSet.add var vars) nenv IntSet.empty
 
 let primitive_name = Env.Int.lookup venv
 
@@ -1635,7 +1621,7 @@ let primitive_stub_by_code (var : Var.var) : Value.t =
 (* jcheney: added to expose lookup by var *)
 let apply_pfun_by_code var args =
   match primitive_by_code var with
-  | Some (#Value.t as r) ->
+  | Some #Value.t ->
       failwith("Attempt to apply primitive non-function "
 	       ^ "(#" ^string_of_int var^ ").")
   | Some (`PFun p) -> p args
@@ -1667,8 +1653,8 @@ let cohttp_server_response headers body =
   let h = Cohttp.Header.add_list (Cohttp.Header.init ()) (headers @ !http_response_headers) in
   Cohttp_lwt_unix.Server.respond_string
     ?headers:(Some h)
-    ?status:(Cohttp.Code.status_of_code !http_response_code)
-    ?body:body
+    ~status:(Cohttp.Code.status_of_code !http_response_code)
+    ~body:body
     ()
 
 (** Output the headers and content to stdout *)

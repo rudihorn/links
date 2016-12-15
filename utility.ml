@@ -798,7 +798,7 @@ let xml_unescape s =
 (** (0 base64 Routines) *)
 let base64decode s =
   try Netencoding.Base64.decode (Str.global_replace (Str.regexp " ") "+" s)
-  with Invalid_argument "Netencoding.Base64.decode"
+  with Invalid_argument _
       -> raise (Invalid_argument ("base64 decode gave error: " ^ s))
 
 let base64encode = Netencoding.Base64.encode

@@ -1,6 +1,3 @@
-open Ir
-open Proc
-
 val webs_running : bool Settings.setting
 
 module type WEBSERVER =

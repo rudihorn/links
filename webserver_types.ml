@@ -1,6 +1,3 @@
-open Ir
-open Proc
-
 let webs_running = Settings.add_bool ("webs_running", false, `System)
 
 module type WEBSERVER =
