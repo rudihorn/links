@@ -2,16 +2,12 @@ open Utility
 open Sugartypes
 open ModuleUtils
 
-type prog_map = program StringMap.t
 type filename = string
 (* Helper functions *)
 
 (* Helper function: given top-level module name, maps to expected filename *)
 let top_level_filename module_name =
-  (String.uncapitalize module_name) ^ ".links"
-
-let print_sorted_deps xs =
-  print_list (List.map print_list xs)
+  (String.uncapitalize_ascii module_name) ^ ".links"
 
 (* Given a module name and unique AST, try and locate / parse the module file *)
 let parse_module module_name =
