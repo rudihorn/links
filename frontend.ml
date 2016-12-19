@@ -15,13 +15,13 @@ sig
 end
 =
 struct
-  let show s program =
+  let _show s program =
     Debug.print (s ^ ": " ^ Sugartypes.Show_program.show program);
     program
 
   (* (These functions correspond to 'first' in an arrow) *)
   let after_typing f (a, b, c) = (f a, b, c)
-  let after_alias_expansion f (a, b) = (f a, b)
+  let _after_alias_expansion f (a, b) = (f a, b)
 
   let program =
     fun tyenv pos_context program ->

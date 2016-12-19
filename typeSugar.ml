@@ -93,6 +93,7 @@ struct
   and is_pure_binding (bind, _ : binding) = match bind with
       (* need to check that pattern matching cannot fail *)
     | `QualifiedImport _
+    | `Module _
     | `Fun _
     | `Funs _
     | `Infix
