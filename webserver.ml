@@ -71,7 +71,7 @@ struct
         | [] ->
            Debug.print "No cases matched!\n";
            Server.respond_string ~status:`Not_found ~body:"<html><body><h1>Nope</h1></body></html>" ()
-        | ((dir, s, (valenv, v)) :: rest) when (dir && is_prefix_of s path) || (s = path) ->
+        | ((dir, s, (valenv, v)) :: _rest) when (dir && is_prefix_of s path) || (s = path) ->
              Debug.print (Printf.sprintf "Matched case %s\n" s);
              let (_, nenv, tyenv) = !env in
              Webif.do_request (valenv, nenv, tyenv) cgi_args (run_page (dir, s, (valenv, v))) (render_cont ()) Lib.cohttp_server_response
