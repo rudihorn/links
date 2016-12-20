@@ -1966,9 +1966,7 @@ let free_bound_tycon_type_vars ?(include_aliases=true) = Vars.free_bound_tycon_v
     existing pool of type variable names.
  *)
 let add_tyvar_names (f : 'a -> Vars.vars_list) (tys : 'a list) =
-  List.map (fun t -> Vars.make_names (f t)) tys;
-  Vars.tyvar_name_map;
-  ()
+  List.iter (fun t -> let _ = Vars.make_names (f t) in ()) tys
 
 (** Builds a fresh set of type variable names for a given list of things.  This
     function is called:

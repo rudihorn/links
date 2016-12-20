@@ -27,7 +27,7 @@ struct
         Value.env *            (* closure environment *)
         Value.t list           (* arguments *)
     | EvalMain
-        deriving (Show)
+        (* deriving (Show) *)
 
   (** Does at least one of the functions have to run on the client? *)
   let is_client_program : Ir.program -> bool =
@@ -213,7 +213,7 @@ struct
     >>= fun (content_type, content) ->
     response_printer [("Content-type", content_type)] content
 
-  let serve_request_program ((valenv, _, _) as env) (globals, (locals, main), render_cont) response_printer cgi_args =
+  let serve_request_program ((_valenv, _, _) as env) (globals, (locals, main), render_cont) response_printer cgi_args =
     Proc.run (fun () -> do_request env cgi_args
                                    (fun () -> Lwt.return (run_main env (globals, (locals, main)) cgi_args ()))
                                    render_cont
