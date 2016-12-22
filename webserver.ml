@@ -109,8 +109,8 @@ struct
     let start_server host port rt =
 
       let render_cont () =
-        let (_, nenv, {Types.tycon_env = tycon_env; _ }) = !env in
-        let _, x = Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
+        let (_, nenv, {Types.tycon_env = tycon_env}) = !env in
+        let xb, x = Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
         let render_page = Env.String.lookup nenv "renderPage" in
         let tail = `Apply (`Variable render_page, [`Variable x]) in
         Hashtbl.add Tables.scopes x `Global;
