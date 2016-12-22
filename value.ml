@@ -397,7 +397,7 @@ and uncompress_env globals env : env =
 let string_as_charlist s : t =
   `List (List.rev (List.rev_map (fun x -> `Char x) (explode s)))
 
-let escape =
+let _escape =
   Str.global_replace (Str.regexp "\\\"") "\\\"" (* FIXME: Can this be right? *)
 
 (** {1 Pretty-printing values} *)
@@ -476,7 +476,7 @@ and string_of_tuple (fields : (string * t) list) : string =
 
 and numberp s = try ignore(int_of_string s); true with _ -> false
 
-and string_of_environment : env -> string = fun _env -> "[ENVIRONMENT]"
+and _string_of_environment : env -> string = fun _env -> "[ENVIRONMENT]"
 
 and string_of_cont : continuation -> string =
   fun cont ->

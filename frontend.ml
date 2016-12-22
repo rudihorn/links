@@ -36,39 +36,39 @@ struct
             failwith ("File contains modules, but modules not enabled. Please set " ^
               "modules flag to true, or run with -m.")
       else program in
-        CheckXmlQuasiquotes.checker#program program;
-        (   DesugarLAttributes.desugar_lattributes#program
-        ->- RefineBindings.refine_bindings#program
-        ->- DesugarDatatypes.program tyenv.Types.tycon_env
-        ->- TypeSugar.Check.program tyenv
-        ->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarCP.desugar_cp tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarInners.desugar_inners tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarProcesses.desugar_processes tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarDbs.desugar_dbs tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarFors.desugar_fors tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarRegexes.desugar_regexes tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarFormlets.desugar_formlets tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarPages.desugar_pages tyenv)#program ->- snd3)
-        ->- after_typing ((DesugarFuns.desugar_funs tyenv)#program ->- snd3))
-          program
+      let _program = CheckXmlQuasiquotes.checker#program program in
+      (DesugarLAttributes.desugar_lattributes#program
+       ->- RefineBindings.refine_bindings#program
+       ->- DesugarDatatypes.program tyenv.Types.tycon_env
+       ->- TypeSugar.Check.program tyenv
+       ->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarCP.desugar_cp tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarInners.desugar_inners tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarProcesses.desugar_processes tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarDbs.desugar_dbs tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarFors.desugar_fors tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarRegexes.desugar_regexes tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarFormlets.desugar_formlets tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarPages.desugar_pages tyenv)#program ->- snd3)
+       ->- after_typing ((DesugarFuns.desugar_funs tyenv)#program ->- snd3))
+        program
 
   let interactive =
     fun tyenv pos_context sentence ->
       let sentence = (ResolvePositions.resolve_positions pos_context)#sentence sentence in
-        CheckXmlQuasiquotes.checker#sentence sentence;
-        (   DesugarLAttributes.desugar_lattributes#sentence
-        ->- RefineBindings.refine_bindings#sentence
-        ->- DesugarDatatypes.sentence tyenv
-        ->- uncurry TypeSugar.Check.sentence
-        ->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarCP.desugar_cp tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarInners.desugar_inners tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarProcesses.desugar_processes tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarDbs.desugar_dbs tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarFors.desugar_fors tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarRegexes.desugar_regexes tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarFormlets.desugar_formlets tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarPages.desugar_pages tyenv)#sentence ->- snd)
-        ->- after_typing ((DesugarFuns.desugar_funs tyenv)#sentence ->- snd)) sentence
+      let _sentence = CheckXmlQuasiquotes.checker#sentence sentence in
+      (DesugarLAttributes.desugar_lattributes#sentence
+       ->- RefineBindings.refine_bindings#sentence
+       ->- DesugarDatatypes.sentence tyenv
+       ->- uncurry TypeSugar.Check.sentence
+       ->- after_typing ((FixTypeAbstractions.fix_type_abstractions tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarCP.desugar_cp tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarInners.desugar_inners tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarProcesses.desugar_processes tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarDbs.desugar_dbs tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarFors.desugar_fors tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarRegexes.desugar_regexes tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarFormlets.desugar_formlets tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarPages.desugar_pages tyenv)#sentence ->- snd)
+       ->- after_typing ((DesugarFuns.desugar_funs tyenv)#sentence ->- snd)) sentence
 end

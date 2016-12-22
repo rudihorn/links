@@ -306,6 +306,7 @@ module Session = struct
         | Accepting cs         -> let c = new_channel () in (c, Accepting (cs @ [c]), true)
         | Requesting [c]       -> (c, Balanced, false)
         | Requesting (c :: cs) -> (c, Requesting cs, false)
+        | Requesting []        -> assert false (* TODO: check that this is impossible *)
       in
         Hashtbl.replace access_points apid state';
         c, blocked
@@ -319,6 +320,7 @@ module Session = struct
         | Requesting cs       -> let c = new_channel () in (c, Requesting (cs @ [c]), true)
         | Accepting [c]       -> (c, Balanced, false)
         | Accepting (c :: cs) -> (c, Accepting cs, false)
+        | Accepting []        -> assert false (* TODO: check that this is impossible *)
       in
         Hashtbl.replace access_points apid state';
         flip_chan c, blocked
