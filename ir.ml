@@ -96,6 +96,7 @@ let binding_scope : binding -> scope =
   | `Fun (b, _, _, _)
   | `Rec ((b, _, _, _)::_)
   | `Alien (b, _) -> Var.scope_of_binder b
+  | `Rec []
   | `Module _ -> assert false
 
 let binder_of_fun_def (fb, _, _, _) = fb
@@ -153,7 +154,7 @@ sig
   object ('self_type)
     val tyenv : environment
 
-    method private lookup_type : var -> Types.datatype
+    method lookup_type : var -> Types.datatype
     method constant : constant -> (constant * Types.datatype * 'self_type)
     method optionu :
       'a.
@@ -212,7 +213,7 @@ struct
     val tyenv = tyenv
     (* val cenv = Env.empty *)
 
-    method private lookup_type : var -> datatype = fun var ->
+    method lookup_type : var -> datatype = fun var ->
       Env.lookup tyenv var
 
     (* method private lookup_closure_type : var -> datatype = fun var -> *)

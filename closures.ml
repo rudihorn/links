@@ -20,17 +20,17 @@ struct
 
       val fenv : (Ir.binder list) IntMap.t = IntMap.empty
 
-      method private register_fun f (zs : binder list) =
+      method register_fun f (zs : binder list) =
         {< fenv = IntMap.add f zs fenv >}
 
-      method private global x =
+      method global x =
         {< globals = IntSet.add x globals >}
 
-      method private bound x =
+      method bound x =
         {< bound_vars = IntSet.add x bound_vars >}
 
       (* recursively gather free variables required by inner closures *)
-      method private close x =
+      method close x =
         if IntSet.mem x bound_vars then
           if IntMap.mem x fenv then
             let zs = IntMap.find x fenv in
@@ -46,7 +46,7 @@ struct
             {< free_vars = IntSet.add x free_vars >}
           end
 
-      method private register_var x =
+      method register_var x =
         if IntSet.mem x globals then
           o
         else
@@ -54,11 +54,11 @@ struct
 
       method private reset =
         {< bound_vars = IntSet.empty; free_vars = IntSet.empty >}
-      method private set bound_vars free_vars =
+      method set bound_vars free_vars =
         {< bound_vars = bound_vars; free_vars = free_vars >}
 
-      method private get_bound_vars = bound_vars
-      method private get_free_vars = free_vars
+      method get_bound_vars = bound_vars
+      method get_free_vars = free_vars
 
       method get_fenv = fenv
 
@@ -75,7 +75,7 @@ struct
 
       method private super_binding = super#binding
 
-      method private super_binder = super#binder
+      method super_binder = super#binder
 
       method! binding =
         function
@@ -265,8 +265,8 @@ struct
 
       val hoisted_bindings = []
 
-      method private push_binding b = {< hoisted_bindings = b :: hoisted_bindings >}
-      method private pop_hoisted_bindings = List.rev hoisted_bindings, {< hoisted_bindings = [] >}
+      method push_binding b = {< hoisted_bindings = b :: hoisted_bindings >}
+      method pop_hoisted_bindings = List.rev hoisted_bindings, {< hoisted_bindings = [] >}
 
       method! value =
         function
@@ -298,7 +298,7 @@ struct
           var_val x, t, o
         | v -> super#value v
 
-      method private set_context parents parent_env cvars =
+      method set_context parents parent_env cvars =
         {< parents = parents; parent_env = parent_env; cvars = cvars >}
 
       method! bindings =

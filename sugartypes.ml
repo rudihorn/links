@@ -424,6 +424,7 @@ struct
           union_all [phrase from;
                      diff (option_map phrase where) pat_bound;
                      diff (union_map (snd ->- phrase) fields) pat_bound]
+    | `QualifiedVar _ -> failwith "Freevars for qualified vars not implemented yet"
   and binding (binding, _: binding) : StringSet.t (* vars bound in the pattern *)
                                     * StringSet.t (* free vars in the rhs *) =
     match binding with
@@ -442,6 +443,7 @@ struct
     | `Type _
     | `Infix -> empty, empty
     | `Exp p -> empty, phrase p
+    | `Module _ -> failwith "Freevars for modules not implemented yet"
   and funlit (args, body : funlit) : StringSet.t =
     diff (phrase body) (union_map (union_map pattern) args)
   and block (binds, expr : binding list * phrase) : StringSet.t =

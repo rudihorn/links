@@ -1,8 +1,6 @@
 open Utility
 open Types
 
-module Env = Env.String
-
 (** type destructors *)
 exception TypeDestructionError of string
 

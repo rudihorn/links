@@ -172,15 +172,15 @@ and perform_term_renaming module_table path ht =
           (self, `Fun (bnd, lin, (tvs, fnlit'), loc, dt_opt))
       | b -> super#bindingnode b
 
-    method binop = function
+    method! binop = function
       | `Name n -> (self, `Name (resolve n shadow_table))
       | bo -> super#binop bo
 
-    method unary_op = function
+    method! unary_op = function
       | `Name n -> (self, `Name (resolve n shadow_table))
       | uo -> super#unary_op uo
 
-    method phrasenode = function
+    method! phrasenode = function
       | `Block (bs, phr) ->
           (* Process bindings, then process the phrase using
            * updated shadow table. *)
