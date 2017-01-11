@@ -148,6 +148,8 @@ sig
 
   val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype) -> tail_computation sem
 
+  val lens_handle : value sem * datatype -> tail_computation sem
+
   val wrong : datatype -> tail_computation sem
 
   val letfun :
@@ -467,6 +469,11 @@ struct
 	     bind keys
 		(fun keys ->  lift (`Special (`Table (database, table, keys, (r, w, n))),
                                `Table (r, w, n)))))
+
+  let lens_handle (table, rtype) =
+      bind table 
+        (fun table -> 
+            lift (`Special (`Lens (table, rtype)), `Lens(rtype))) 
 
   let wrong t = lift (`Special (`Wrong t), t)
 
@@ -820,6 +827,11 @@ struct
               in
                 I.database
                   (ev (`RecordLit ([("name", name); ("driver", driver); ("args", args)], None), pos))
+          | `LensLit (table) ->
+              let table = ev table in 
+              let ttype = I.sem_type table in
+              let rtype = match ttype with `Table(r, _, _) -> r in
+              I.lens_handle (table, rtype) 
           | `TableLit (name, (_, Some (readtype, writetype, neededtype)), constraints, keys, db) ->
               I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype))
           | `Xml (tag, attrs, attrexp, children) ->

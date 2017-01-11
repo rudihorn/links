@@ -86,6 +86,7 @@ struct
     | `Offer _
     | `CP _
     (* | `Fork _ *)
+    | `LensLit _
     | `DBDelete _
     | `DBInsert _
     | `DBUpdate _ -> false
@@ -1760,6 +1761,14 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
               `TableLit (erase tname, (dtype, Some (read_row, write_row, needed_row)), constraints, erase keys, erase db),
               `Table (read_row, write_row, needed_row),
               merge_usages [usages tname; usages db]
+        | `LensLit (table) ->
+           let table = tc table in
+           let trowtype = 
+               begin
+                 match typ table with
+                 | `Table (r,_,_) -> r
+               end in
+           `LensLit(erase table), `Lens (trowtype), merge_usages [usages table]
         | `DBDelete (pat, from, where) ->
             let pat  = tpc pat in
             let from = tc from in

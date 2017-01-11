@@ -188,6 +188,7 @@ let datatype d = d, None
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON COLONCOLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY 
 %token UPDATE DELETE INSERT VALUES SET RETURNING
+%token LENS DROP
 %token READONLY DEFAULT
 %token ESCAPE
 %token CLIENT SERVER NATIVE
@@ -827,6 +828,11 @@ database_expression:
                                                                  pos() }
 | DATABASE atomic_expression perhaps_db_driver                 { `DatabaseLit ($2, $3), pos() }
 
+lens_expression:
+| database_expression                                          { $1 }
+| LENS exp                                                     { `LensLit ($2), pos() }
+
+
 record_labels:
 | record_label COMMA record_labels                             { $1 :: $3 }
 | record_label                                                 { [$1] }
@@ -867,7 +873,7 @@ perhaps_semi:
 | /* empty */                                                  {}
 
 exp:
-| database_expression                                          { $1 }
+| lens_expression                                              { $1 }
 
 labeled_exps:
 | record_label EQ exp                                          { [$1, $3] }

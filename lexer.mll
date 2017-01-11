@@ -176,6 +176,7 @@ let keywords = [
  "formlet"  , FORMLET;
  "if"       , IF;
  "in"       , IN;
+ "lens"     , LENS;
  "open"     , OPEN;
  "yields"   , YIELDS;
 (*  "infix"    , INFIX; *)

@@ -82,6 +82,7 @@ type typ =
     | `Record of row
     | `Variant of row
     | `Table of typ * typ * typ
+    | `Lens of typ
     | `Alias of ((string * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
     | `MetaTypeVar of meta_type_var

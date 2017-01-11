@@ -417,6 +417,12 @@ module Eval = struct
   and special env cont : Ir.special -> Proc.thread_result Lwt.t = function
     | `Wrong _                    -> raise Wrong
     | `Database v                 -> apply_cont cont env (`Database (db_connect (value env v)))
+    | `Lens (table, typ) -> 
+      begin
+          match value env table, (TypeUtils.concrete_type typ) with 
+            | `Table tinfo, `Record row ->
+                 apply_cont cont env (`Lens (tinfo, row))
+      end
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have

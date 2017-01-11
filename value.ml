@@ -166,6 +166,7 @@ type primitive_value = [
 | primitive_value_basis
 | `Database of (database * string)
 | `Table of table
+| `Lens of table * Types.row
 ]
   deriving (Show)
 
@@ -417,6 +418,7 @@ and string_of_primitive : primitive_value -> string = function
   | `XML x -> string_of_item x
   | `Database (_, params) -> "(database " ^ params ^")"
   | `Table (_, table_name, _, _) -> "(table " ^ table_name ^")"
+  | `Lens _ -> "(lens)"
   | `String s -> "\"" ^ s ^ "\""
 
 and string_of_tuple (fields : (string * t) list) : string =

@@ -55,6 +55,7 @@ type primitive_value = [
 | `Char of char
 | `Database of (database * string)
 | `Table of table
+| `Lens of table * Types.row
 | `Float of float
 | `Int of int
 | `XML of xmlitem

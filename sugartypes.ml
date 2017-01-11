@@ -231,6 +231,7 @@ and phrasenode = [
 | `DBDelete         of pattern * phrase * phrase option
 | `DBInsert         of phrase * name list * phrase * phrase option
 | `DBUpdate         of pattern * phrase * phrase option * (name * phrase) list
+| `LensLit          of phrase
 | `Xml              of name * (name * (phrase list)) list * phrase option * phrase list
 | `TextNode         of string
 | `Formlet          of phrase * phrase

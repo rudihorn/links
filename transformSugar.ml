@@ -433,6 +433,10 @@ class transform (env : Types.typing_environment) =
           let (o, driver, _) = option o (fun o -> o#phrase) driver in
           let (o, args, _) = option o (fun o -> o#phrase) args in
             (o, `DatabaseLit (name, (driver, args)), `Primitive `DB)
+      | `LensLit (table) ->
+         let (o, table, tableType) = o#phrase table in
+         let rowType = match tableType with `Table (r, _, _) -> r in
+         (o, `LensLit (table), `Lens (rowType))
       | `TableLit (name, (dtype, Some (read_row, write_row, needed_row)), constraints, keys, db) ->
           let (o, name, _) = o#phrase name in
           let (o, db, _) = o#phrase db in
