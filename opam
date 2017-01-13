@@ -11,15 +11,33 @@ build: [
   [ make "nc" ]
 ]
 install: [
-  [ "cp" "links" "%{links:bin}%/linx"       ]
-  [ "mkdir" "-p" "%{links:lib}%"            ]
-  [ "cp" "prelude.links" "%{links:lib}%"    ]
-  [ "./links" "%{links:lib}%/prelude.links" ]
+  [ "cp" "links" "%{links:bin}%/linx"                               ]
+# Install Links prelude
+  [ "mkdir" "-p" "%{links:lib}%"                                    ]
+  [ "cp" "prelude.links" "%{links:lib}%"                            ]
+  [ "./links" "%{links:lib}%/prelude.links"                         ]
+# Install JS libraries
+  [ "cp" "-r" "lib/js" "%{links:lib}%"                              ]
+# Copy examples
+  [ "mkdir" "-p" "%{links:share}%/examples"                         ]
+  [ "sh" "-c" "cp examples/*.links %{links:share}%/examples"        ]
+  [ "sh" "-c" "cp examples/*.jpg %{links:share}%/examples"          ]
+  [ "sh" "-c" "cp examples/*.sql %{links:share}%/examples"          ]
+  [ "sh" "-c" "cp examples/*.html %{links:share}%/examples"         ]
+  [ "sh" "-c" "cp examples/*.css %{links:share}%/examples"          ]
+  [ "sh" "-c" "cp examples/*.js %{links:share}%/examples"           ]
+  [ "sh" "-c" "cp -r examples/dictionary %{links:share}%/examples/" ]
+  [ "sh" "-c" "cp -r examples/games %{links:share}%/examples/"      ]
+  [ "sh" "-c" "cp -r examples/sessions %{links:share}%/examples/"   ]
+  [ "sh" "-c" "cp -r examples/webserver %{links:share}%/examples/"  ]
 ]
+
 remove: [
-  [ "rm" "-f"  "%{links:bin}%/links" ]
-  [ "rm" "-rf" "%{links:lib}%"       ]
+  [ "rm" "-f"  "%{links:bin}%/linx"       ]
+  [ "rm" "-rf" "%{links:lib}%"            ]
+  [ "rm" "-rf" "%{links:share}%/examples" ]
 ]
+
 depends: [
   "ocamlfind" {build}
   "deriving" {build}
@@ -28,6 +46,7 @@ depends: [
   "base64"
   "cohttp"
 ]
+
 depopts: [
   "mysql"
   "postgresql"
