@@ -10,25 +10,31 @@ You can then install Links simply by issuing the command:
 
   $ opam install postgresql links
 
+This will put Links and its files into your OPAM switch, typically located at
+$HOME/.opam/SWITCH_VERSION, where $HOME is your home directory and
+SWITCH_VERSION is the compiler version that you're using (eg. 4.04.0).  Links
+files install to several locations inside an OPAM switch:
+
+* executable is called `linx` an goes into `bin` directory
+* Links prelude and JavaScript libraries go into lib/links
+* example Links programs go into share/links
+* Links configuration file goes into etc/links
+
 # Running Links.
 
-Beginning with the Gorgie release, Links supports two methods of running
+Beginning with the Gorgie (0.6) release, Links supports two methods of running
 applications: either via the standalone application server, or via the CGI
 interpreter used in previous releases.
 
 ## Application Server
 
-To invoke a Links application using the application server, use a command
-similar to the following:
+To run provided examples using Links application server go into share/links
+directory inside your OPAM switch and invoke the following command:
 
-  links --config=config -m
+  linx -m
   --path=examples:examples/games:examples/dictionary
   examples/webserver/examples.links
 
-(This program provides an application server for a number of example
-programs.)
-
-* The --config flag sets the location of the config file to the file "config"
 * The -m flag enables support for Links' module system, new in Gorgie.
 * The --path flag says that files can be found in the following directories:
   - examples
@@ -39,25 +45,31 @@ programs.)
 
 But first you need to do a few things.
 
-  1) The config file needs to have an appropriate jsliburl and database
-configuration arguments:
+  1) By default Links uses a config file inside etc/links directory.  Use
+     --config=/custom/config/file flag to use a different configuration file.
 
-  jsliburl=/lib/
-  database_driver=postgresql
-  database_args=:5432:fred:
+  2) Default config file should contain paths to JavaScript libraries:
 
-  2) The database user fred should exist. With postgres, perhaps the easiest
-  way I to do this is to tie fred to the unix username and then no
-  authentication is required.
+     jsliburl=/lib/
+     jslibdir=SWITCH_PATH/lib/links/js
+
+     Where SWITCH_PATH is the actual path on your system.  To use database
+     examples you need to add database configuration to the config file:
+
+     database_driver=postgresql
+     database_args=:5432:fred:
+
+     The database user fred should exist. With postgres, perhaps the easiest
+     way I to do this is to tie fred to the unix username and then no
+     authentication is required.
 
   3) Create appropriate databases. We have some scripts to populate tables for
-  some of the examples, but not all of them. We also don't have the actual
-  data.
+     some of the examples, but not all of them. We also don't have the actual
+     data.
 
 You should also be able to run
 
-  links --config=config -m --path=examples:examples/games
-    examples/webserver/examples-nodb.links
+  linx -m --path=examples:examples/games examples/webserver/examples-nodb.links
 
 without needing to install a database. (This version just displays the
 source code for examples that use the database.)
@@ -70,7 +82,6 @@ you should be able to access them by pointing your browser at:
 Some (outdated) documentation can be built by running the Makefile in
 the doc directory.
 
-Some very incomplete but more up-to-date documentation is available on
-the links wiki:
+Some very incomplete documentation is available on the links wiki:
 
   https://github.com/links-lang/links/wiki
