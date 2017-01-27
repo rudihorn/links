@@ -87,6 +87,9 @@ struct
     | `CP _
     (* | `Fork _ *)
     | `LensLit _
+    | `LensDropLit _
+    | `LensGetLit _
+    | `LensPutLit _
     | `DBDelete _
     | `DBInsert _
     | `DBUpdate _ -> false
@@ -1761,14 +1764,30 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
               `TableLit (erase tname, (dtype, Some (read_row, write_row, needed_row)), constraints, erase keys, erase db),
               `Table (read_row, write_row, needed_row),
               merge_usages [usages tname; usages db]
-        | `LensLit (table) ->
+        | `LensLit (table, _) ->
            let table = tc table in
            let trowtype = 
                begin
                  match typ table with
                  | `Table (r,_,_) -> r
+                 | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
-           `LensLit(erase table), `Lens (trowtype), merge_usages [usages table]
+           `LensLit(erase table, Some trowtype), `Lens (trowtype), merge_usages [usages table]
+        | `LensDropLit (lens, drop, key, default, _) ->
+           let lens = tc lens
+           and default = tc default in
+           let trowtype = match typ lens with `Lens (r) -> 
+               try LensHelpers.remove_record_type drop r
+                 with NotFound _ -> Gripers.die pos ("There is no column with name " ^ drop ^ " in the underlying lens.") in
+             `LensDropLit (erase lens, drop, key, erase default, Some trowtype), `Lens (trowtype), merge_usages [usages lens; usages default]
+        | `LensGetLit (lens, _) ->
+           let lens = tc lens in
+           let trowtype = match typ lens with `Lens(r) -> r in
+           `LensGetLit (erase lens, Some trowtype), `Lens (trowtype), merge_usages [usages lens]
+        | `LensPutLit (lens, _) ->
+           let lens = tc lens in 
+           let trowtype = match typ lens with `Lens(r) -> r in
+           `LensPutLit (erase lens, Some trowtype), `Lens (trowtype), merge_usages [usages lens]
         | `DBDelete (pat, from, where) ->
             let pat  = tpc pat in
             let from = tc from in

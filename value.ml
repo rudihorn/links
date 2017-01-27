@@ -166,9 +166,9 @@ type primitive_value = [
 | primitive_value_basis
 | `Database of (database * string)
 | `Table of table
-| `Lens of table * Types.row
 ]
   deriving (Show)
+
 
 module Show_in_channel = Deriving_Show.Show_unprintable(struct type a = in_channel end)
 module Show_out_channel = Deriving_Show.Show_unprintable(struct type a = out_channel end)
@@ -191,6 +191,9 @@ type continuation = (Ir.scope * Ir.var * env * Ir.computation) list
 and t = [
 | primitive_value
 | `List of t list
+| `Lens of table * Types.row
+| `LensMem of t * Types.row 
+| `LensDrop of t * string * string * primitive_value_basis * Types.row
 | `Record of (string * t) list
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
@@ -202,6 +205,9 @@ and t = [
 ]
 and env = (t * Ir.scope) Utility.intmap  * (t * Ir.scope) Utility.intmap
   deriving (Show)
+
+let primValue : primitive_value_basis -> primitive_value = function
+    | #primitive_value_basis as p -> p
 
 let toplevel_cont : continuation = []
 
@@ -410,6 +416,9 @@ and string_of_value : t -> string = function
   | `Continuation cont -> "Continuation" ^ string_of_cont cont
   | `Pid (pid, location) -> string_of_int pid ^ "@" ^ Sugartypes.string_of_location location
   | `Socket (_, _) -> "<socket>"
+  | `Lens (_, _) -> "(lens)"
+  | `LensMem (_, _) -> "(lens)" 
+  | `LensDrop (lens, dr, key, def, typ) -> "(lensdrop " ^ dr ^ " determined by " ^ key ^ " default " ^ string_of_primitive (primValue def) ^ " from " ^ string_of_value lens
 and string_of_primitive : primitive_value -> string = function
   | `Bool value -> string_of_bool value
   | `Int value -> string_of_int value
@@ -418,7 +427,6 @@ and string_of_primitive : primitive_value -> string = function
   | `XML x -> string_of_item x
   | `Database (_, params) -> "(database " ^ params ^")"
   | `Table (_, table_name, _, _) -> "(table " ^ table_name ^")"
-  | `Lens _ -> "(lens)"
   | `String s -> "\"" ^ s ^ "\""
 
 and string_of_tuple (fields : (string * t) list) : string =

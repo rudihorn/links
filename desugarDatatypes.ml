@@ -172,6 +172,7 @@ struct
         | `Record r -> `Record (row var_env alias_env r)
         | `Variant r -> `Variant (row var_env alias_env r)
         | `Table (r, w, n) -> `Table (datatype var_env r, datatype var_env w, datatype var_env n)
+        | `Lens (r) -> `Lens (datatype var_env r)
         | `List k -> `Application (Types.list, [`Type (datatype var_env k)])
         | `TypeApplication (tycon, ts) ->
             begin match SEnv.find alias_env tycon with

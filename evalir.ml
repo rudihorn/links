@@ -422,7 +422,17 @@ module Eval = struct
           match value env table, (TypeUtils.concrete_type typ) with 
             | `Table tinfo, `Record row ->
                  apply_cont cont env (`Lens (tinfo, row))
+            | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, row))
       end
+    | `LensDrop (lens, drop, key, def, rtype) as le -> 
+        let lens = value env lens in 
+        let def = match value env def with #Value.primitive_value_basis as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
+        let rtype = match rtype with `Record row -> row in
+          apply_cont cont env (`LensDrop (lens, drop, key, def, rtype))
+    | `LensGet (lens, rtype) as le ->
+        let lens = value env lens in
+        let res = LensHelpers.lens_get lens in
+          apply_cont cont env res
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have

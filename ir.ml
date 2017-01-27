@@ -83,6 +83,9 @@ and special =
     [ `Wrong of Types.datatype
   | `Database of value 
   | `Lens of value * Types.datatype
+  | `LensDrop of value * string * string * value * Types.datatype
+  | `LensGet of value * Types.datatype
+  | `LensPut of value * value * Types.datatype
   | `Table of (value * value * value * (Types.datatype * Types.datatype * Types.datatype))
   | `Query of (value * value) option * computation * Types.datatype
   | `Update of (binder * value) * computation option * computation
@@ -433,7 +436,14 @@ module type TRANSFORM =
                 `Table (db, table_name, keys, tt), `Table tt, o
         | `Lens (table, rtype) ->
             let table, _, o = o#value table in
-            `Lens (table, rtype), `Lens (rtype), o
+              `Lens (table, rtype), `Lens (rtype), o
+        | `LensDrop (lens, drop, key, default, rtype) ->
+            let lens, _, o = o#value lens in
+            let default, _, o = o#value default in
+              `LensDrop (lens, drop, key, default, rtype), `Lens(rtype), o
+        | `LensGet (lens, rtype) ->
+            let lens, _, o = o#value lens in
+              `LensGet (lens, rtype)
         | `Query (range, e, t) ->
             let range, o =
               o#optionu

@@ -433,10 +433,23 @@ class transform (env : Types.typing_environment) =
           let (o, driver, _) = option o (fun o -> o#phrase) driver in
           let (o, args, _) = option o (fun o -> o#phrase) args in
             (o, `DatabaseLit (name, (driver, args)), `Primitive `DB)
-      | `LensLit (table) ->
-         let (o, table, tableType) = o#phrase table in
-         let rowType = match tableType with `Table (r, _, _) -> r in
-         (o, `LensLit (table), `Lens (rowType))
+      | `LensLit (table, Some t) ->
+         let (o, table, _) = o#phrase table in
+         let (o, t) = o#datatype t in
+            (o, `LensLit (table, Some t), `Lens (t))
+      | `LensDropLit (lens, drop, key, default, Some t) ->
+          let (o, lens, _) = o#phrase lens in
+          let (o, t) = o#datatype t in
+          let (o, default, _) = o#phrase default in
+            (o, `LensDropLit (lens, drop, key, default, Some t), `Lens (t))
+      | `LensGetLit (lens, Some t) -> 
+          let (o, lens, _) = o#phrase lens in
+          let (o, t) = o#datatype t in
+            (o, `LensGetLit (lens, Some t), `Lens (t))
+      | `LensPutLit (lens, Some t) ->
+          let (o, lens, _) = o#phrase lens in
+          let (o, t) = o#datatype t in
+            (o, `LensPutLit (lens, Some t), `Lens (t))
       | `TableLit (name, (dtype, Some (read_row, write_row, needed_row)), constraints, keys, db) ->
           let (o, name, _) = o#phrase name in
           let (o, db, _) = o#phrase db in

@@ -47,19 +47,21 @@ type xmlitem =   Text of string
 and xml = xmlitem list
   deriving (Show)
 
-type table = (database * string) * string * string list list * Types.row
-  deriving (Show)
-
-type primitive_value = [
+type primitive_value_basis = [
 | `Bool of bool
 | `Char of char
-| `Database of (database * string)
-| `Table of table
-| `Lens of table * Types.row
 | `Float of float
 | `Int of int
 | `XML of xmlitem
 | `String of string ]
+
+type table = (database * string) * string * string list list * Types.row
+  deriving (Show)
+
+type primitive_value = [
+| primitive_value_basis
+| `Database of (database * string)
+| `Table of table ]
 
 module Show_primitive_value : Deriving_Show.Show with type a = primitive_value
 
@@ -68,6 +70,9 @@ type t = [
 | primitive_value
 | `List of t list
 | `Record of (string * t) list
+| `Lens of table * Types.row
+| `LensMem of t * Types.row
+| `LensDrop of t * string * string * primitive_value_basis * Types.row
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
 | `PrimitiveFunction of string * Var.var option

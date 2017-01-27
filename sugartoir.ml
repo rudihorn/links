@@ -150,6 +150,11 @@ sig
 
   val lens_handle : value sem * datatype -> tail_computation sem
 
+  val lens_drop_handle : value sem * string * string * value sem * datatype -> tail_computation sem
+
+  val lens_get : value sem * datatype -> tail_computation sem
+
+
   val wrong : datatype -> tail_computation sem
 
   val letfun :
@@ -473,7 +478,19 @@ struct
   let lens_handle (table, rtype) =
       bind table 
         (fun table -> 
-            lift (`Special (`Lens (table, rtype)), `Lens(rtype))) 
+            lift (`Special (`Lens (table, rtype)), `Lens (rtype))) 
+
+  let lens_drop_handle (lens, drop, key, default, rtype) =
+      bind lens
+        (fun lens ->
+            bind default
+            (fun default ->
+               lift (`Special (`LensDrop (lens, drop, key, default, rtype)), `Lens (rtype))))
+
+  let lens_get (lens, rtype) =
+      bind lens 
+        (fun lens ->
+            lift (`Special (`LensGet (lens, rtype)), `Lens (rtype)))
 
   let wrong t = lift (`Special (`Wrong t), t)
 
@@ -827,13 +844,18 @@ struct
               in
                 I.database
                   (ev (`RecordLit ([("name", name); ("driver", driver); ("args", args)], None), pos))
-          | `LensLit (table) ->
+          | `LensLit (table, Some t) ->
               let table = ev table in 
-              let ttype = I.sem_type table in
-              let rtype = match ttype with `Table(r, _, _) -> r in
-              I.lens_handle (table, rtype) 
+                I.lens_handle (table, t) 
+          | `LensDropLit (lens, drop, key, default, Some t) ->
+              let lens = ev lens in
+              let default = ev default in
+                I.lens_drop_handle (lens, drop, key, default, t)
+          | `LensGetLit (lens, Some t) ->
+              let lens = ev lens in
+                I.lens_get (lens, t)
           | `TableLit (name, (_, Some (readtype, writetype, neededtype)), constraints, keys, db) ->
-              I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype))
+                I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype))
           | `Xml (tag, attrs, attrexp, children) ->
               (* check for duplicates *)
               let () =

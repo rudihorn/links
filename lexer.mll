@@ -161,11 +161,13 @@ let count_newlines = StringUtils.count '\n'
 let keywords = [
  "alien"    , ALIEN;
  "as"       , AS;
+ "by"       , BY;
  "case"     , CASE;
  "client"   , CLIENT;
  "database" , DATABASE;
  "default"  , DEFAULT;
  "delete"   , DELETE;
+ "determined", DETERMINED;
  "else"     , ELSE;
  "escape"   , ESCAPE;
  "false"    , FALSE;
@@ -174,9 +176,11 @@ let keywords = [
  "from"     , FROM;
  "fun"      , FUN;
  "formlet"  , FORMLET;
+ "get"      , GET;
  "if"       , IF;
  "in"       , IN;
  "lens"     , LENS;
+ "lensdrop" , LENSDROP;
  "open"     , OPEN;
  "yields"   , YIELDS;
 (*  "infix"    , INFIX; *)
@@ -192,6 +196,7 @@ let keywords = [
  "orderby"  , ORDERBY;
  "op"       , OP;
  "page"     , PAGE;
+ "put"      , PUT;
  "query"    , QUERY;
  "readonly" , READONLY;
 
