@@ -490,7 +490,7 @@ struct
   let lens_get (lens, rtype) =
       bind lens 
         (fun lens ->
-            lift (`Special (`LensGet (lens, rtype)), `Lens (rtype)))
+            lift (`Special (`LensGet (lens, rtype)), Types.make_list_type rtype))
 
   let wrong t = lift (`Special (`Wrong t), t)
 

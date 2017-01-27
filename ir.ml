@@ -440,10 +440,10 @@ module type TRANSFORM =
         | `LensDrop (lens, drop, key, default, rtype) ->
             let lens, _, o = o#value lens in
             let default, _, o = o#value default in
-              `LensDrop (lens, drop, key, default, rtype), `Lens(rtype), o
+              `LensDrop (lens, drop, key, default, rtype), `Lens (rtype), o
         | `LensGet (lens, rtype) ->
             let lens, _, o = o#value lens in
-              `LensGet (lens, rtype)
+              `LensGet (lens, rtype), `Lens (rtype), o
         | `Query (range, e, t) ->
             let range, o =
               o#optionu

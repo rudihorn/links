@@ -234,7 +234,7 @@ and phrasenode = [
 | `LensLit          of phrase * Types.datatype option
 | `LensDropLit      of phrase * string * string * phrase * Types.datatype option
 | `LensGetLit       of phrase * Types.datatype option
-| `LensPutLit       of phrase * Types.datatype option
+| `LensPutLit       of phrase * phrase * Types.datatype option
 | `Xml              of name * (name * (phrase list)) list * phrase option * phrase list
 | `TextNode         of string
 | `Formlet          of phrase * phrase

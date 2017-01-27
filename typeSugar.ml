@@ -1783,11 +1783,12 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
         | `LensGetLit (lens, _) ->
            let lens = tc lens in
            let trowtype = match typ lens with `Lens(r) -> r in
-           `LensGetLit (erase lens, Some trowtype), `Lens (trowtype), merge_usages [usages lens]
-        | `LensPutLit (lens, _) ->
+           `LensGetLit (erase lens, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens]
+        | `LensPutLit (lens, data, _) ->
            let lens = tc lens in 
+           let data = tc data in
            let trowtype = match typ lens with `Lens(r) -> r in
-           `LensPutLit (erase lens, Some trowtype), `Lens (trowtype), merge_usages [usages lens]
+           `LensPutLit (erase lens, erase data, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens; usages data]
         | `DBDelete (pat, from, where) ->
             let pat  = tpc pat in
             let from = tc from in
