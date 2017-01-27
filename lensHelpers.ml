@@ -11,6 +11,13 @@ let drop_record_row (a : string) (r : Value.t) =
     let columns = List.filter (fun (name, value) -> name <> a) columns in
       `Record columns
 
+
+let rec is_memory_lens (lens : Value.t) =
+    match lens with
+    | `Lens _ -> false
+    | `LensMem _ -> true
+    | `LensDrop (lens, drop, key, def, rtype) -> is_memory_lens lens
+
 let rec lens_get (lens : Value.t) =
     match lens with
     | `Lens _ -> failwith "Non memory lenses not implemented."
