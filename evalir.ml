@@ -433,6 +433,11 @@ module Eval = struct
         let lens = value env lens in
         let res = LensHelpers.lens_get lens in
           apply_cont cont env res
+    | `LensPut (lens, data, rtype) as le ->
+        let lens = value env lens in
+        let data = value env data in
+        let res = LensHelpers.lens_put lens data in
+          apply_cont cont env res
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have

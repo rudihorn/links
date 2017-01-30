@@ -154,6 +154,7 @@ sig
 
   val lens_get : value sem * datatype -> tail_computation sem
 
+  val lens_put : value sem * value sem * datatype -> tail_computation sem
 
   val wrong : datatype -> tail_computation sem
 
@@ -491,6 +492,13 @@ struct
       bind lens 
         (fun lens ->
             lift (`Special (`LensGet (lens, rtype)), Types.make_list_type rtype))
+
+  let lens_put (lens, data, rtype) =
+      bind lens 
+        (fun lens ->
+            bind data 
+                (fun data ->
+                        lift (`Special (`LensPut (lens, data, rtype)), Types.make_list_type rtype)))
 
   let wrong t = lift (`Special (`Wrong t), t)
 
@@ -854,6 +862,10 @@ struct
           | `LensGetLit (lens, Some t) ->
               let lens = ev lens in
                 I.lens_get (lens, t)
+          | `LensPutLit (lens, data, Some t) ->
+              let lens = ev lens in
+              let data = ev data in
+                I.lens_put (lens, data, t)
           | `TableLit (name, (_, Some (readtype, writetype, neededtype)), constraints, keys, db) ->
                 I.table_handle (ev db, ev name, ev keys, (readtype, writetype, neededtype))
           | `Xml (tag, attrs, attrexp, children) ->

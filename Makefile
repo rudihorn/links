@@ -63,7 +63,6 @@ OPC = cgi.ml netencoding.ml netencoding.mli unionfind.ml unionfind.mli \
 SOURCES = $(OPC)                                \
           notfound.ml                           \
           utility.ml                            \
-		  lensHelpers.ml						\
           env.mli env.ml                        \
           settings.mli settings.ml              \
           basicsettings.ml                      \
@@ -95,6 +94,7 @@ SOURCES = $(OPC)                                \
           desugarDatatypes.mli desugarDatatypes.ml      \
           defaultAliases.ml                     \
           value.mli value.ml                    \
+		  lensHelpers.ml						\
           eventHandlers.mli eventHandlers.ml    \
           xmlParser.mly xmlLexer.mll            \
           parseXml.mli parseXml.ml              \

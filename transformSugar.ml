@@ -448,7 +448,7 @@ class transform (env : Types.typing_environment) =
             (o, `LensGetLit (lens, Some t), Types.make_list_type t)
       | `LensPutLit (lens, data, Some t) ->
           let (o, lens, _) = o#phrase lens in
-          let (o, lens, _) = o#phrase data in
+          let (o, data, _) = o#phrase data in
           let (o, t) = o#datatype t in
             (o, `LensPutLit (lens, data, Some t), Types.make_list_type t)
       | `TableLit (name, (dtype, Some (read_row, write_row, needed_row)), constraints, keys, db) ->

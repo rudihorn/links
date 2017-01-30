@@ -1475,7 +1475,7 @@ class fold_map =
             (o, (`LensGetLit ((_x, _x_i1))))
       | `LensPutLit ((_x, _x_i1, _x_i2)) ->
           let (o, _x) = o#phrase _x in
-          let (o, _x_i1) = o#phrase _x in
+          let (o, _x_i1) = o#phrase _x_i1 in
           let (o, _x_i2) = o#option (fun o -> o#unknown) _x_i2 in
             (o, (`LensPutLit ((_x, _x_i1, _x_i2))))
       | `DBDelete ((_x, _x_i1, _x_i2)) ->

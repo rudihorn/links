@@ -193,7 +193,7 @@ and t = [
 | `List of t list
 | `Lens of table * Types.row
 | `LensMem of t * Types.row 
-| `LensDrop of t * string * string * primitive_value_basis * Types.row
+| `LensDrop of t * string * string * t * Types.row
 | `Record of (string * t) list
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
@@ -418,7 +418,7 @@ and string_of_value : t -> string = function
   | `Socket (_, _) -> "<socket>"
   | `Lens (_, _) -> "(lens)"
   | `LensMem (_, _) -> "(lens)" 
-  | `LensDrop (lens, dr, key, def, typ) -> "(lensdrop " ^ dr ^ " determined by " ^ key ^ " default " ^ string_of_primitive (primValue def) ^ " from " ^ string_of_value lens
+  | `LensDrop (lens, dr, key, def, typ) -> "(lensdrop " ^ dr ^ " determined by " ^ key ^ " default " ^ string_of_value def ^ " from " ^ string_of_value lens
 and string_of_primitive : primitive_value -> string = function
   | `Bool value -> string_of_bool value
   | `Int value -> string_of_int value

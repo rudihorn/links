@@ -72,7 +72,7 @@ type t = [
 | `Record of (string * t) list
 | `Lens of table * Types.row
 | `LensMem of t * Types.row
-| `LensDrop of t * string * string * primitive_value_basis * Types.row
+| `LensDrop of t * string * string * t * Types.row
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
 | `PrimitiveFunction of string * Var.var option

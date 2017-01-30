@@ -444,6 +444,10 @@ module type TRANSFORM =
         | `LensGet (lens, rtype) ->
             let lens, _, o = o#value lens in
               `LensGet (lens, rtype), `Lens (rtype), o
+        | `LensPut (lens, data, rtype) ->
+            let lens, _, o = o#value lens in
+            let data, _, o = o#value data in
+              `LensPut (lens, data, rtype), `Lens (rtype), o
         | `Query (range, e, t) ->
             let range, o =
               o#optionu
