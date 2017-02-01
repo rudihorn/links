@@ -19,16 +19,41 @@ module Show_otherfield =
 type db_status = [ `QueryOk | `QueryError of string ]
   deriving (Show)
 
-class virtual dbvalue = object
+class virtual dbvalue = object (self)
   method virtual status : db_status
   method virtual nfields : int
   method virtual ntuples : int
   method virtual fname : int -> string
   method virtual get_all_lst : string list list
-  method virtual map : 'a. ((int -> string) -> 'a) -> 'a list
-  method virtual map_array : 'a. (string array -> 'a) -> 'a list
-  method virtual fold_array : 'a. (string array -> 'a -> 'a) -> 'a -> 'a
+  method map : 'a. ((int -> string) -> 'a) -> 'a list = fun f ->
+      let max = self#ntuples in
+      let rec do_map n acc =
+	if n < max
+	then (
+	  do_map (n+1) (f (self#getvalue n)::acc)
+	 )
+	else acc
+      in do_map 0 []
+  method map_array : 'a. (string array -> 'a) -> 'a list = fun f ->
+      let max = self#ntuples in
+      let rec do_map n acc =
+	if n < max
+	then (
+	  do_map (n+1) (f (self#gettuple n)::acc)
+	 )
+	else acc
+      in do_map 0 []
+  method fold_array : 'a. (string array -> 'a -> 'a) -> 'a -> 'a = fun f x ->
+      let max = self#ntuples in
+      let rec do_fold n acc =
+	if n < max
+	then (
+	  do_fold (n+1) (f (self#gettuple n) acc)
+	 )
+	else acc
+      in do_fold 0 x	    method virtual map : 'a. ((int -> string) -> 'a) -> 'a list
   method virtual getvalue : int -> int -> string
+  method virtual gettuple : int -> string array
   method virtual error : string
 end
 
@@ -106,7 +131,7 @@ class null_database =
 object
   inherit database
   method driver_name () = "null"
-  method exec query : dbvalue = assert false
+  method exec _query : dbvalue = assert false
   method escape_string = assert false
   method quote_field = assert false
 end
@@ -126,22 +151,42 @@ let is_attr = function
 let attrs = List.filter is_attr
 and nodes = List.filter (not -<- is_attr)
 
-let rec string_of_xml xml : string
-    = String.concat "" (List.map string_of_item xml)
-and string_of_item : xmlitem -> string =
-  let format_attrs attrs = match String.concat " " (List.map string_of_item attrs) with
-    | "" -> ""
-    | a -> " " ^ a in
-  let escape = Str.global_replace (Str.regexp "\"") "\\\""  in
+let rec string_of_xml : ?close_tags:bool -> xml -> string =
+  fun ?(close_tags=false) x -> String.concat "" (List.map (string_of_item ~close_tags:close_tags) x)
+and string_of_item : ?close_tags:bool -> xmlitem -> string =
+  fun ?(close_tags=false) ->
+    let format_attrs attrs = match String.concat " " (List.map (string_of_item ~close_tags:close_tags) attrs) with
+      | "" -> ""
+      | a -> " " ^ a in
+    let escape = Str.global_replace (Str.regexp "\"") "\\\""  in
     function
-      | Attr (k, v) -> k ^ "=\"" ^ escape v ^ "\""
-      | Text s -> xml_escape s
-      | Node (tag, children) -> let attrs, nodes = attrs children, nodes children in
-          match nodes with
-            | [] -> "<" ^ tag ^ format_attrs attrs ^ "/>"
-            | _  -> ("<" ^ tag ^ format_attrs attrs ^ ">"
-                     ^ string_of_xml nodes
-                     ^ "</" ^ tag ^ ">")
+    | Attr (k, v) -> k ^ "=\"" ^ escape v ^ "\""
+    | Text s -> xml_escape s
+    | Node (tag, children) ->
+      begin
+        let attrs, nodes = attrs children, nodes children in
+        match nodes with
+        | [] when not close_tags ->
+          "<" ^ tag ^ format_attrs attrs ^ "/>"
+        | _  ->
+          "<" ^ tag ^ format_attrs attrs ^ ">" ^ string_of_xml ~close_tags:close_tags nodes ^ "</" ^ tag ^ ">"
+      end
+
+(* split top-level HTML into head and body components *)
+let split_html : xml -> xml * xml =
+  function
+  | [Node ("html", xs)] ->
+    List.fold_left
+      (fun (hs, bs) ->
+         function
+         | Node ("body", ys) ->
+           hs, bs @ ys
+         | Node ("head", ys) ->
+           hs @ ys, bs
+         | x -> hs, bs @ [x])
+      ([], []) xs
+  | [Node ("body", xs)] -> [], xs
+  | xs -> [], xs
 
 type table = (database * string) * string * string list list * Types.row
   deriving (Show)
@@ -203,37 +248,51 @@ and t = [
 | `Pid of int * Sugartypes.location
 | `Socket of in_channel * out_channel
 ]
-and env = (t * Ir.scope) Utility.intmap  * (t * Ir.scope) Utility.intmap
+and env = {
+  all : (t * Ir.scope) Utility.intmap;
+  globals : (t * Ir.scope) Utility.intmap;
+  request_data : RequestData.request_data
+}
   deriving (Show)
 
-let primValue : primitive_value_basis -> primitive_value = function
-    | #primitive_value_basis as p -> p
+let set_request_data env rd = { env with request_data = rd }
 
 let toplevel_cont : continuation = []
+let request_data env = env.request_data
 
 (** {1 Environment stuff} *)
 (** {2 IntMap-based implementation with global memoization} *)
 
-let empty_env = (IntMap.empty, IntMap.empty)
-let bind name (v,scope) (env, globals) =
+let empty_env = {
+  all = IntMap.empty;
+  globals = IntMap.empty;
+  request_data = RequestData.new_request_data ()
+}
+let bind name (v,scope) env =
   (* Maintains globals as submap of global bindings. *)
   match scope with
-    `Local -> (IntMap.add name (v,scope) env, globals)
-  | `Global -> (IntMap.add name (v,scope) env, IntMap.add name (v,scope) globals)
-let find name (env, _globals) = fst (IntMap.find name env)
-let mem name (env, _globals) = IntMap.mem name env
-let lookup name (env, _globals) = opt_map fst (IntMap.lookup name env)
-let lookupS name (env, _globals) = IntMap.lookup name env
+    `Local ->
+      { env with all = IntMap.add name (v,scope) env.all }
+  | `Global ->
+      { env with
+          all = IntMap.add name (v,scope) env.all;
+          globals = IntMap.add name (v,scope) env.globals;
+      }
+let find name env = fst (IntMap.find name env.all)
+let mem name env = IntMap.mem name env.all
+let lookup name env = opt_map fst (IntMap.lookup name env.all)
+let lookupS name env = IntMap.lookup name env.all
 let extend env bs = IntMap.fold (fun k v r -> bind k v r) bs env
 
-let get_parameters (env, _globals) = env
+let get_parameters env = env.all
 
-let shadow env ~by:(by, _globals') =
+let shadow env ~by:env_by =
 (* Assumes that globals never change *)
-    IntMap.fold (fun name v env -> bind name v env) by env
+  let by_all = env_by.all in
+  IntMap.fold (fun name v env -> bind name v env) by_all env
 
-let fold f (env, _globals) a = IntMap.fold f env a
-let globals (env, genv) = (genv, genv)
+let fold f env a = IntMap.fold f env.all a
+let globals env = { env with all = env.globals }
 
 (** {1 Compressed values for more efficient pickling} *)
 type compressed_primitive_value = [
@@ -294,8 +353,8 @@ and compress_t (v : t) : compressed_t =
       | `PrimitiveFunction (f,_op) -> `PrimitiveFunction f
       | `ClientFunction f -> `ClientFunction f
       | `Continuation cont -> `Continuation (compress_continuation cont)
-      | `Pid (pid, location) -> assert false
-      | `Socket (inc, outc) -> assert false (* wheeee! *)
+      | `Pid (_pid, _location) -> assert false
+      | `Socket (_inc, _outc) -> assert false (* wheeee! *)
 and compress_env env : compressed_env =
   List.rev
     (fold
@@ -359,12 +418,12 @@ and uncompress_env globals env : env =
 let string_as_charlist s : t =
   `List (List.rev (List.rev_map (fun x -> `Char x) (explode s)))
 
-let escape =
+let _escape =
   Str.global_replace (Str.regexp "\\\"") "\\\"" (* FIXME: Can this be right? *)
 
 (** {1 Pretty-printing values} *)
 
-let string_of_cont = Show_continuation.show 
+(* let string_of_cont = Show_continuation.show *)
 
 exception Not_tuple
 
@@ -441,7 +500,7 @@ and string_of_tuple (fields : (string * t) list) : string =
 
 and numberp s = try ignore(int_of_string s); true with _ -> false
 
-and string_of_environment : env -> string = fun _env -> "[ENVIRONMENT]"
+and _string_of_environment : env -> string = fun _env -> "[ENVIRONMENT]"
 
 and string_of_cont : continuation -> string =
   fun cont ->
@@ -482,7 +541,7 @@ and unbox_bool : t -> bool   = function
 and box_int i = `Int i
 and unbox_int  : t -> int    = function
   | `Int i   -> i
-  | other -> failwith("Type error unboxing int")
+  | _other -> failwith("Type error unboxing int")
 and box_float f = `Float f
 and unbox_float : t -> float = function
   | `Float f -> f | _ -> failwith "Type error unboxing float"
@@ -499,11 +558,11 @@ and unbox_string : t -> string = function
      failwith ("Type error unboxing string: " ^ string_of_value v)
 and box_list l = `List l
 and unbox_list : t -> t list = function
-  | `List l -> l | _ -> failwith "Type error unboxing list"
+  | `List l -> l | v -> failwith ("Type error unboxing list: " ^ string_of_value v)
 and box_record fields = `Record fields
 and unbox_record : t -> (string * t) list = function
   | `Record fields -> fields | _ -> failwith "Type error unboxing record"
-and box_unit : unit -> t 
+and box_unit : unit -> t
   = fun () -> `Record []
 and unbox_unit : t -> unit = function
   | `Record [] -> () | _ -> failwith "Type error unboxing unit"
@@ -511,7 +570,7 @@ let box_pair : t -> t -> t = fun a b -> `Record [("1", a); ("2", b)]
 let unbox_pair = function
   | (`Record [(_, a); (_, b)]) -> (a, b)
   | _ -> failwith ("Match failure in pair conversion")
-let box_pid (pid, location) = `Pid (pid, `Unknown)
+let box_pid (pid, _location) = `Pid (pid, `Unknown)
 let unbox_pid = function
   | `Pid (pid, location) -> (pid, location)
   | _ -> failwith "Type error unboxing pid"
@@ -576,7 +635,7 @@ let value_serialiser : unit -> compressed_t serialiser =
 
 let marshal_continuation (c : continuation) : string =
   let cs = compress_continuation c in
-  let { save = save } = continuation_serialiser () in
+  let save = (continuation_serialiser ()).save in
   let pickle = save cs in
     if String.length pickle > 4096 then
       prerr_endline "Marshalled continuation larger than 4K:";
@@ -584,17 +643,17 @@ let marshal_continuation (c : continuation) : string =
 
 let marshal_value : t -> string =
   fun v ->
-    let { save = save } = value_serialiser () in
+    let save = (value_serialiser ()).save in
     (* Debug.print ("marshalling: "^Show_t.show v); *)
       base64encode (save (compress_t v))
 
 let unmarshal_continuation env : string -> continuation =
-    let { load = load } = continuation_serialiser () in
+    let load = (continuation_serialiser ()).load in
     base64decode ->- load ->- uncompress_continuation (globals env)
 
 let unmarshal_value env : string -> t =
   fun s ->
-    let { load = load } = value_serialiser () in
+    let load = (value_serialiser ()).load in
     (* Debug.print ("unmarshalling string: " ^ s); *)
     let v = (load (base64decode s)) in
     (* Debug.print ("unmarshalling: " ^ Show_compressed_t.show v); *)

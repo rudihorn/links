@@ -9,7 +9,7 @@ type 'a field_env = 'a stringmap deriving (Show)
 module TypeVarSet : Utility.INTSET
 
 (* points *)
-type 'a point = 'a Unionfind.point 
+type 'a point = 'a Unionfind.point
   deriving (Show)
 
 type primitive = [ `Bool | `Int | `Char | `Float | `XmlItem | `DB | `String ]
@@ -58,12 +58,26 @@ sig
   val compare : t -> t -> int
 end
 
-val process      : Abstype.t
-val list         : Abstype.t
-val event        : Abstype.t
-val dom_node     : Abstype.t
-val access_point : Abstype.t
-val socket       : Abstype.t
+module Vars : sig
+  type flavour = [`Rigid | `Flexible | `Recursive]
+  type kind    = primary_kind
+  type scope   = [`Free | `Bound]
+  type vars_list = (int * (flavour * kind * scope)) list
+end
+
+module Print : sig
+  type policy = {quantifiers:bool; flavours:bool; hide_fresh:bool; kinds:string}
+
+  val default_policy : unit -> policy
+end
+
+
+val process        : Abstype.t
+val list           : Abstype.t
+val event          : Abstype.t
+val dom_node       : Abstype.t
+val access_point   : Abstype.t
+val socket         : Abstype.t
 
 type ('t, 'r) session_type_basis =
     [ `Input of 't * 't
@@ -162,6 +176,8 @@ type environment        = datatype Env.String.t
                             effect_row : row }
     deriving (Show)
 
+val empty_typing_environment : typing_environment
+
 val concrete_type : datatype -> datatype
 val concrete_field_spec : field_spec -> field_spec
 
@@ -195,6 +211,8 @@ val xml_type : datatype
 (** get type variables *)
 val free_type_vars : datatype -> TypeVarSet.t
 val free_row_type_vars : row -> TypeVarSet.t
+val free_bound_type_vars     : ?include_aliases:bool -> typ -> Vars.vars_list
+val free_bound_row_type_vars : ?include_aliases:bool -> row -> Vars.vars_list
 
 val var_of_quantifier : quantifier -> int
 val primary_kind_of_quantifier : quantifier -> primary_kind
@@ -212,7 +230,6 @@ val flexible_type_vars : TypeVarSet.t -> datatype -> quantifier Utility.IntMap.t
 (** Fresh type variables *)
 val type_variable_counter : int ref
 val fresh_raw_variable : unit -> int
-val bump_variable_counter : int -> unit
 
 (** type variable construction *)
 val make_type_variable : int -> subkind -> datatype
@@ -332,12 +349,25 @@ val make_wobbly_envs : datatype -> datatype Utility.IntMap.t * row Utility.IntMa
 val show_mailbox_annotations : bool Settings.setting
 
 (** pretty printing *)
-val string_of_datatype : datatype -> string
-val string_of_row : row -> string
-val string_of_presence : field_spec -> string
-val string_of_type_arg : type_arg -> string
-val string_of_row_var : row_var -> string
-val string_of_environment : environment -> string
+val string_of_datatype   : ?policy:(unit -> Print.policy)
+                        -> ?refresh_tyvar_names:bool -> datatype   -> string
+val string_of_row        : ?policy:(unit -> Print.policy)
+                        -> ?refresh_tyvar_names:bool -> row        -> string
+val string_of_presence   : ?policy:(unit -> Print.policy)
+                        -> ?refresh_tyvar_names:bool -> field_spec -> string
+val string_of_type_arg   : ?policy:(unit -> Print.policy)
+                        -> ?refresh_tyvar_names:bool -> type_arg   -> string
+val string_of_row_var    : ?policy:(unit -> Print.policy)
+                        -> ?refresh_tyvar_names:bool -> row_var    -> string
+val string_of_tycon_spec : ?policy:(unit -> Print.policy)
+                        -> ?refresh_tyvar_names:bool -> tycon_spec -> string
+val string_of_environment        : environment -> string
 val string_of_typing_environment : typing_environment -> string
 
-val string_of_tycon_spec : tycon_spec -> string
+(** generating type variable names *)
+val build_tyvar_names : ('a -> Vars.vars_list)
+                     -> ('a list)
+                     -> unit
+val add_tyvar_names : ('a -> Vars.vars_list)
+                   -> ('a list)
+                   -> unit

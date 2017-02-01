@@ -66,11 +66,9 @@ struct
       deriving (Eq, Show)
   let make name arity =
     let id = Utility.gensym ~prefix:"abstype:" () in
-      { id    = id ;
-        name  = name ;
-        arity = arity }
-  let arity { arity = arity } = arity
-  let name  { name  = name  } = name
+      { id; name; arity }
+  let arity { arity; _ } = arity
+  let name  { name ; _ } = name
   let compare l r = String.compare l.id r.id
 end
 
@@ -591,9 +589,6 @@ let fresh_raw_variable : unit -> int =
   function () ->
     incr type_variable_counter; !type_variable_counter
 
-let get_variable_counter () = !type_variable_counter
-let bump_variable_counter i = type_variable_counter := !type_variable_counter+i
-
 (* type ops stuff *)
   let empty_field_env = FieldEnv.empty
   let closed_row_var = Unionfind.fresh `Closed
@@ -622,9 +617,6 @@ let bump_variable_counter i = type_variable_counter := !type_variable_counter+i
             end
     in
       is_closed TypeVarSet.empty
-
-  let is_empty_row ((fields, row_var, _) as row) =
-    is_closed_row row && FieldEnv.is_empty fields
 
   let get_row_var : row -> int option = fun (_, row_var, _) ->
     let rec get_row_var' = fun rec_vars -> function
@@ -1113,7 +1105,7 @@ in field_env.
 and unwrap_row : row -> (row * row_var option) = fun (field_env, row_var, dual) ->
   let dual_if r = if dual then dual_row TypeVarMap.empty r else r in
   let rec unwrap_row' : meta_row_var IntMap.t -> row -> (row * row_var option) =
-    fun rec_env ((field_env, row_var, dual) as row) ->
+    fun rec_env ((field_env, row_var, _dual) as row) ->
       let row' =
         match Unionfind.find row_var with
           | `Closed
@@ -1148,7 +1140,7 @@ let dual_row = dual_row TypeVarMap.empty
 (* TODO: tidy up all this normalisation / concretisation code *)
 let rec normalise_datatype rec_names t =
   let nt = normalise_datatype rec_names in
-  let nr = normalise_row rec_names in
+  let nr = normalise_row in
     hoist_quantifiers t;
     match t with
       | `Not_typed
@@ -1193,7 +1185,7 @@ let rec normalise_datatype rec_names t =
       | `Dual s               -> dual_type (nt s)
       | `End                  -> `End
 
-and normalise_row rec_names row =
+and normalise_row row =
   (* WARNING:
 
      We cannot use unwrap_row here, as that would lead to
@@ -1209,13 +1201,12 @@ and normalise_row rec_names row =
 and normalise_type_arg rec_names type_arg =
   match type_arg with
     | `Type t -> `Type (normalise_datatype rec_names t)
-    | `Row row -> `Row (normalise_row rec_names row)
+    | `Row row -> `Row (normalise_row row)
     | `Presence f -> `Presence (normalise_field_spec f)
 
 let concrete_type = concrete_type IntSet.empty
 
 let normalise_datatype = normalise_datatype IntSet.empty
-let normalise_row = normalise_row IntSet.empty
 
 (** building quantified types *)
 
@@ -1229,7 +1220,7 @@ let quantifiers_of_type_args =
                | _ -> assert false
            end
        | `Type _ -> assert false
-       | `Row (fields, row_var, dual) ->
+       | `Row (fields, row_var, _dual) ->
            assert (StringMap.is_empty fields);
            begin
              match Unionfind.find row_var with
@@ -1352,16 +1343,23 @@ let show_mailbox_annotations = Settings.add_bool("show_mailbox_annotations", tru
 let show_raw_type_vars = Settings.add_bool("show_raw_type_vars", false, `User)
 
 
-
-
 module Vars =
 struct
   type flavour = [`Rigid | `Flexible | `Recursive]
-  type kind = primary_kind
-  type scope = [`Free | `Bound]
-  type spec = flavour * kind * int
+  type kind    = primary_kind
+  type scope   = [`Free | `Bound]
+  type spec    = flavour * kind * int
 
   type vars_list = (int * (flavour * kind * scope)) list
+
+  (* See Note [Variable names in error messages] *)
+  (* We don't really care much about size of the hash table.  20 should be a
+     reasonable default since error message is unlikely to have more type
+     variables.  And even if it does we don't care about performance penalty
+     because we're printing the error message and thus stopping the compilation
+     anyway. *)
+  let tyvar_name_map = Hashtbl.create 20
+  let tyvar_name_counter = ref 0
 
   let varspec_of_tyvar q =
     let flavour = if is_rigid_quantifier q then
@@ -1436,7 +1434,7 @@ struct
   and free_bound_row_type_vars ~include_aliases bound_vars (field_env, row_var, _) =
     let field_type_vars =
       FieldEnv.fold
-        (fun name f tvs ->
+        (fun _name f tvs ->
            tvs @ free_bound_field_spec_type_vars ~include_aliases bound_vars f)
         field_env [] in
     let row_var = free_bound_row_var_vars ~include_aliases bound_vars row_var in
@@ -1470,70 +1468,81 @@ struct
             (List.rev vars) @ (free_bound_type_vars ~include_aliases bound_vars body)
       | `Abstract _ -> []
 
-  let init (var, (flavour, kind, scope)) name =
+  let init (flavour, kind, scope) name =
     match scope with
-      | `Free -> (name, (flavour, kind, 1))
+      | `Free  -> (name, (flavour, kind, 1))
       | `Bound -> (name, (flavour, kind, 0))
 
   let combine (name, (flavour, kind, count)) (flavour', kind', scope) =
-(*     assert (flavour = flavour'); *)
-(*     assert (kind = kind'); *)
+    assert (flavour = flavour');
+    assert (kind    = kind'   );
     match scope with
-      | `Free -> (name, (flavour, kind, count+1))
+      | `Free  -> (name, (flavour, kind, count+1))
       | `Bound -> (name, (flavour, kind, count))
 
-  let make_names vars =
+  (* Generates next letter to use as a type variable name.  Uses side effects to
+     increment variable counter.  This ensures that the next call generates next
+     letter of the alphabet. *)
+  let next_letter : unit -> string = function _ ->
+    let first_letter      = int_of_char 'a' in
+    let last_letter       = int_of_char 'z' in
+    let num_letters       = last_letter - first_letter + 1 in
+    let string_of_ascii n = Char.escaped (char_of_int n) in
+    let letter n = string_of_ascii (first_letter + (n mod num_letters)) in
+    let rec num_to_letters n =
+      letter n ^ (if n >= num_letters
+                  then (num_to_letters (n / num_letters))
+                  else "") in
+    let n = !tyvar_name_counter in
+    begin
+      incr tyvar_name_counter;
+      num_to_letters n
+    end
+
+  (* Assigns names to type variables and adds them to a hash table storing type
+     variables.  Both folds work by side-effecting on the hash table, which is
+     then returned to be used freely outside of this module. *)
+  let make_names (vars:vars_list) =
     if Settings.get_value show_raw_type_vars then
-      List.fold_left
-        (fun name_map (var, spec) ->
-           match IntMap.lookup var name_map with
-             | None -> IntMap.add var (init (var, spec) (string_of_int var)) name_map
-             | Some (name, spec') -> IntMap.add var (combine (name, spec') spec) name_map)
-        IntMap.empty vars
+      let _ = List.fold_left
+        (fun _ (var, spec) ->
+           match Hashtbl.lookup tyvar_name_map var with
+             | None ->
+                Hashtbl.add tyvar_name_map var (init spec (string_of_int var))
+             | Some (name, spec') ->
+                Hashtbl.add tyvar_name_map var (combine (name, spec') spec))
+        () vars
+        in tyvar_name_map
     else
       begin
-        let first_letter = int_of_char 'a' in
-        let last_letter = int_of_char 'z' in
-        let num_letters = last_letter - first_letter + 1 in
-
-        let string_of_ascii n = Char.escaped (char_of_int n) in
-
-        let rec num_to_letters n =
-          let letter = string_of_ascii (first_letter + (n mod num_letters)) in
-            letter ^
-              (if n >= num_letters then (num_to_letters (n / num_letters))
-               else "") in
-
-        let (_, name_map) =
-          List.fold_left
-            (fun (n, name_map) (var, spec) ->
-               match IntMap.lookup var name_map with
-                 | None -> (n+1, IntMap.add var (init (var, spec) (num_to_letters n)) name_map)
-                 | Some (name, spec') -> (n, IntMap.add var (combine (name, spec') spec) name_map))
-            (0, IntMap.empty) vars
-        in
-          name_map
+        let _ = List.fold_left
+          (fun _ (var, spec) ->
+            match Hashtbl.lookup tyvar_name_map var with
+            | None -> Hashtbl.add tyvar_name_map var (init spec (next_letter ()))
+            | Some (name, spec') ->
+               Hashtbl.add tyvar_name_map var (combine (name, spec') spec))
+          () vars
+        in tyvar_name_map
       end
 
-  let find var = fst -<- (IntMap.find var)
-
-  let find_spec = IntMap.find
+  let find      var tbl = fst (Hashtbl.find tbl var)
+  let find_spec var tbl =      Hashtbl.find tbl var
 end
 
 (** Type printers *)
 
 module Print =
 struct
-  let show_quantifiers = Settings.add_bool ("show_quantifiers", false, `User)
-  let show_flavours = Settings.add_bool ("show_flavours", false, `User)
-  let show_kinds = Settings.add_string ("show_kinds", "default", `User)
-  let hide_fresh_type_vars = Settings.add_bool ("hide_fresh_type_vars", true, `User)
+  let show_quantifiers     = Settings.add_bool   ("show_quantifiers"    , false    , `User)
+  let show_flavours        = Settings.add_bool   ("show_flavours"       , false    , `User)
+  let show_kinds           = Settings.add_string ("show_kinds"          , "default", `User)
+  let hide_fresh_type_vars = Settings.add_bool   ("hide_fresh_type_vars", true     , `User)
 
   (* Set the quantifiers to be true to display any outer quantifiers.
      Set flavours to be true to distinguish flexible type variables
      from rigid type variables. *)
   type policy = {quantifiers:bool; flavours:bool; hide_fresh:bool; kinds:string}
-  type names = (string * Vars.spec) IntMap.t
+  type names  = (int, string * Vars.spec) Hashtbl.t
 
   let default_policy () =
     {quantifiers=Settings.get_value show_quantifiers;
@@ -1622,7 +1631,7 @@ struct
 
       let unwrap = fst -<- unwrap_row in
         (* precondition: the row is unwrapped *)
-      let string_of_tuple (field_env, row_var, _) =
+      let string_of_tuple (field_env, _, _) =
         let tuple_env =
           FieldEnv.fold
             (fun i f tuple_env ->
@@ -1632,26 +1641,85 @@ struct
             field_env
             IntMap.empty in
         let ss = List.rev (IntMap.fold (fun _ t ss -> (sd t) :: ss) tuple_env []) in
-          "(" ^ String.concat ", " ss ^  ")"
-      in
-        match t with
+          "(" ^ String.concat ", " ss ^  ")" in
+
+      (* If type variable names are hidden return a generic name n1.
+         Otherwise pass name of type variable to n2 so that it can construct a
+         name. *)
+      let name_of_type var n1 n2 =
+        let name, spec = Vars.find_spec var vars in
+        if hide_fresh_check var spec then n1 else (n2 name) in
+
+      (* Pretty-prints a row variable *)
+      let ppr_row_var args to_match closed (flex_name_hidden, flex_name)
+                           (name_hidden, name) =
+        match Unionfind.find to_match with
+        | `Var (var, _, `Flexible) when policy.flavours ->
+           name_of_type var flex_name_hidden flex_name
+        | `Var (var, _, _) ->
+           name_of_type var name_hidden name
+        | `Closed      -> closed
+        | `Body t'     -> sd (`Function (args, t', t))
+        | `Recursive _ -> assert false in
+
+      (* Pretty-prints function spaces.
+         `ah` argument stands for "arrow head", either ">" (for normal function
+              space) or "@" (for linear types' space). *)
+      let ppr_function_type args effects t ah ht =
+       let (fields, row_var, dual) = unwrap effects in
+       assert (not dual);
+
+       (* Checks that field environment contains exactly the values passed in in
+          a list *)
+       let fields_present values =
+         FieldEnv.size fields = List.length values &&
+         List.fold_left (fun acc v -> acc && FieldEnv.mem v fields
+                                          && is_present (FieldEnv.find v fields))
+                        true values in
+
+       let ppr_arrow () =
+         if fields_present [] then
+           ppr_row_var args row_var ("{}-" ^ ah)
+               ("-%-" ^ ah, fun name -> "-%" ^ name ^ "-" ^ ah)
+               ("-"   ^ ah, fun name -> "-"  ^ name ^ "-" ^ ah)
+         else if fields_present ["wild"]
+         then
+           ppr_row_var args row_var ("{}~" ^ ah)
+               ("~%~" ^ ah, fun name -> "~%" ^ name ^ "~" ^ ah)
+               ("~"   ^ ah, fun name -> "~"  ^ name ^ "~" ^ ah)
+         else if fields_present ["hear"; "wild"]
+         then
+           let ht' = ht fields in
+           ppr_row_var args row_var ("{:" ^ ht' ^ "}~" ^ ah)
+               ("{:" ^ ht' ^ "|%}~" ^ ah, fun name -> "{:" ^ ht' ^ "|%" ^ name ^ "}~" ^ ah)
+               ("{:" ^ ht' ^ "|_}~" ^ ah, fun name -> "{:" ^ ht' ^ "|"  ^ name ^ "}~" ^ ah)
+         else
+             (* to guarantee termination it's crucial that we
+                invoke row on the original wrapped version of
+                the effect row *)
+             "{" ^ row "," bound_vars p effects ^ "}-" ^ ah
+         in begin match concrete_type args with
+            | `Record row when is_tuple ~allow_onetuples:true row ->
+               (* Let bindings are needed here to ensure left-to-right
+                  generation of type variable names.
+                  See Note [Variable names in error messages] *)
+               let row_str   = string_of_tuple row in
+               let arrow_str = ppr_arrow () in
+               let sd_str    = sd t in
+               row_str ^ " " ^ arrow_str ^ " " ^ sd_str
+            | _ -> assert false
+            end
+
+      in match t with
           | `Not_typed       -> "not typed"
           | `Primitive p     -> primitive p
           | `MetaTypeVar point ->
               begin
                 match Unionfind.find point with
                   | `Var (var, k, `Flexible) when policy.flavours ->
-                      let name, spec = Vars.find_spec var vars in
-                        (if hide_fresh_check var spec then
-                           "%"
-                         else
-                           "%" ^ name) ^ sk k
+                      (name_of_type var "%" (fun name -> "%" ^ name)) ^ sk k
                   | `Var (var, k, _) ->
-                      let name, spec = Vars.find_spec var vars in
-                        (if hide_fresh_check var spec then
-                           "_"
-                         else
-                           name) ^ sk k
+                      (name_of_type var "_" (fun name -> name)) ^ sk k
                   | `Recursive (var, body) ->
                       if TypeVarSet.mem var bound_vars then
                         Vars.find var vars
@@ -1661,169 +1729,17 @@ struct
                   | `Body t -> sd t
               end
           | `Function (args, effects, t) ->
-              let arrow =
-                let (fields, row_var, false) = unwrap effects in
-                  if FieldEnv.is_empty fields then
-                    match Unionfind.find row_var with
-                      | `Closed -> "{}->"
-                      | `Var (var, _, `Flexible) when policy.flavours ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "-%->"
-                            else
-                              "-%" ^ name ^ "->"
-                      | `Var (var, _, _) ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "->"
-                            else
-                              "-" ^ name ^ "->"
-                      | `Recursive _ -> assert false
-                      | `Body t' ->
-                          sd (`Function (args, t', t))
-                  else if
-                    (FieldEnv.mem "wild" fields &&
-                       is_present (FieldEnv.find "wild" fields) &&
-                        FieldEnv.size fields = 1)
-                  then
-                    match Unionfind.find row_var with
-                      | `Closed -> "{}~>"
-                      | `Var (var, _, `Flexible) when policy.flavours ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "~%~>"
-                            else
-                              "~%" ^ name ^ "~>"
-                      | `Var (var, _, _) ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "~>"
-                            else
-                              "~" ^ name ^ "~>"
-                      | `Recursive _ -> assert false
-                      | `Body t' ->
-                          sd (`Function (args, t', t))
-                  else if
-                    (FieldEnv.mem "hear" fields &&
-                       FieldEnv.mem "wild" fields &&
-                       is_present (FieldEnv.find "hear" fields) &&
-                        is_present (FieldEnv.find "wild" fields) &&
-                        FieldEnv.size fields = 2)
-                  then
-                    let ht =
-                      match FieldEnv.find "hear" fields with
-                      | `Present t -> sd t
-                      | _          -> assert false
-                    in
-                      match Unionfind.find row_var with
-                        | `Closed ->
-                            "{:" ^ ht ^ "}~>"
-                        | `Var (var, _, `Flexible) when policy.flavours ->
-                            let name, spec = Vars.find_spec var vars in
-                              if hide_fresh_check var spec then
-                                "{:" ^ ht ^ "|%}~>"
-                              else
-                                "{:" ^ ht ^ "|%" ^ name ^ "}~>"
-                        | `Var (var, _, _) ->
-                            let name, spec = Vars.find_spec var vars in
-                              if hide_fresh_check var spec then
-                                "{:" ^ ht ^ "|_}~>"
-                              else
-                                "{:" ^ ht ^ "|" ^ name ^ "}~>"
-                        | `Recursive _ -> assert false
-                        | `Body t' ->
-                            sd (`Function (args, t', t))
-                  else
-                      (* to guarantee termination it's crucial that we
-                         invoke row on the original wrapped version of
-                         the effect row *)
-                      "{" ^ row "," bound_vars p effects ^ "}->"
-              in
-                begin match concrete_type args with
-                  | `Record row when is_tuple ~allow_onetuples:true row ->
-                    string_of_tuple row ^ " " ^arrow ^ " " ^ sd t
-                  | t' -> assert false (* "*" ^ sd t' ^ " " ^arrow ^ " " ^ sd t *)
-                end
-          | `Lolli (args, effects, t) ->
-              let arrow =
-                let (fields, row_var, false) = unwrap effects in
-                  if FieldEnv.is_empty fields then
-                    match Unionfind.find row_var with
-                      | `Closed -> "{}-@"
-                      | `Var (var, _, `Flexible) when policy.flavours ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "-%-@"
-                            else
-                              "-%" ^ name ^ "-@"
-                      | `Var (var, _, _) ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "-@"
-                            else
-                              "-" ^ name ^ "-@"
-                      | `Recursive _ -> assert false
-                      | `Body t' ->
-                          sd (`Lolli (args, t', t))
-                  else if
-                    (FieldEnv.mem "wild" fields &&
-                       is_present (FieldEnv.find "wild" fields) &&
-                        FieldEnv.size fields = 1)
-                  then
-                    match Unionfind.find row_var with
-                      | `Closed -> "{}~@"
-                      | `Var (var, _, `Flexible) when policy.flavours ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "~%~@"
-                            else
-                              "~%" ^ name ^ "~@"
-                      | `Var (var, _, _) ->
-                          let name, spec = Vars.find_spec var vars in
-                            if hide_fresh_check var spec then
-                              "~@"
-                            else
-                              "~" ^ name ^ "~@"
-                      | `Recursive _ -> assert false
-                      | `Body t' ->
-                          sd (`Lolli (args, t', t))
-                  else if
-                    (FieldEnv.mem "hear" fields &&
-                       FieldEnv.mem "wild" fields &&
-                       is_present (FieldEnv.find "hear" fields) &&
-                        is_present (FieldEnv.find "wild" fields) &&
-                        FieldEnv.size fields = 2)
-                  then
-                    let ht = sd
-                      (match FieldEnv.find "hear" fields with
-                      | `Present t -> t
-                      | (`Absent | `Var _) -> assert false) in
-                      match Unionfind.find row_var with
-                        | `Closed ->
-                            "{:" ^ ht ^ "}~@"
-                        | `Var (var, _, `Flexible) when policy.flavours ->
-                            let name, spec = Vars.find_spec var vars in
-                              if hide_fresh_check var spec then
-                                "{:" ^ ht ^ "|%}~@"
-                              else
-                                "{:" ^ ht ^ "|%" ^ name ^ "}~@"
-                        | `Var (var, _, _) ->
-                            let name, spec = Vars.find_spec var vars in
-                              if hide_fresh_check var spec then
-                                "{:" ^ ht ^ "|_}~@"
-                              else
-                                "{:" ^ ht ^ "|" ^ name ^ "}~@"
-                        | `Recursive _ -> assert false
-                        | `Body t' ->
-                            sd (`Lolli (args, t', t))
-                  else
-                      "{" ^ row "," bound_vars p effects ^ "}-@"
-              in
-                begin match concrete_type args with
-                  | `Record row when is_tuple ~allow_onetuples:true row ->
-                    string_of_tuple row ^ " " ^arrow ^ " " ^ sd t
-                  | t' -> assert false (* "*" ^ sd t' ^ " " ^arrow ^ " " ^ sd t *)
-                end
+             let ht fields =
+             match FieldEnv.find "hear" fields with
+             | `Present t -> sd t
+             | _          -> assert false in
+             ppr_function_type args effects t ">" ht
+          | `Lolli    (args, effects, t) ->
+             let ht fields =
+             sd (match FieldEnv.find "hear" fields with
+                 | `Present t -> t
+                 | _          -> assert false)
+             in ppr_function_type args effects t "@" ht
           | `Record r ->
               let ur = unwrap r in
                 (if is_tuple ur then string_of_tuple r
@@ -1845,7 +1761,7 @@ struct
                           "forall "^ mapstrcat "," (quantifier p) tyvars ^"."^ datatype bound_vars p body
                 else
                   "forall "^ mapstrcat "," (quantifier p) tyvars ^"."^ datatype bound_vars p body
-          | `Input (t, s) -> "?(" ^ datatype bound_vars p t ^ ")." ^ datatype bound_vars p s
+          | `Input  (t, s) -> "?(" ^ datatype bound_vars p t ^ ")." ^ datatype bound_vars p s
           | `Output (t, s) -> "!(" ^ datatype bound_vars p t ^ ")." ^ datatype bound_vars p s
           | `Select bs -> "[+|" ^ row "," bound_vars p bs ^ "|+]"
           | `Choice bs -> "[&|" ^ row "," bound_vars p bs ^ "|&]"
@@ -1858,7 +1774,7 @@ struct
                datatype bound_vars p w ^ "," ^
                datatype bound_vars p n ^ ")"
           | `Lens (fds, cond, typ) -> "Lens(" ^ datatype bound_vars p typ ^ ")"
-          | `Alias ((s,[]), t) ->  s
+          | `Alias ((s,[]), _) ->  s
           | `Alias ((s,ts), _) ->  s ^ " ("^ String.concat "," (List.map (type_arg bound_vars p) ts) ^")"
           | `Application (l, [elems]) when Abstype.Eq_t.eq l list ->  "["^ (type_arg bound_vars p) elems ^"]"
           | `Application (s, []) -> Abstype.name s
@@ -1875,20 +1791,20 @@ struct
       | `Absent -> "-"
       | `Var point ->
           begin
+            let name_of_type var n1 n2 =
+              let name, (_, _, count) = Vars.find_spec var vars in
+              if policy.hide_fresh && count = 1 && not (IntSet.mem var bound_vars) then n1
+              else (n2 name) in
             match Unionfind.find point with
               | `Var (var, _, `Flexible) when policy.flavours ->
-                  let name, (_, _, count) = Vars.find_spec var vars in
-                    if policy.hide_fresh && count = 1 && not (IntSet.mem var bound_vars) then "{%}"
-                    else "{%" ^ name ^ "}"
+                 name_of_type var "{%}" (fun name -> "{%" ^ name ^ "}")
               | `Var (var, _, _) ->
-                  let name, (_, _, count) = Vars.find_spec var vars in
-                    if policy.hide_fresh && count = 1 && not (IntSet.mem var bound_vars) then "{_}"
-                    else "{" ^ name ^ "}"
+                 name_of_type var "{_}" (fun name -> "{" ^ name ^ "}")
               | `Body f ->
                   presence bound_vars p f
           end
 
-  and row sep bound_vars ((policy, vars) as p) (field_env, rv, dual) =
+  and row sep bound_vars p (field_env, rv, dual) =
     (* FIXME:
 
        should quote labels when necessary, i.e., when they
@@ -1908,18 +1824,18 @@ struct
             | Some s -> "|"^ (if dual then "~" else "") ^ s
         end
   and row_var sep bound_vars ((policy, vars) as p) rv =
+    let name_of_type var k n1 n2 =
+     let name, (_, _, count) = Vars.find_spec var vars in
+     Some ((if policy.hide_fresh && count = 1 && not (IntSet.mem var bound_vars)
+            then n1
+            else (n2 name))
+          ^ has_kind (subkind p k)) in
     match Unionfind.find rv with
       | `Closed -> None
       | `Var (var, k, `Flexible) when policy.flavours ->
-          let name, (_, _, count) = Vars.find_spec var vars in
-            Some
-              ((if policy.hide_fresh && count = 1 && not (IntSet.mem var bound_vars) then "%"
-                else ("%" ^ name)) ^ has_kind (subkind p k))
+         name_of_type var k "%" (fun name -> "%" ^ name)
       | `Var (var, k, _) ->
-          let name, (_, _, count) = Vars.find_spec var vars in
-            Some
-              ((if policy.hide_fresh && count = 1 && not (IntSet.mem var bound_vars) then "_"
-                else name) ^ has_kind (subkind p k))
+         name_of_type var k "_" (fun name -> name)
       | `Recursive (var, r) ->
           if TypeVarSet.mem var bound_vars then
             Some (Vars.find var vars)
@@ -1994,10 +1910,10 @@ let rec flexible_type_vars : TypeVarSet.t -> datatype -> quantifier TypeVarMap.t
             flexible_type_vars bound_vars body
       | `Variant row -> row_flexible_type_vars bound_vars row
       | `Table (r, w, n) -> TypeVarMap.union_all [ftv r; ftv w; ftv n]
-      | `Alias ((name, ts), d) ->
+      | `Alias ((_name, ts), d) ->
           TypeVarMap.union_all
             ((ftv d)::(List.map (tyarg_flexible_type_vars bound_vars) ts))
-      | `Application (name, datatypes) ->
+      | `Application (_name, datatypes) ->
           TypeVarMap.union_all (List.map (tyarg_flexible_type_vars bound_vars) datatypes)
       | `Input (t, s)
       | `Output (t, s) -> TypeVarMap.union_all [flexible_type_vars bound_vars t; flexible_type_vars bound_vars s]
@@ -2014,7 +1930,7 @@ and presence_flexible_type_vars bound_vars =
           match Unionfind.find point with
             | `Var (var, _, `Flexible) when TypeVarSet.mem var bound_vars -> TypeVarMap.empty
             | `Var (var, subkind, `Flexible) -> TypeVarMap.singleton var (var, subkind, `Presence point)
-            | `Var (var, _, `Rigid) -> TypeVarMap.empty
+            | `Var (_  , _, `Rigid) -> TypeVarMap.empty
             | `Body f -> presence_flexible_type_vars bound_vars f
         end
 
@@ -2054,63 +1970,77 @@ let free_bound_row_var_vars ?(include_aliases=true) = Vars.free_bound_row_var_va
 
 let free_bound_tycon_type_vars ?(include_aliases=true) = Vars.free_bound_tycon_vars ~include_aliases TypeVarSet.empty
 
-(* string conversions *)
-let string_of_datatype ?(policy=Print.default_policy) (t : datatype) =
-  let policy = policy () in
-  let t =
-    if policy.Print.quantifiers then t
-    else Print.strip_quantifiers t
-  in
-    Print.datatype
-      TypeVarSet.empty
-      (policy, Vars.make_names (free_bound_type_vars ~include_aliases:true t))
-      t
-
-let string_of_row ?(policy=Print.default_policy) row =
-  Print.row "," TypeVarSet.empty
-    (policy (), Vars.make_names (free_bound_row_type_vars ~include_aliases:true row))
-    row
-
-let string_of_presence ?(policy=Print.default_policy) (f : field_spec) =
-  let policy = policy () in
-    Print.presence
-      TypeVarSet.empty
-      (policy, Vars.make_names (free_bound_field_spec_type_vars ~include_aliases:true f))
-      f
-
-let string_of_type_arg ?(policy=Print.default_policy) (arg : type_arg) =
-  let policy = policy () in
-    Print.type_arg
-      TypeVarSet.empty
-      (policy, Vars.make_names (free_bound_type_arg_type_vars ~include_aliases:true arg))
-      arg
-
-let string_of_row_var ?(policy=Print.default_policy) row_var =
-  match
-    Print.row_var "," TypeVarSet.empty
-      (policy (), Vars.make_names (free_bound_row_var_vars ~include_aliases:true row_var))
-      row_var
-  with
-      | None -> ""
-      | Some s -> s
-
-let string_of_tycon_spec ?(policy=Print.default_policy) (tycon : tycon_spec) =
-  let policy = policy () in
-    Print.tycon_spec
-      TypeVarSet.empty
-      (policy, Vars.make_names (free_bound_tycon_type_vars ~include_aliases:true tycon))
-      tycon
-
-(* HACK:
-   Just use the default policy. At some point we might want to export
-   the printing policy in types.mli.
+(** Generates new variable names for things in the list, adding them to already
+    existing pool of type variable names.
  *)
-let string_of_datatype t = string_of_datatype t
-let string_of_row r = string_of_row r
-let string_of_presence f = string_of_presence f
-let string_of_type_arg arg = string_of_type_arg arg
-let string_of_row_var r = string_of_row_var r
-let string_of_tycon_spec s = string_of_tycon_spec s
+let add_tyvar_names (f : 'a -> Vars.vars_list) (tys : 'a list) =
+  List.iter (fun t -> let _ = Vars.make_names (f t) in ()) tys
+
+(** Builds a fresh set of type variable names for a given list of things.  This
+    function is called:
+
+    * when pretty-printing a type.  It then builds type variable names for a
+      single thing that is being printed.
+
+    * when printing error messages.  It then builds a consistent set of variable
+      names for several different types appearing in the error message.
+ *)
+let build_tyvar_names (f : 'a -> Vars.vars_list) (tys : 'a list) =
+  Vars.tyvar_name_counter := 0;
+  Hashtbl.reset Vars.tyvar_name_map;
+  add_tyvar_names f tys
+
+(*
+
+Note [Refreshing type variable names]
+=====================================
+
+Optional argument refresh_tyvar_names passed to string_of_* pretty-printing
+functions determines whether the set of variable names should be refreshed
+(default) or re-used.  The latter is used for printing error messages, where we
+want consistent type variable names across several calls to pretty-printing
+functions.
+
+See Note [Variable names in error messages].
+
+ *)
+
+(* string conversions *)
+let string_of_datatype ?(policy=Print.default_policy) ?(refresh_tyvar_names=true)
+                       (t : datatype) =
+  let policy = policy () in
+  let t = if policy.Print.quantifiers then t
+          else Print.strip_quantifiers t in
+  if refresh_tyvar_names then build_tyvar_names (fun x -> free_bound_type_vars x) [t];
+  Print.datatype TypeVarSet.empty (policy, Vars.tyvar_name_map) t
+
+let string_of_row ?(policy=Print.default_policy) ?(refresh_tyvar_names=true) row =
+  if refresh_tyvar_names then build_tyvar_names (fun x -> free_bound_row_type_vars x) [row];
+  Print.row "," TypeVarSet.empty (policy (), Vars.tyvar_name_map) row
+
+let string_of_presence ?(policy=Print.default_policy) ?(refresh_tyvar_names=true)
+                       (f : field_spec) =
+  if refresh_tyvar_names then
+    build_tyvar_names (fun x -> free_bound_field_spec_type_vars x) [f];
+  Print.presence TypeVarSet.empty (policy (), Vars.tyvar_name_map) f
+
+let string_of_type_arg ?(policy=Print.default_policy) ?(refresh_tyvar_names=true)
+                       (arg : type_arg) =
+  if refresh_tyvar_names then
+    build_tyvar_names (fun x -> free_bound_type_arg_type_vars x) [arg];
+  Print.type_arg TypeVarSet.empty (policy (), Vars.tyvar_name_map) arg
+
+let string_of_row_var ?(policy=Print.default_policy) ?(refresh_tyvar_names=true) row_var =
+  if refresh_tyvar_names then
+    build_tyvar_names (fun x -> free_bound_row_var_vars x) [row_var];
+  match Print.row_var "," TypeVarSet.empty (policy (), Vars.tyvar_name_map) row_var
+  with | None -> ""
+       | Some s -> s
+
+let string_of_tycon_spec ?(policy=Print.default_policy) ?(refresh_tyvar_names=true) (tycon : tycon_spec) =
+  if refresh_tyvar_names then
+    build_tyvar_names (fun x -> free_bound_tycon_type_vars x) [tycon];
+  Print.tycon_spec TypeVarSet.empty (policy (), Vars.tyvar_name_map) tycon
 
 module Show_datatype =
   Deriving_Show.Defaults
@@ -2128,12 +2058,14 @@ module Show_tycon_spec =
         Format.pp_print_string fmt (string_of_tycon_spec a)
      end)
 
-type environment        = datatype Env.t
+type environment       = datatype Env.t
 and tycon_environment  = tycon_spec Env.t
-and typing_environment = { var_env   : environment ;
-                           tycon_env : tycon_environment ;
-                           effect_row : row }
+and typing_environment = { var_env    : environment
+                         ; tycon_env  : tycon_environment
+                         ; effect_row : row }
     deriving (Show)
+
+let empty_typing_environment = { var_env = Env.empty; tycon_env =  Env.empty; effect_row = make_empty_closed_row ()  }
 
 let normalise_typing_environment env =
   { env with
@@ -2143,13 +2075,14 @@ let normalise_typing_environment env =
 
 (* Functions on environments *)
 let extend_typing_environment
-    {var_env = l ; tycon_env = al ; effect_row = _el }
+    {var_env = l ; tycon_env = al ; effect_row = _  }
     {var_env = r ; tycon_env = ar ; effect_row = er } : typing_environment =
   {var_env = Env.extend l r ; tycon_env = Env.extend al ar ; effect_row = er }
 
 let string_of_environment = Show_environment.show
 
-let string_of_typing_environment {var_env=env} = string_of_environment env
+let string_of_typing_environment { var_env = env; _ }
+  = string_of_environment env
 
 let make_fresh_envs : datatype -> datatype IntMap.t * row IntMap.t * field_spec IntMap.t =
   let module S = IntSet in
@@ -2168,7 +2101,7 @@ let make_fresh_envs : datatype -> datatype IntMap.t * row IntMap.t * field_spec 
       | `Variant row             -> make_env_r boundvars row
       | `Table (r, w, n)         -> union [make_env boundvars r; make_env boundvars w; make_env boundvars n]
       | `Lens (fds, cond, r)     -> union [make_env boundvars r]
-      | `Alias ((name, ts), d)   -> union (List.map (make_env_ta boundvars) ts @ [make_env boundvars d])
+      | `Alias ((_name, ts), d)  -> union (List.map (make_env_ta boundvars) ts @ [make_env boundvars d])
       | `Application (_, ds)     -> union (List.map (make_env_ta boundvars) ds)
       | `ForAll (qs, t)          ->
           make_env
@@ -2267,7 +2200,7 @@ let is_sub_type, is_sub_row =
           and rrow, _ = unwrap_row row' in
             is_sub_row rec_vars (lrow, rrow)
       | `Table _, `Table _ -> failwith "not implemented subtyping on tables yet"
-      | `Application (labs, lts), `Application (rabs, rts) ->
+      | `Application (labs, _), `Application (rabs, _) ->
           (* WARNING:
 
              This assumes that abstract type parameters are all covariant -
@@ -2282,7 +2215,7 @@ let is_sub_type, is_sub_row =
               | `Var (var, _, _), `Var (var', _, _) -> var=var'
               | `Body t, _ -> is_sub_type rec_vars (t, t')
               | _, `Body t -> is_sub_type rec_vars (t, t')
-              | `Recursive (var, t), `Recursive (var', t') ->
+              | `Recursive _, `Recursive _ ->
                   failwith "not implemented subtyping on recursive types yet"
               | _, _ -> false
           end
@@ -2303,7 +2236,7 @@ let is_sub_type, is_sub_row =
       | `Alias ((name, []), _), `Alias ((name', []), _) when name=name' -> true
       | (`Alias (_, t)), t'
       | t, (`Alias (_, t')) -> is_sub_type rec_vars (t, t')
-      | `ForAll (qs, t), `ForAll (qs', t') ->
+      | `ForAll _, `ForAll _ ->
           failwith "not implemented subtyping on forall types yet"
       | _, _ -> false
   (* This is like standard row sub-typing, but the field types must be invariant.
@@ -2312,9 +2245,11 @@ let is_sub_type, is_sub_row =
      associated with input).
   *)
   and is_sub_eff =
-    fun rec_vars ((lfield_env, lrow_var, false as lrow), (rfield_env, rrow_var, false as rrow)) ->
+    fun rec_vars ((lfield_env, lrow_var, ldual as lrow), (rfield_env, rrow_var, rdual as rrow)) ->
+      assert (not ldual);
+      assert (not rdual);
       let sub_fields =
-        FieldEnv.fold (fun name f b ->
+        FieldEnv.fold (fun name f _ ->
                          match f with
                            | `Present t ->
                                if FieldEnv.mem name rfield_env then
@@ -2342,7 +2277,7 @@ let is_sub_type, is_sub_row =
   and is_sub_row =
     fun rec_vars ((lfield_env, lrow_var, ldual as lrow), (rfield_env, rrow_var, rdual as rrow)) ->
       let sub_fields =
-        FieldEnv.fold (fun name f b ->
+        FieldEnv.fold (fun name f _ ->
                          match f with
                            | `Present t ->
                                if FieldEnv.mem name rfield_env then
@@ -2363,7 +2298,7 @@ let is_sub_type, is_sub_row =
           | `Closed, _ -> true
           | `Body lrow, _ -> is_sub_row rec_vars (dual_if ldual lrow, rrow)
           | _, `Body rrow -> is_sub_row rec_vars (lrow, dual_if rdual rrow)
-          | `Recursive (lvar, lrow), `Recursive (rvar, rrow) ->
+          | `Recursive _, `Recursive _ ->
               failwith "not implemented subtyping on recursive rows yet"
           | _, _ -> false
       in

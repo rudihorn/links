@@ -1,7 +1,6 @@
 %{
 
 open Utility
-open List
 open Sugartypes
 
 (* Generation of fresh type variables *)
@@ -116,20 +115,11 @@ let subkind_of pos =
   | "Session" -> Some (`Any, `Session)
   | sk -> raise (ConcreteSyntaxError ("Invalid subkind: " ^ sk, pos))
 
-let attach_kind pos (t, k) = (t, k, `Rigid)
+let attach_kind _pos (t, k) = (t, k, `Rigid)
 
-let attach_subkind_helper update pos sk = update sk
+let attach_subkind_helper update _pos sk = update sk
 
 let attach_subkind pos (t, subkind) =
-  let update sk =
-    match t with
-    | `TypeVar (x, _, freedom) ->
-       `TypeVar (x, sk, freedom)
-    | _ -> assert false
-  in
-    attach_subkind_helper update pos subkind
-
-let attach_session_subkind pos (t, subkind) =
   let update sk =
     match t with
     | `TypeVar (x, _, freedom) ->
@@ -163,10 +153,15 @@ let parseRegexFlags f =
       List.rev l
     else
       asList f (i+1) ((String.get f i)::l) in
-    List.map (function 'l' -> `RegexList | 'n' -> `RegexNative | 'g' -> `RegexGlobal) (asList f 0 [])
+    List.map (function
+                'l' -> `RegexList
+              | 'n' -> `RegexNative
+              | 'g' -> `RegexGlobal
+              | _ -> assert false) (asList f 0 [])
 
 let datatype d = d, None
 
+let cp_unit p = `Unquote ([], (`TupleLit [], p)), p
 %}
 
 %token END
@@ -185,8 +180,8 @@ let datatype d = d, None
 %token LEFTTRIANGLE RIGHTTRIANGLE NU
 %token FOR LARROW LLARROW WHERE FORMLET PAGE
 %token LRARROW
-%token COMMA VBAR DOT DOTDOT COLON COLONCOLON COLONCOLONCOLON
-%token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY 
+%token COMMA VBAR DOT DOTDOT COLON COLONCOLON
+%token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY
 %token UPDATE DELETE INSERT VALUES SET RETURNING
 %token LENS LENSDROP LENSSELECT DETERMINED BY
 %token PUT GET
@@ -200,8 +195,8 @@ let datatype d = d, None
 %token <float> UFLOAT
 %token <string> STRING CDATA REGEXREPL
 %token <char> CHAR
-%token <string> QUALIFIEDVARIABLE VARIABLE CONSTRUCTOR KEYWORD PERCENTVAR
-%token <string> QUALIFIEDMODULE LXML ENDTAG
+%token <string> VARIABLE CONSTRUCTOR KEYWORD PERCENTVAR
+%token <string> LXML ENDTAG
 %token RXML SLASHRXML
 %token MU FORALL ALIEN SIG OPEN
 %token MODULE
@@ -309,7 +304,7 @@ nofun_declaration:
 
 links_module:
 | MODULE module_name moduleblock                               { let (mod_name, name_pos) = $2 in
-                                                                 `Module (mod_name, (`Block $3, name_pos)), name_pos }
+                                                                 `Module (mod_name, $3), name_pos }
 module_name:
 | CONSTRUCTOR                                                  { $1 , pos () }
 
@@ -391,9 +386,25 @@ constant:
 | FALSE                                                        { `Bool false, pos() }
 | CHAR                                                         { `Char $1   , pos() }
 
+qualified_name:
+| CONSTRUCTOR DOT qualified_name_inner                         { $1 :: $3 }
+
+qualified_name_inner:
+| CONSTRUCTOR DOT qualified_name_inner                         { $1 :: $3 }
+| VARIABLE                                                     { [$1] }
+
+qualified_type_name:
+| CONSTRUCTOR DOT qualified_type_name_inner                    { $1 :: $3 }
+
+qualified_type_name_inner:
+| CONSTRUCTOR DOT qualified_type_name_inner                    { $1 :: $3 }
+| CONSTRUCTOR                                                  { [$1] }
+
+
+
 atomic_expression:
+| qualified_name                                               { `QualifiedVar $1, pos() }
 | VARIABLE                                                     { `Var $1, pos() }
-| QUALIFIEDVARIABLE                                            { `Var $1, pos() }
 | constant                                                     { let c, p = $1 in `Constant c, p }
 | parenthesized_thing                                          { $1 }
 /* HACK: allows us to support both mailbox receive syntax
@@ -431,11 +442,14 @@ perhaps_exp:
 cp_expression:
 | LBRACE block_contents RBRACE                                 { `Unquote $2, pos () }
 | cp_name LPAREN perhaps_name RPAREN DOT cp_expression         { `Grab ((fst3 $1, None), $3, $6), pos () }
+| cp_name LPAREN perhaps_name RPAREN                           { `Grab ((fst3 $1, None), $3, cp_unit(pos())), pos () }
 | cp_name LBRACKET exp RBRACKET DOT cp_expression              { `Give ((fst3 $1, None), Some $3, $6), pos () }
+| cp_name LBRACKET exp RBRACKET                                { `Give ((fst3 $1, None), Some $3, cp_unit(pos())), pos () }
 | cp_name LBRACKET RBRACKET                                    { `GiveNothing $1, pos () }
 | OFFER cp_name LBRACE perhaps_cp_cases RBRACE                 { `Offer ($2, $4), pos () }
 | cp_label cp_name DOT cp_expression                           { `Select ($2, $1, $4), pos () }
-| cp_name LRARROW cp_name                                      { `Fuse ($1, $3), pos () }
+| cp_label cp_name                                             { `Select ($2, $1, cp_unit(pos())), pos () }
+| cp_name LRARROW cp_name                                      { `Link ($1, $3), pos () }
 | NU cp_name DOT LPAREN cp_expression VBAR cp_expression RPAREN { `Comp ($2, $5, $7), pos () }
 
 primary_expression:
@@ -771,9 +785,9 @@ formlet_expression:
 
 table_expression:
 | formlet_expression                                           { $1 }
-| TABLE exp WITH datatype perhaps_table_constraints FROM exp   { `TableLit ($2, datatype $4, $5, (`ListLit ([], None),pos()), $7), pos()} 
+| TABLE exp WITH datatype perhaps_table_constraints FROM exp   { `TableLit ($2, datatype $4, $5, (`ListLit ([], None),pos()), $7), pos()}
 /* SAND */
-| TABLE exp WITH datatype perhaps_table_constraints TABLEKEYS exp FROM exp   { `TableLit ($2, datatype $4, $5, $7, $9), pos()} 
+| TABLE exp WITH datatype perhaps_table_constraints TABLEKEYS exp FROM exp   { `TableLit ($2, datatype $4, $5, $7, $9), pos()}
 
 perhaps_table_constraints:
 | WHERE table_constraints                                      { $2 }
@@ -843,9 +857,8 @@ record_labels:
 | record_label                                                 { [$1] }
 
 links_open:
-| OPEN QUALIFIEDVARIABLE                                       { `Import $2, pos () }
-| OPEN QUALIFIEDMODULE                                         { `Import $2, pos () }
-| OPEN CONSTRUCTOR                                             { `Import $2, pos () }
+| OPEN qualified_type_name                                     { `QualifiedImport $2, pos () }
+| OPEN CONSTRUCTOR                                             { `QualifiedImport [$2], pos () }
 
 binding:
 | VAR pattern EQ exp SEMICOLON                                 { `Val ([], $2, $4, `Unknown, None), pos () }
@@ -861,7 +874,7 @@ bindings:
 | bindings binding                                             { $1 @ [$2] }
 
 moduleblock:
-| LBRACE bindings RBRACE                                       { ($2, (`RecordLit ([], None), pos())) }
+| LBRACE declarations RBRACE                                   { $2 }
 
 block:
 | LBRACE block_contents RBRACE                                 { $2 }
@@ -969,6 +982,15 @@ forall_datatype:
 | FORALL varlist DOT datatype                                  { `Forall (List.map fst $2, $4) }
 | session_datatype                                             { $1 }
 
+/* Parenthesised dts disambiguate between sending qualified types and recursion variables.
+   e.g:
+
+     S = !ModuleA.ModuleB.Type.S
+     should be written
+     S = !(ModuleA.ModuleB.Type).S
+
+     Parenthesised versions take priority over non-parenthesised versions.
+*/
 session_datatype:
 | BANG datatype DOT datatype                                   { `Output ($2, $4) }
 | QUESTION datatype DOT datatype                               { `Input ($2, $4) }
@@ -980,6 +1002,7 @@ session_datatype:
 
 parenthesized_datatypes:
 | LPAREN RPAREN                                                { [] }
+| LPAREN qualified_type_name RPAREN                            { [`QualifiedTypeApplication ($2, [])] }
 | LPAREN datatypes RPAREN                                      { $2 }
 
 primary_datatype:

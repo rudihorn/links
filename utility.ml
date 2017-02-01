@@ -105,7 +105,7 @@ module IntPair = struct
   let compare (i1,i2) (j1,j2) = if i1 = j1 then i2-j2 else i1-j1
 end
 
-module Char = 
+module Char =
 struct
   include Char
   module Show_t = Deriving_Show.Show_char
@@ -132,7 +132,7 @@ struct
     include Map.Make(Ord)
 
     exception Not_disjoint of key * string
-    module S = Deriving_Show.Show_map(Ord)(Ord.Show_t)
+    (* module S = Deriving_Show.Show_map(Ord)(Ord.Show_t) *)
 
     let find elem map =
       try find elem map
@@ -495,6 +495,10 @@ struct
 
   let string_of_alist = String.concat ", " -<- List.map (fun (x,y) -> x ^ " => " ^ y)
 
+  (* FIXME: consolidate split_string and split (suspicion:
+   split_string doesn't properly deal with failure whereas split
+   does) *)
+
   let rec split_string source delim =
     if String.contains source delim then
       let delim_index = String.index source delim in
@@ -502,6 +506,22 @@ struct
           (split_string (String.sub source (delim_index+1)
                            ((String.length source) - delim_index - 1)) delim)
     else source :: []
+
+  (* taken from the internals of cgi *)
+  let split separator text =
+    let len = String.length text in
+    let rec loop pos =
+      if pos < len then
+        try
+          let last = String.index_from text pos separator in
+          let str = String.sub text pos (last-pos) in
+          str::(loop (succ last))
+        with NotFound _ ->
+          if pos < len then [String.sub text pos (len-pos)]
+          else []
+      else []
+    in
+    loop 0
 
   let explode : string -> char list =
     let rec explode' list n string =
@@ -528,6 +548,10 @@ struct
     in List.rev (aux 0 [])
 
   let mapstrcat glue f list = String.concat glue (List.map f list)
+
+  let string_starts_with s pref =
+    String.length s >= String.length pref &&
+    String.sub s 0 (String.length pref) = pref
 
   let start_of ~is s =
     Str.string_match (Str.regexp_string is) s 0
@@ -797,23 +821,14 @@ let xml_unescape s =
 
 (** (0 base64 Routines) *)
 let base64decode s =
-  try Netencoding.Base64.decode (Str.global_replace (Str.regexp " ") "+" s)
-  with Invalid_argument "Netencoding.Base64.decode"
-      -> raise (Invalid_argument ("base64 decode gave error: " ^ s))
+  try B64.decode (Str.global_replace (Str.regexp " ") "+" s)
+  with Invalid_argument s as e ->
+    if s = "B64.decode" then
+      raise (Invalid_argument ("base64 decode gave error: " ^ s))
+    else
+      raise e
 
-let base64encode = Netencoding.Base64.encode
-
-(** (0 Ocaml Version Comparison) ***)
-let ocaml_version_number = (List.map int_of_string
-                              (split_string Sys.ocaml_version '.'))
-
-(* Ocaml team says string comparison would work here. Do we believe them? *)
-let rec version_atleast a b =
-  match a, b with
-      _, [] -> true
-    | [], _ -> false
-    | (ah::at), (bh::bt) -> ah > bh || (ah = bh && version_atleast at bt)
-let ocaml_version_atleast min_vsn = version_atleast ocaml_version_number min_vsn
+let base64encode = B64.encode
 
 let gensym_counter = ref 0
 
@@ -856,6 +871,13 @@ let getenv : string -> string option =
   fun name ->
     try Some (Sys.getenv name)
     with NotFound _ -> None
+
+(** Get an environment variable, return its value if it is defined, or
+    raise an exception if it is not in the environment. *)
+let safe_getenv s =
+  try Sys.getenv s
+  with NotFound _ ->
+    failwith ("The environment variable " ^ s ^ " is not set")
 
 (** Initialise the random number generator *)
 let _ = Random.self_init()

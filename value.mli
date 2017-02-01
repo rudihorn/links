@@ -13,10 +13,11 @@ class virtual dbvalue :
     method virtual get_all_lst : string list list
     method virtual nfields : int
     method virtual ntuples : int
-    method virtual map : 'a. ((int -> string) -> 'a) -> 'a list
-    method virtual map_array : 'a. (string array -> 'a) -> 'a list
-    method virtual fold_array : 'a. (string array -> 'a -> 'a) -> 'a -> 'a
+    method map : 'a. ((int -> string) -> 'a) -> 'a list
+    method map_array : 'a. (string array -> 'a) -> 'a list
+    method fold_array : 'a. (string array -> 'a -> 'a) -> 'a -> 'a
     method virtual getvalue : int -> int -> string
+    method virtual gettuple : int -> string array
     method virtual status : db_status
   end
 
@@ -31,7 +32,7 @@ class virtual database :
   end
 
 module Eq_database : Deriving_Eq.Eq with type a = database
-module Typeable_database : Deriving_Typeable.Typeable with type a = database 
+module Typeable_database : Deriving_Typeable.Typeable with type a = database
 module Show_database : Deriving_Show.Show with type a = database
 
 type db_constructor = string -> database * string
@@ -85,6 +86,7 @@ and continuation = (Ir.scope * Ir.var * env * Ir.computation) list
 and env
     deriving (Show)
 
+val set_request_data : env -> RequestData.request_data -> env
 val toplevel_cont : continuation
 
 val empty_env : env
@@ -96,6 +98,7 @@ val lookupS : Ir.var -> env -> (t * Ir.scope) option
 val shadow : env -> by:env -> env
 val fold : (Ir.var -> (t * Ir.scope) -> 'a -> 'a) -> env -> 'a -> 'a
 val globals : env -> env
+val request_data : env -> RequestData.request_data
 (* used only by json.ml, webif.ml ... *)
 val get_parameters : env -> (t*Ir.scope) Utility.intmap
 
@@ -123,7 +126,7 @@ val box_list : t list -> t
 val unbox_list : t -> t list
 val box_record : (string * t) list -> t
 val unbox_record : t -> (string * t) list
-val box_unit : unit -> t 
+val box_unit : unit -> t
 val unbox_unit : t -> unit
 val box_pair : t -> t -> t
 val unbox_pair : t -> (t * t)
@@ -137,6 +140,7 @@ val intmap_of_record : t -> t Utility.intmap option
 val string_as_charlist : string -> t
 val charlist_as_string : t -> string
 val string_of_value : t -> string
+val string_of_xml : ?close_tags:bool -> xml -> string
 val string_of_primitive : primitive_value -> string
 val string_of_tuple : (string * t) list -> string
 val string_of_cont : continuation -> string
@@ -152,3 +156,6 @@ val expr_to_contframe : env -> Ir.tail_computation ->
 
 val value_of_xml : xml -> t
 val value_of_xmlitem : xmlitem -> t
+
+val split_html : xml -> xml * xml
+

@@ -4,261 +4,322 @@ open Notfound
 open List
 open Proc
 
+open Webserver_types
 open Performance
 open Utility
 
-type web_request =
-  | ServerCont of
-      Value.t                (* thunk *)
-  | ClientReturn of
-      Value.continuation *   (* continuation *)
-      Value.t                (* argument *)
-  | RemoteCall of
-      Value.t *              (* function *)
-      Value.env *            (* closure environment *)
-      Value.t list           (* arguments *)
-  | EvalMain of
-      Ir.binding list *
-      Ir.program
-      deriving (Show)
+let realpages = Settings.add_bool ("realpages", false, `System)
+let ( >>= ) = Lwt.bind
 
-(** Does at least one of the functions have to run on the client? *)
-let is_client_program : Ir.program -> bool =
-  fun (bs, main) ->
-    exists
-      (function
-         | `Fun (_, _, _, `Client)
-         | `Alien (_, "javascript") -> true
-         | `Rec defs ->
-             exists
-               (fun (_, _, _, location) -> location = `Client)
-               defs
-         | _ -> false)
-      bs
+module WebIf = functor (Webs : WEBSERVER) ->
+struct
 
-let serialize_call_to_client (continuation, name, arg) =
-  Json.jsonize_call continuation name arg
+  module Eval = Evalir.Eval(Webs)
 
-let parse_remote_call (valenv, nenv, tyenv) cgi_args =
-  let fname = Utility.base64decode (assoc "__name" cgi_args) in
-  let args = Utility.base64decode (assoc "__args" cgi_args) in
-  (* Debug.print ("args: " ^ Value.Show_t.show (Json.parse_json args)); *)
-  let args = Value.untuple (Json.parse_json args) in
+  type web_request =
+    | ServerCont of
+        Value.t                (* thunk *)
+    | ClientReturn of
+        Value.continuation *   (* continuation *)
+        Value.t                (* argument *)
+    | RemoteCall of
+        Value.t *              (* function *)
+        Value.env *            (* closure environment *)
+        Value.t list           (* arguments *)
+    | EvalMain
+        deriving (Show)
 
-  let fvs = Json.parse_json_b64 (assoc "__env" cgi_args) in
+  (** Does at least one of the functions have to run on the client? *)
+  let is_client_program : Ir.program -> bool =
+    fun (bs, _main) ->
+      exists
+        (function
+           | `Fun (_, _, _, `Client)
+           | `Alien (_, "javascript") -> true
+           | `Rec defs ->
+               exists
+                 (fun (_, _, _, location) -> location = `Client)
+                 defs
+           | _ -> false)
+        bs
 
-  let func =
-    match fvs with
-    | `Record [] -> `FunctionPtr (int_of_string fname, None)
-    | _          -> `FunctionPtr (int_of_string fname, Some fvs) in
-  RemoteCall(func, valenv, args)
+  (* SL: dead code *)
 
-(** Boolean tests for cgi parameters *)
+  (* let serialize_call_to_client (continuation, name, arg) = *)
+  (*   Json.jsonize_call continuation name arg *)
 
-(** remote client->server call *)
-let is_remote_call params =
-  mem_assoc "__name" params && mem_assoc "__args" params
+  let parse_remote_call (valenv, _, _) cgi_args =
+    let fname = Utility.base64decode (assoc "__name" cgi_args) in
+    let args = Utility.base64decode (assoc "__args" cgi_args) in
+    (* Debug.print ("args: " ^ Value.Show_t.show (Json.parse_json args)); *)
+    let args = Value.untuple (Json.parse_json args) in
 
-(** return __result from server->client call with server continuation __continuation *)
-let is_client_return params =
-  mem_assoc "__continuation" params && mem_assoc "__result" params
+    let fvs = Json.parse_json_b64 (assoc "__env" cgi_args) in
 
-(** invoke server continuation _k
-    (e.g. from a hypertext link or a formlet post)
- *)
-let is_server_cont args =
-  mem_assoc "_k" args
+    let func =
+      match fvs with
+      | `Record [] -> `FunctionPtr (int_of_string fname, None)
+      | _          -> `FunctionPtr (int_of_string fname, Some fvs) in
+    RemoteCall(func, valenv, args)
 
-(** Extract continuation thunk from the CGI parameter _k *)
-let parse_server_cont (valenv, _, _) program params =
-  ServerCont (Value.unmarshal_value valenv (assoc "_k" params))
+  (** Boolean tests for cgi parameters *)
 
-let parse_client_return (valenv, _, _) program cgi_args =
-  let fixup_cont =
-    (* At some point, '+' gets replaced with ' ' in our base64-encoded
-       string. Here we put it back as it was. *)
-    Str.global_replace (Str.regexp " ") "+"
-  in
-  let cont =
-    Value.unmarshal_continuation
-      valenv
-      (fixup_cont (assoc "__continuation" cgi_args))
-  in
-  (* Debug.print("continuation: " ^ Value.Show_continuation.show continuation); *)
-  let arg = Json.parse_json_b64 (assoc "__result" cgi_args) in
-  (* Debug.print ("arg: "^Value.Show_t.show arg); *)
-    ClientReturn(cont, arg)
+  (** remote client->server call *)
+  let is_remote_call params =
+    mem_assoc "__name" params && mem_assoc "__args" params
 
-let error_page_stylesheet =
-  "<style>pre {border : 1px solid #c66; padding: 4px; background-color: #fee} code.typeError {display: block; padding:1em;}</style>"
+  (** return __result from server->client call with server continuation __continuation *)
+  let is_client_return params =
+    mem_assoc "__continuation" params && mem_assoc "__result" params
 
-let error_page body =
-  "<html>\n  <head>\n    <title>Links error</title>\n    " ^
-    error_page_stylesheet ^
-    "\n  </head>\n  <body>" ^
-    body ^
-    "\n  </body></html>\n"
+  (** invoke server continuation _k
+      (e.g. from a hypertext link or a formlet post)
+   *)
+  let is_server_cont args =
+    mem_assoc "_k" args
 
-let is_multipart () =
-  ((Cgi.safe_getenv "REQUEST_METHOD") = "POST" &&
-      Cgi.string_starts_with (Cgi.safe_getenv "CONTENT_TYPE") "multipart/form-data")
+  (** Extract continuation thunk from the CGI parameter _k *)
+  let parse_server_cont (valenv, _, _) params =
+    ServerCont (Value.unmarshal_value valenv (assoc "_k" params))
 
-let get_cgi_args() =
-  if is_multipart() then
-    map (fun (name, {Cgi.value=value}) -> (name, value))
-      (Cgi.parse_multipart_args())
-  else
-    Cgi.parse_args()
-
-(* jcheney: lifted from serve_request, to de-clutter *)
-let parse_request env (globals, (locals, main)) cgi_args  =
-  if      (is_remote_call cgi_args)
-  then parse_remote_call env cgi_args
-  else if (is_client_return cgi_args)
-  then parse_client_return env (globals@locals, main) cgi_args
-  else if (is_server_cont cgi_args)
-  then parse_server_cont env (globals@locals, main) cgi_args
-  else EvalMain (globals, (locals, main))
-
-(** In web mode, we wrap the continuation of the whole program in a
-    call to renderPage. We also return the resulting continuation so
-    that we can use it elsewhere (i.e. in processing ServerCont).
-*)
-let wrap_with_render_page (nenv, {Types.tycon_env=tycon_env; Types.var_env=_})
-                          (bs, body) =
-  let xb, x = Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
-  let render_page = Env.String.lookup nenv "renderPage" in
-  let tail = `Apply (`Variable render_page, [`Variable x]) in
-  let cont = [(`Global, x, Value.empty_env, ([], tail))] in
-    (bs @ [`Let (xb, ([], body))], tail), cont
-
-let perform_request cgi_args (valenv, nenv, tyenv) render_cont =
-  function
-    | ServerCont t ->
-      Debug.print("Doing ServerCont");
-      let v = Evalir.apply_with_cont render_cont valenv (t, []) in
-      ("text/html",
-       Value.string_of_value v)
-    | ClientReturn(cont, arg) ->
-      Debug.print("Doing ClientReturn ");
-      let result = Evalir.apply_cont_toplevel cont valenv arg in
-      let result_json = Json.jsonize_value result in
-      ("text/plain",
-       Utility.base64encode result_json)
-    | RemoteCall(func, env, args) ->
-      Debug.print("Doing RemoteCall for " ^ Value.string_of_value func);
-      (* Debug.print ("func: " ^ Value.Show_t.show func); *)
-      (* Debug.print ("args: " ^ mapstrcat ", " Value.Show_t.show args); *)
-      let result = Evalir.apply_toplevel env (func, args) in
-      (* Debug.print ("result: "^Value.Show_t.show result); *)
-      if not(Proc.singlethreaded()) then
-        (prerr_endline "Remaining procs on server after remote call!";
-         assert(false));
-      ("text/plain",
-       Utility.base64encode (Json.jsonize_value result))
-    | EvalMain (globals, (locals, main))->
-        Debug.print("Doing EvalMain");
-        ("text/html",
-         if is_client_program (globals @ locals, main) then
-           let program = (globals @ locals, main) in
-           Debug.print "Running client program.";
-             lazy (Irtojs.generate_program_page
-                     ~cgi_env:cgi_args
-                     (Lib.nenv, Lib.typing_env)
-                     program)
-             <|measure_as|> "irtojs"
-         else
-           let program = locals, main in
-           Debug.print "Running server program";
-           let _env, v = Evalir.run_program valenv program in
-           Value.string_of_value v)
-
-let serve_request_program env (globals, (locals, main), render_cont) cgi_args =
-  try
-    let request = parse_request env (globals, (locals, main)) cgi_args in
-    let (content_type, content) =
-      perform_request cgi_args env render_cont request
+  let parse_client_return (valenv, _, _) cgi_args =
+    let fixup_cont =
+      (* At some point, '+' gets replaced with ' ' in our base64-encoded
+         string. Here we put it back as it was. *)
+      Str.global_replace (Str.regexp " ") "+"
     in
-    Lib.print_http_response [("Content-type", content_type)] content
-  with
-      (* FIXME: errors need to be handled differently between
-         user-facing (text/html) and remote-call (text/plain) modes. *)
-    Failure msg as e ->
-    prerr_endline msg;
-    Lib.print_http_response [("Content-type", "text/html; charset=utf-8")]
-      (error_page (Errors.format_exception_html e))
-  | exc -> Lib.print_http_response[("Content-type","text/html; charset=utf-8")]
-             (error_page (Errors.format_exception_html exc))
+    let cont =
+      Value.unmarshal_continuation
+        valenv
+        (fixup_cont (assoc "__continuation" cgi_args))
+    in
+    (* Debug.print("continuation: " ^ Value.Show_continuation.show continuation); *)
+    let arg = Json.parse_json_b64 (assoc "__result" cgi_args) in
+    (* Debug.print ("arg: "^Value.Show_t.show arg); *)
+      ClientReturn(cont, arg)
 
+  let error_page_stylesheet =
+    "<style>pre {border : 1px solid #c66; padding: 4px; background-color: #fee} code.typeError {display: block; padding:1em;}</style>"
 
-(* does the preprocessing to turn prelude+filename into a program *)
-(* result can be cached *)
+  let error_page body =
+    "<html>\n  <head>\n    <title>Links error</title>\n    " ^
+      error_page_stylesheet ^
+      "\n  </head>\n  <body>" ^
+      body ^
+      "\n  </body></html>\n"
 
-let make_program (_, nenv, tyenv) prelude filename =
-  (* Warning: cache call nested inside another cache call *)
-  let (nenv', tyenv'), (globals, (locals, main), t) =
-    Errors.display_fatal (Loader.load_file (nenv, tyenv)) filename
-  in
+  let is_multipart () =
+    ((safe_getenv "REQUEST_METHOD") = "POST" &&
+        string_starts_with (safe_getenv "CONTENT_TYPE") "multipart/form-data")
 
-  begin
-    try
-      Unify.datatypes (t, Instantiate.alias "Page" [] tyenv.Types.tycon_env)
-    with
-      Unify.Failure error ->
-      begin match error with
-        | `Msg s -> Debug.print ("Unification error: " ^ s)
-        | _ -> ()
-      end;
-      failwith("Web programs must have type Page but this one has type "
-               ^ Types.string_of_datatype t)
-  end;
+  let get_cgi_args() =
+    if is_multipart() then
+      map (fun (name, { Cgi.value=value; _ }) -> (name, value))
+        (Cgi.parse_multipart_args())
+    else
+      Cgi.parse_args()
 
-  (* Debug.print ("un-closure-converted IR: " ^ Ir.Show_program.show (prelude@globals@locals, main)); *)
+  (* jcheney: lifted from serve_request, to de-clutter *)
+  let parse_request env cgi_args  =
+    if      (is_remote_call cgi_args)
+    then parse_remote_call env cgi_args
+    else if (is_client_return cgi_args)
+    then parse_client_return env cgi_args
+    else if (is_server_cont cgi_args)
+    then parse_server_cont env cgi_args
+    else EvalMain
 
-  let nenv'' = Env.String.extend nenv nenv' in
-  let tyenv'' = Types.extend_typing_environment tyenv tyenv' in
+  (** In web mode, we wrap the continuation of the whole program in a
+      call to renderPage. We also return the resulting continuation so
+      that we can use it elsewhere (i.e. in processing ServerCont).
+  *)
+  let wrap_with_render_page (nenv, {Types.tycon_env=tycon_env; _ })
+                            (bs, body) =
+    let xb, x = Var.fresh_global_var_of_type (Instantiate.alias "Page" [] tycon_env) in
+    let render_page = Env.String.lookup nenv "renderPage" in
+    let tail = `Apply (`Variable render_page, [`Variable x]) in
+    let cont = [(`Global, x, Value.empty_env, ([], tail))] in
+      (bs @ [`Let (xb, ([], body))], tail), cont
 
-  (* let module Show_IntStringEnv = Env.Int.Show_t(Deriving_Show.Show_string) in *)
-  (* let module Show_StringIntEnv = Env.String.Show_t(Deriving_Show.Show_int) in *)
+  let perform_request valenv run render_cont =
+    function
+      | ServerCont t ->
+        Debug.print("Doing ServerCont");
+        Eval.apply render_cont valenv (t, []) >>= fun (_, v) ->
+        Lwt.return ("text/html", Value.string_of_value v)
+      | ClientReturn(cont, arg) ->
+        Debug.print("Doing ClientReturn ");
+        Eval.apply_cont cont valenv arg >>= fun (_, result) ->
+        let result_json = Json.jsonize_value result in
+        Lwt.return ("text/plain",
+                    Utility.base64encode result_json)
+      | RemoteCall(func, env, args) ->
+        Debug.print("Doing RemoteCall for " ^ Value.string_of_value func);
+        (* Debug.print ("func: " ^ Value.Show_t.show func); *)
+        (* Debug.print ("args: " ^ mapstrcat ", " Value.Show_t.show args); *)
+        Eval.apply Value.toplevel_cont env (func, args) >>= fun (_, r) ->
+        (* Debug.print ("result: "^Value.Show_t.show result); *)
+        if not(Proc.singlethreaded()) then
+          (prerr_endline "Remaining procs on server after remote call!";
+           assert(false));
 
-  (* Debug.print ("nenv''" ^ Show_StringIntEnv.show nenv''); *)
+        Lwt.return ("text/plain",
+                    (* TODO: we should package up the result with event handlers,
+                       client processes, and client messages *)
+                    Utility.base64encode (Json.jsonize_value r))
+      | EvalMain ->
+         Debug.print("Doing EvalMain");
+         run ()
 
-  let tenv0 = Var.varify_env (nenv, tyenv.Types.var_env) in
-  let gs0 = Env.String.fold (fun _name var vars -> IntSet.add var vars) nenv IntSet.empty in
-  (* Debug.print("gs0: "^Show_intset.show gs0); *)
-  let globals = Closures.bindings tenv0 gs0 globals in
+  let run_main (valenv, _, _) (globals, (locals, main)) cgi_args () =
+    ("text/html",
+     if is_client_program (globals @ locals, main) then
+       if Settings.get_value realpages then
+         begin
+           Debug.print "Running client program from server";
+           let (valenv, v) = Eval.run_program valenv (locals, main) in
+           (* Debug.print ("valenv" ^ Value.Show_env.show valenv); *)
+           Irtojs.generate_real_client_page
+             ~cgi_env:cgi_args
+             (Lib.nenv, Lib.typing_env)
+             (globals @ locals)
+             (valenv, v)
+         end
+       else
+         let program = (globals @ locals, main) in
+         Debug.print "Running client program.";
+         lazy (Irtojs.generate_program_page
+                 ~cgi_env:cgi_args
+                 (Lib.nenv, Lib.typing_env)
+                 program)
+         <|measure_as|> "irtojs"
+     else
+       let program = locals, main in
+       Debug.print "Running server program";
+       let (_env, v) = Eval.run_program valenv program in
+       Value.string_of_value v)
 
-  let tenv1 = Var.varify_env (nenv'', tyenv''.Types.var_env) in
-  let gs1 = Env.String.fold (fun _name var vars -> IntSet.add var vars) nenv'' IntSet.empty in
-  let (locals, main) = Closures.program tenv1 gs1 (locals, main) in
+  let do_request ((valenv, _, _) as env) cgi_args run render_cont response_printer =
+    let request = parse_request env cgi_args in
+    let (>>=) f g = Lwt.bind f g in
+    Lwt.catch
+      (fun () -> perform_request valenv run render_cont request )
+      (function
+       | Aborted r -> Lwt.return r
+       | Failure msg as e ->
+          prerr_endline msg;
+          Lwt.return ("text/html; charset=utf-8", error_page (Errors.format_exception_html e))
+       | exc -> Lwt.return ("text/html; charset=utf-8", error_page (Errors.format_exception_html exc)))
+    >>= fun (content_type, content) ->
+    response_printer [("Content-type", content_type)] content
 
-  (* Debug.print ("closure-converted locals: " ^ Ir.Show_program.show (locals, main)); *)
+  let serve_request_program
+      (valenv, env2, env3)
+      (globals, (locals, main), render_cont)
+      response_printer
+      cgi_args
+      req_data =
+    let valenv' = Value.set_request_data valenv req_data in
+    let env = (valenv', env2, env3) in
+    Proc.run (fun () -> do_request env cgi_args
+                                   (fun () -> Lwt.return (run_main env (globals, (locals, main)) cgi_args ()))
+                                   render_cont
+                                   (fun headers body -> Lwt.return (response_printer headers body))
+                                   )
 
-  let (locals, main), render_cont = wrap_with_render_page (nenv, tyenv) (locals, main) in
-  let globals = prelude@globals in
-  (* Debug.print ("closure-converted IR: " ^ Ir.Show_program.show (globals@locals, main)); *)
+  (* does the preprocessing to turn prelude+filename into a program *)
+  (* result can be cached *)
 
-  BuildTables.program tenv0 Lib.primitive_vars ((globals @ locals), main);
-  (render_cont, (nenv'', tyenv''), (globals, (locals, main)))
+  let make_program (_, nenv, tyenv) prelude filename =
+    (* Warning: cache call nested inside another cache call *)
+    let (nenv', tyenv'), (globals, (locals, main), t) =
+      Errors.display_fatal (Loader.load_file (nenv, tyenv)) filename
+    in
 
-(* wrapper for ordinary uses of serve_request_program *)
-let serve_request ((valenv, nenv, tyenv) as envs) prelude filename =
+    begin
+      try
+        Unify.datatypes (t, Instantiate.alias "Page" [] tyenv.Types.tycon_env)
+      with
+        Unify.Failure error ->
+        begin match error with
+          | `Msg s -> Debug.print ("Unification error: " ^ s)
+          | _ -> ()
+        end;
+        failwith("Web programs must have type Page but this one has type "
+                 ^ Types.string_of_datatype t)
+    end;
 
-  let cgi_args = get_cgi_args() in
-  Debug.print ("cgi_args: " ^ mapstrcat "," (fun (k, v) -> k ^ "="  ^ v) cgi_args);
-  Lib.cgi_parameters := cgi_args;
+    (* Debug.print ("un-closure-converted IR: " ^ Ir.Show_program.show (prelude@globals@locals, main)); *)
 
-  (* Compute cacheable stuff in one call *)
-  let (render_cont, (nenv,tyenv), (globals, (locals, main))) =
-    Loader.wpcache "program" (fun () ->
-      make_program envs prelude filename
-   )
-  in
+    let nenv'' = Env.String.extend nenv nenv' in
+    let tyenv'' = Types.extend_typing_environment tyenv tyenv' in
 
-  (* We can evaluate the definitions here because we know they are pure. *)
-  let valenv = Evalir.run_defs valenv globals in
+    (* let module Show_IntStringEnv = Env.Int.Show_t(Deriving_Show.Show_string) in *)
+    (* let module Show_StringIntEnv = Env.String.Show_t(Deriving_Show.Show_int) in *)
 
-  Errors.display (lazy (serve_request_program
-			  (valenv, nenv, tyenv)
-			  (globals, (locals, main), render_cont)
-                          cgi_args))
+    (* Debug.print ("nenv''" ^ Show_StringIntEnv.show nenv''); *)
+
+    let tenv0 = Var.varify_env (nenv, tyenv.Types.var_env) in
+    let gs0 = Env.String.fold (fun _name var vars -> IntSet.add var vars) nenv IntSet.empty in
+    (* Debug.print("gs0: "^Show_intset.show gs0); *)
+    let globals = Closures.bindings tenv0 gs0 globals in
+
+    let tenv1 = Var.varify_env (nenv'', tyenv''.Types.var_env) in
+    let gs1 = Env.String.fold (fun _name var vars -> IntSet.add var vars) nenv'' IntSet.empty in
+    let (locals, main) = Closures.program tenv1 gs1 (locals, main) in
+
+    (* Debug.print ("closure-converted locals: " ^ Ir.Show_program.show (locals, main)); *)
+
+    let (locals, main), render_cont = wrap_with_render_page (nenv, tyenv) (locals, main) in
+    let globals = prelude@globals in
+    (* Debug.print ("closure-converted IR: " ^ Ir.Show_program.show (globals@locals, main)); *)
+
+    BuildTables.program tenv0 Lib.primitive_vars ((globals @ locals), main);
+    (render_cont, (nenv'', tyenv''), (globals, (locals, main)))
+
+  (* Processes a CGI-based request *)
+  let serve_request ((valenv, _, _) as envs) prelude filename : unit =
+    let cgi_args = get_cgi_args() in
+    Debug.print ("cgi_args: " ^ mapstrcat "," (fun (k, v) -> k ^ "="  ^ v) cgi_args);
+    let cookies =
+      begin
+        match getenv "HTTP_COOKIE" with
+        | Some header ->
+           let cookies = Str.split (Str.regexp "[ \t]*;[ \t]*") header in
+           concat_map
+             (fun str ->
+              match Str.split (Str.regexp "[ \t]*=[ \t]*") str with
+              | [nm; vl] -> [nm, vl]
+              | _ -> Debug.print ("Warning: ill-formed cookie: "^str); [])
+             cookies
+        | None ->
+           []
+      end in
+
+    (* Set up record containing mutable fields used for primitive library calls.
+     * This record is specific to this request. All fields are mutable since the
+     * library functions may need to modify the environments, and we don't want
+     * to do a state-passing transformation. *)
+    let req_data = RequestData.new_request_data () in
+    RequestData.set_cgi_parameters req_data cgi_args;
+    RequestData.set_cookies req_data cookies;
+
+    (* Compute cacheable stuff in one call *)
+    let (render_cont, (nenv,tyenv), (globals, (locals, main))) =
+      Loader.wpcache "program" (fun () ->
+        make_program envs prelude filename
+     )
+    in
+
+    (* We can evaluate the definitions here because we know they are pure. *)
+    let valenv = Eval.run_defs valenv globals in
+
+    Errors.display (lazy (serve_request_program
+  			  (valenv, nenv, tyenv)
+  			  (globals, (locals, main), render_cont)
+          (fun hdrs bdy -> Lib.print_http_response hdrs bdy req_data)
+          cgi_args
+          req_data
+      )
+    )
+end

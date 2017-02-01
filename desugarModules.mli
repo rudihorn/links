@@ -1,1 +1,1 @@
-val desugar_modules : Sugartypes.program -> Sugartypes.program
+val desugarModules : Sugartypes.program -> Sugartypes.program

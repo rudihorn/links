@@ -1,8 +1,12 @@
 (** Process management *)
+
+type abort_type = string * string
+exception Aborted of abort_type  (* This sucks *)
+
 module Proc :
 sig
   type pid = int (* leaky abstraction what *)
-  type thread_result = Value.env * Value.t
+  type thread_result = (Value.env * Value.t)
   type thread = unit -> thread_result Lwt.t
 
   val debug_process_status : unit -> unit
@@ -10,21 +14,22 @@ sig
   val string_of_pid : pid -> string
   val get_current_pid : unit -> pid
 
-  val get_client_process : pid -> Value.t
+  val lookup_client_process : pid -> Value.t option
 
   val create_process : bool -> thread -> pid
   val create_client_process : Value.t -> pid
   val awaken : pid -> unit
 
-  val finish : thread_result -> thread_result Lwt.t
+  val finish : Value.env * Value.t -> thread_result Lwt.t
   val yield : thread -> thread_result Lwt.t
   val block : thread -> thread_result Lwt.t
+  val abort : abort_type -> thread_result Lwt.t
 
   val atomically : thread -> Value.t
 
   val singlethreaded : unit -> bool (* Exposed to prevent client calls from killing server-side threads... *)
 
-  val run : thread -> Value.env * Value.t
+  val run : (unit -> 'a Lwt.t) -> 'a
 end
 
 module Mailbox :
@@ -53,7 +58,7 @@ sig
   val send : Value.t -> portid -> unit
   val receive : portid -> Value.t option
 
-  val fuse : chan -> chan -> unit
+  val link : chan -> chan -> unit
 
   val unbox_port : Value.t -> portid
   val unbox_chan' : Value.t -> int * int

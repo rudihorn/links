@@ -1,11 +1,12 @@
 (** Data structures/utilities for process management *)
-open Notfound
 open Utility
 open Lwt
 
+type abort_type = string * string
+exception Aborted of abort_type
+
 module Proc =
 struct
-
   (** The abstract type of process identifiers *)
   type pid = int
 
@@ -18,12 +19,12 @@ struct
   type proc_state = Value.continuation * Value.t
   *)
 
-  type thread_result = Value.env * Value.t
+  type thread_result = (Value.env * Value.t)
   type thread = unit -> thread_result Lwt.t (* Thunked to avoid changing evalir.  Because I'm laaaaaaaaaaaaazy. *)
 
   type scheduler_state =
       { blocked : (pid, unit Lwt.u) Hashtbl.t;
-        client_processes : (pid, Value.t) Hashtbl.t;
+        client_processes : (pid, Value.t * bool) Hashtbl.t;
         angels : (pid, unit Lwt.t) Hashtbl.t;
         step_counter : int ref }
 
@@ -67,11 +68,28 @@ struct
   let string_of_pid = string_of_int
 
   (** retrieve the body of a client process (for transmission to the
-      client) *)
-  let get_client_process pid =
-    try Hashtbl.find state.client_processes pid with
-    | NotFound pid ->
-      failwith ("Missing client process: " ^ pid)
+      client if it hasn't already been) *)
+  let lookup_client_process pid =
+    let v, active =
+      try Hashtbl.find state.client_processes pid with
+      | NotFound pid ->
+        failwith ("Missing client process: " ^ pid) in
+    if active then
+      None
+    else
+      begin
+        Hashtbl.replace state.client_processes pid (v, true);
+        Some v
+      end
+
+  let current_pid_key = Lwt.new_key ()
+  let angel_done = Lwt.new_key ()
+
+  (** Return the identifier of the running process. *)
+  let get_current_pid () =
+    match Lwt.get current_pid_key with
+    | None -> assert false
+    | Some pid -> pid
 
   (** Awaken (unblock) a process:
     Move it from the blocked state to the runnable queue ([suspended]).
@@ -92,14 +110,6 @@ struct
 
   (** Reset (set to 0) the scheduler's step counter. *)
   let reset_step_counter() = state.step_counter := 0
-  let result : (Value.env * Value.t) option ref = ref None
-  let current_pid_key = Lwt.new_key ()
-
-  (** Return the identifier of the running process. *)
-  let get_current_pid () =
-    match Lwt.get current_pid_key with
-    | None -> assert false
-    | Some pid -> pid
 
   let switch_granularity = 100
 
@@ -108,9 +118,6 @@ struct
    *)
   let yield pstate =
     let step_ctr = count_step () in
-    let pid = get_current_pid () in
-    (* Debug.print ("pid: " ^string_of_int pid); *)
-    (* Debug.print ("step_ctr: "^string_of_int step_ctr); *)
     if not !atomic && step_ctr mod switch_granularity == 0 then
       begin
         (* Debug.print ("yielding"); *)
@@ -130,8 +137,6 @@ struct
     Hashtbl.add state.blocked pid u;
     t >>= pstate
 
-  let angel_done = Lwt.new_key ()
-
   (** Given a process state, create a new process and return its identifier. *)
   let create_process angel pstate =
     let new_pid = fresh_pid () in
@@ -149,7 +154,7 @@ struct
   (** Create a new client process and return its identifier *)
   let create_client_process func =
     let new_pid = fresh_pid () in
-    Hashtbl.add state.client_processes new_pid func;
+    Hashtbl.add state.client_processes new_pid (func, false);
     new_pid
 
   let finish r =
@@ -169,9 +174,22 @@ struct
       end;
     Lwt.return r
 
-  let is_main pid = pid == main_process_pid
-  (** Is the current process is the main process? *)
-  let current_is_main() = get_current_pid () == main_process_pid
+  let abort v =
+    let pid = get_current_pid () in
+    (* This process is only actually finished if we're not executing atomically *)
+    if not (!atomic) then
+      Debug.print ("Finishing process " ^ string_of_int pid);
+    if pid == main_process_pid then
+      main_running := false
+    else if Hashtbl.mem state.angels pid then
+      begin
+        let w = match Lwt.get angel_done with
+          | None -> assert false
+          | Some w -> w in
+        Lwt.wakeup w ();
+        Hashtbl.remove state.angels pid
+      end;
+    Lwt.fail (Aborted v)
 
   let run' pfun =
    Lwt_main.run (Lwt.with_value current_pid_key (Some main_process_pid) pfun >>= fun r ->
@@ -185,15 +203,12 @@ struct
     reset_step_counter ();
     run' pfun
 
-  (* Pretty sure that Lwt.run does what we want here---at least, the document reasons not to nest
-  calls to Lwt.run match the desired behavior of atomically. :) *)
   let atomically pfun =
     let previously_atomic = !atomic in
     atomic := true;
-    let v = snd (run' pfun) in
+    let v = run' pfun in
     atomic := previously_atomic;
-    v
-
+    snd v
 end
 
 exception UnknownProcessID of Proc.pid (* This wouldn't be necessary if pid's were properly abstract.. *)
@@ -291,6 +306,7 @@ module Session = struct
         | Accepting cs         -> let c = new_channel () in (c, Accepting (cs @ [c]), true)
         | Requesting [c]       -> (c, Balanced, false)
         | Requesting (c :: cs) -> (c, Requesting cs, false)
+        | Requesting []        -> assert false (* TODO: check that this is impossible *)
       in
         Hashtbl.replace access_points apid state';
         c, blocked
@@ -304,11 +320,12 @@ module Session = struct
         | Requesting cs       -> let c = new_channel () in (c, Requesting (cs @ [c]), true)
         | Accepting [c]       -> (c, Balanced, false)
         | Accepting (c :: cs) -> (c, Accepting cs, false)
+        | Accepting []        -> assert false (* TODO: check that this is impossible *)
       in
         Hashtbl.replace access_points apid state';
         flip_chan c, blocked
 
-  let rec find_active p =
+  let find_active p =
     Unionfind.find (Hashtbl.find forward p)
 
   let forward inp outp =
@@ -317,7 +334,7 @@ module Session = struct
   let block portid pid =
     let portid = find_active portid in
       Hashtbl.add blocked portid pid
-  let rec unblock portid =
+  let unblock portid =
     let portid = find_active portid in
       if Hashtbl.mem blocked portid then
         begin
@@ -328,12 +345,12 @@ module Session = struct
       else
         None
 
-  let rec send msg p =
+  let send msg p =
     (* Debug.print ("Sending along: " ^ string_of_int p); *)
     let p = find_active p in
       Queue.push msg (Hashtbl.find buffers p)
 
-  let rec receive p =
+  let receive p =
     (* Debug.print ("Receiving on: " ^ string_of_int p); *)
     let p = find_active p in
     let buf = Hashtbl.find buffers p in
@@ -342,7 +359,7 @@ module Session = struct
       else
         None
 
-  let fuse (out1, in1) (out2, in2) =
+  let link (out1, in1) (out2, in2) =
     let out1 = find_active out1 in
     let in1 = find_active in1 in
     let out2 = find_active out2 in

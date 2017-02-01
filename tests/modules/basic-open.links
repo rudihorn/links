@@ -4,5 +4,7 @@ module A {
   }
 }
 
+fun bar() { () }
+
 open A
 foo()

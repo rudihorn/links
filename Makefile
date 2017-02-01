@@ -2,43 +2,33 @@
 
 OCAMLMAKEFILE = ./OCamlMakefile
 
-PACKS=bigarray num str deriving.syntax deriving.syntax.classes deriving.runtime lwt lwt.syntax lwt.unix
+PACKS=str deriving.syntax deriving.syntax.classes deriving.runtime lwt lwt.syntax lwt.unix cgi base64 cohttp cohttp.lwt unix
 export OCAMLFLAGS=-syntax camlp4o
 
 PATH := $(PATH):deriving
 
-ifdef SQLITE_LIBDIR
-   DB_CODE    += lite_database.ml
-   DB_AUXLIBS += $(SQLITE_LIBDIR)
-   DB_CLIBS   += sqlite_stubs sqlite
-   DB_LIBS    += sqlite
-endif
+POSTGRESQL_LIBDIR=$(shell ocamlfind query postgresql)
+SQLITE3_LIBDIR=$(shell ocamlfind query sqlite3)
+MYSQL_LIBDIR=$(shell ocamlfind query mysql)
 
-ifdef SQLITE3_LIBDIR
+ifneq ($(SQLITE3_LIBDIR),)
    DB_CODE    += lite3_database.ml
    DB_AUXLIBS += $(SQLITE3_LIBDIR)
    DB_CLIBS   += sqlite3
    DB_LIBS    += sqlite3
 endif
 
-ifdef MYSQL_LIBDIR
+ifneq ($(MYSQL_LIBDIR),)
    DB_CODE    += mysql_database.ml
    DB_AUXLIBS += $(MYSQL_LIBDIR)
    DB_LIBS    += mysql
 endif
 
-ifdef POSTGRESQL_LIBDIR
+ifneq ($(POSTGRESQL_LIBDIR),)
    DB_CODE    += pg_database.ml
    DB_AUXLIBS += $(POSTGRESQL_LIBDIR)
    DB_LIBS    += postgresql
    THREADS = yes
-endif
-
-ifdef MONETDB5_LIBDIR
-	DB_CODE    += m5_database.ml
-	DB_AUXLIBS += $(MONETDB5_LIBDIR)
-	DB_LIBS    += mapi
-	THREADS = yes
 endif
 
 AUXLIB_DIRS = $(DB_AUXLIBS)
@@ -50,17 +40,18 @@ endif
 #OCAMLYACC := menhir --infer --comment --explain --dump --log-grammar 1 --log-code 1 --log-automaton 2 --graph
 OCAMLYACC := ocamlyacc -v
 
-OCAMLFLAGS=-dtypes -w Ae-44-45 -g -cclib -lunix
+OCAMLFLAGS=-dtypes -w Ae-44-45-60 -g -cclib -lunix
 #OCAMLDOCFLAGS=-pp deriving
 
 # additional files to clean
 TRASH=*.tmp *.output *.cache
 
 # Other people's code.
-OPC = cgi.ml netencoding.ml netencoding.mli unionfind.ml unionfind.mli \
-      getopt.ml getopt.mli PP.ml unix.cma
+OPC = unionfind.ml unionfind.mli \
+      getopt.ml getopt.mli PP.ml
 
 SOURCES = $(OPC)                                \
+          multipart.ml                          \
           notfound.ml                           \
           utility.ml                            \
           env.mli env.ml                        \
@@ -93,6 +84,7 @@ SOURCES = $(OPC)                                \
 					desugarModules.mli desugarModules.ml \
           desugarDatatypes.mli desugarDatatypes.ml      \
           defaultAliases.ml                     \
+					requestData.mli requestData.ml        \
           value.mli value.ml                    \
 		  lensHelpers.ml						\
           eventHandlers.mli eventHandlers.ml    \
@@ -124,16 +116,19 @@ SOURCES = $(OPC)                                \
           json.ml                               \
           database.mli database.ml              \
           linksregex.ml                         \
-          lib.mli lib.ml                        \
+	  lib.mli lib.ml                        \
           sugartoir.mli sugartoir.ml            \
           loader.mli loader.ml                  \
           $(DB_CODE)                            \
           irtojs.mli irtojs.ml                  \
           query.mli query.ml                              \
           queryshredding.ml                     \
-          evalir.ml                             \
+          webserver_types.mli webserver_types.ml \
+          webserver.mli                         \
+	  evalir.ml                             \
           buildTables.ml                        \
           webif.mli webif.ml                    \
+	  webserver.ml                          \
           links.ml                              \
 
 # TODO: get these working again
@@ -154,7 +149,7 @@ include $(OCAMLMAKEFILE)
 
 .PHONY: tests
 tests: $(RESULT)
-	@./run-tests
+	@OCAMLRUNPARAM="" ./run-tests
 
 fixmes:
 	@grep FIXME *.ml *.mli *.mly *.mll

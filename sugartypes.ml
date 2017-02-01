@@ -1,5 +1,4 @@
 (*pp deriving *)
-open Utility
 
 (** The syntax tree created by the parser. *)
 
@@ -109,6 +108,7 @@ type fieldconstraint = [ `Readonly | `Default ]
 
 type datatype =
   [ `TypeVar         of known_type_variable
+  | `QualifiedTypeApplication of (name list * type_arg list)
   | `Function        of datatype list * row * datatype
   | `Lolli           of datatype list * row * datatype
   | `Mu              of name * datatype
@@ -199,6 +199,7 @@ and fn_dep = string * string
 and phrasenode = [
 | `Constant         of constant
 | `Var              of name
+| `QualifiedVar     of name list
 | `FunLit           of ((Types.datatype * Types.row) list) option * declared_linearity * funlit * location
 | `Spawn            of spawn_kind * location * phrase * Types.row option
 | `Query            of (phrase * phrase) option * phrase * Types.datatype option
@@ -264,11 +265,11 @@ and bindingnode = [
 | `Fun     of binder * declared_linearity * (tyvar list * funlit) * location * datatype' option
 | `Funs    of (binder * declared_linearity * ((tyvar list * (Types.datatype * Types.quantifier option list) option) * funlit) * location * datatype' option * position) list
 | `Foreign of binder * name * datatype'
-| `Import  of name
+| `QualifiedImport of name list
 | `Type    of name * (quantifier * tyvar option) list * datatype'
 | `Infix
 | `Exp     of phrase
-| `Module  of name * phrase
+| `Module  of name * binding list
 ]
 and binding = bindingnode * position
 and directive = string * string list
@@ -283,11 +284,10 @@ and cp_phrasenode = [
 | `GiveNothing of binder
 | `Select of binder * string * cp_phrase
 | `Offer of binder * (string * cp_phrase) list
-| `Fuse of binder * binder
+| `Link of binder * binder
 | `Comp of binder * cp_phrase * cp_phrase ]
 and cp_phrase = cp_phrasenode * position
     deriving (Show)
-
 
 type program = binding list * phrase option
   deriving (Show)
@@ -389,8 +389,8 @@ struct
         union_all [phrase p; option_map phrase popt1; option_map phrase popt2]
     | `DBInsert (p1, _labels, p2, popt) ->
         union_all [phrase p1; phrase p2; option_map phrase popt]
-    | `TableLit (p1, _, _, _, p2) -> union (phrase p1) (phrase p2) 
-    | `Xml (_, attrs, attrexp, children) -> 
+    | `TableLit (p1, _, _, _, p2) -> union (phrase p1) (phrase p2)
+    | `Xml (_, attrs, attrexp, children) ->
         union_all
           [union_map (snd ->- union_map phrase) attrs;
            option_map phrase attrexp;
@@ -398,7 +398,7 @@ struct
     | `Formlet (xml, yields) ->
         let binds = formlet_bound xml in
           union (phrase xml) (diff (phrase yields) binds)
-    | `FunLit (_, _, fnlit, location) -> funlit fnlit
+    | `FunLit (_, _, fnlit, _) -> funlit fnlit
     | `Iteration (generators, body, where, orderby) ->
         let xs = union_map (function
                               | `List (_, source)
@@ -430,6 +430,7 @@ struct
           union_all [phrase from;
                      diff (option_map phrase where) pat_bound;
                      diff (union_map (snd ->- phrase) fields) pat_bound]
+    | `QualifiedVar _ -> failwith "Freevars for qualified vars not implemented yet"
   and binding (binding, _: binding) : StringSet.t (* vars bound in the pattern *)
                                     * StringSet.t (* free vars in the rhs *) =
     match binding with
@@ -444,10 +445,11 @@ struct
             (empty, []) in
           names, union_map (fun rhs -> diff (funlit rhs) names) rhss
     | `Foreign ((name, _, _), _, _) -> singleton name, empty
-    | `Import _
+    | `QualifiedImport _
     | `Type _
     | `Infix -> empty, empty
     | `Exp p -> empty, phrase p
+    | `Module _ -> failwith "Freevars for modules not implemented yet"
   and funlit (args, body : funlit) : StringSet.t =
     diff (phrase body) (union_map (union_map pattern) args)
   and block (binds, expr : binding list * phrase) : StringSet.t =
@@ -478,6 +480,6 @@ struct
     | `GiveNothing (c, _, _) -> singleton c
     | `Select ((c, _t, _), _label, p) -> union (singleton c) (cp_phrase p)
     | `Offer ((c, _t, _), cases) -> union (singleton c) (union_map (fun (_label, p) -> cp_phrase p) cases)
-    | `Fuse ((c, _, _), (d, _, _)) -> union (singleton c) (singleton d)
+    | `Link ((c, _, _), (d, _, _)) -> union (singleton c) (singleton d)
     | `Comp ((c, _t, _), left, right) -> diff (union (cp_phrase left) (cp_phrase right)) (singleton c)
 end

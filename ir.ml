@@ -1,10 +1,8 @@
 (*pp deriving *)
 (** Monadic IR *)
 
-open Notfound
 
 open Utility
-open PP
 
 type scope = Var.scope
   deriving (Show)
@@ -80,7 +78,7 @@ and binding =
   | `Alien of (binder * language)
   | `Module of (string * binding list option) ]
 and special =
-    [ `Wrong of Types.datatype
+  [ `Wrong of Types.datatype
   | `Database of value 
   | `Lens of value * Types.lens_sort
   | `LensDrop of value * string * string * value * Types.lens_sort
@@ -97,14 +95,15 @@ and computation = binding list * tail_computation
   deriving (Show)
 
 let binding_scope : binding -> scope =
-    function
-        | `Let (b, _)
-        | `Fun (b, _, _, _)
-        | `Rec ((b, _, _, _)::_)
-        | `Alien (b, _) -> Var.scope_of_binder b
+  function
+  | `Let (b, _)
+  | `Fun (b, _, _, _)
+  | `Rec ((b, _, _, _)::_)
+  | `Alien (b, _) -> Var.scope_of_binder b
+  | `Rec []
   | `Module _ -> assert false
 
-let binder_of_fun_def (fb, def, xs, scope) = fb
+let binder_of_fun_def (fb, _, _, _) = fb
 
 let tapp (v, tyargs) =
     match tyargs with
@@ -159,7 +158,7 @@ module type TRANSFORM =
       object ('self_type)
           val tyenv : environment
 
-    method private lookup_type : var -> Types.datatype
+    method lookup_type : var -> Types.datatype
     method constant : constant -> (constant * Types.datatype * 'self_type)
     method optionu :
         'a.
@@ -218,8 +217,8 @@ module type TRANSFORM =
           val tyenv = tyenv
     (* val cenv = Env.empty *)
 
-    method private lookup_type : var -> datatype = fun var ->
-        Env.lookup tyenv var
+    method lookup_type : var -> datatype = fun var ->
+      Env.lookup tyenv var
 
     (* method private lookup_closure_type : var -> datatype = fun var -> *)
     (*   Env.lookup cenv var *)
@@ -348,45 +347,45 @@ module type TRANSFORM =
                       prerr_endline ("Arity mismatch in type application (Ir.Transform)");
                     prerr_endline ("expression: "^Show_value.show (`TApp (v, ts)));
                     prerr_endline ("type: "^Types.string_of_datatype t);
-                    prerr_endline ("tyargs: "^String.concat "," (List.map Types.string_of_type_arg ts));
+                    prerr_endline ("tyargs: "^String.concat "," (List.map (fun t -> Types.string_of_type_arg t) ts));
                     failwith "fatal internal error"
-                        end
-                        | `XmlNode (tag, attributes, children) ->
-                                let (attributes, attribute_types, o) = o#name_map (fun o -> o#value) attributes in
-                                let (children, children_types, o) = o#list (fun o -> o#value) children in
+              end
+        | `XmlNode (tag, attributes, children) ->
+            let (attributes, _, o) = o#name_map (fun o -> o#value) attributes in
+            let (children  , _, o) = o#list (fun o -> o#value) children in
 
                                 (*
                 let _ = assert (StringMap.for_all (fun t -> t=string_type) attribute_types) in
-  let _ = assert (List.for_all (fun t -> t=xml_type) children_types) in
-  *)
-                                `XmlNode (tag, attributes, children), xml_type, o
-                        | `ApplyPure (f, args) ->
-                                let (f, ft, o) = o#value f in
-                                let (args, arg_types, o) = o#list (fun o -> o#value) args in
-                                (* TODO: check arg types match *)
-                                `ApplyPure (f, args), deconstruct return_type ft, o
-                        | `Closure (f, z) ->
-                                let (f, t, o) = o#var f in
-                                let (z, _, o) = o#value z in
-                                (* TODO: check that closure environment types match expectations for f *)
-                                `Closure (f, z), t, o
-                        | `Coerce (v, t) ->
-                                let v, vt, o = o#value v in
-                                (* TODO: check that vt <: t *)
-                                `Coerce (v, t), t, o
+                let _ = assert (List.for_all (fun t -> t=xml_type) children_types) in
+              *)
+              `XmlNode (tag, attributes, children), xml_type, o
+        | `ApplyPure (f, args) ->
+            let (f, ft, o) = o#value f in
+            let (args, _, o) = o#list (fun o -> o#value) args in
+              (* TODO: check arg types match *)
+              `ApplyPure (f, args), deconstruct return_type ft, o
+        | `Closure (f, z) ->
+            let (f, t, o) = o#var f in
+            let (z, _, o) = o#value z in
+              (* TODO: check that closure environment types match expectations for f *)
+              `Closure (f, z), t, o
+        | `Coerce (v, t) ->
+            let v, _, o = o#value v in
+            (* TODO: check that vt <: t *)
+              `Coerce (v, t), t, o
 
-          method tail_computation :
-              tail_computation -> (tail_computation * datatype * 'self_type) =
-                  function
-                      (* TODO: type checking *)
-                      | `Return v ->
-                              let v, t, o = o#value v in
-                              `Return v, t, o
-                      | `Apply (f, args) ->
-                              let f, ft, o = o#value f in
-                              let args, arg_types, o = o#list (fun o -> o#value) args in
-                              (* TODO: check arg types match *)
-                              `Apply (f, args), deconstruct return_type ft, o
+    method tail_computation :
+      tail_computation -> (tail_computation * datatype * 'self_type) =
+      function
+          (* TODO: type checking *)
+        | `Return v ->
+            let v, t, o = o#value v in
+              `Return v, t, o
+        | `Apply (f, args) ->
+            let f, ft, o = o#value f in
+            let args, _, o = o#list (fun o -> o#value) args in
+              (* TODO: check arg types match *)
+              `Apply (f, args), deconstruct return_type ft, o
         (* | `ApplyClosure (f, args) -> *)
         (*     let f, ft, o = o#value f in *)
         (*     let args, arg_types, o = o#list (fun o -> o#value) args in *)
@@ -429,11 +428,6 @@ module type TRANSFORM =
         | `Database v ->
                 let v, _, o = o#value v in
                 `Database v, `Primitive `DB, o
-        | `Table (db, table_name, keys, tt) ->
-                let db, _, o = o#value db in
-                let keys, _, o = o#value keys in
-                let table_name, _, o = o#value table_name in
-                `Table (db, table_name, keys, tt), `Table tt, o
         | `Lens (table, rtype) ->
             let table, _, o = o#value table in
               `Lens (table, rtype), `Lens (rtype), o
@@ -448,7 +442,12 @@ module type TRANSFORM =
             let lens, _, o = o#value lens in
             let data, _, o = o#value data in
               `LensPut (lens, data, rtype), Types.make_list_type rtype, o
-        | `Query (range, e, t) ->
+        | `Table (db, table_name, keys, tt) ->
+            let db, _, o = o#value db in
+            let keys, _, o = o#value keys in
+            let table_name, _, o = o#value table_name in
+              `Table (db, table_name, keys, tt), `Table tt, o
+        | `Query (range, e, _) ->
             let range, o =
               o#optionu
                 (fun o (limit, offset) ->
@@ -507,7 +506,7 @@ module type TRANSFORM =
       function
         | `Let (x, (tyvars, tc)) ->
             let x, o = o#binder x in
-            let tc, t, o = o#tail_computation tc in
+            let tc, _, o = o#tail_computation tc in
               `Let (x, (tyvars, tc)), o
         | `Fun (f, (tyvars, xs, body), z, location) ->
             let xs, body, z, o =
@@ -599,12 +598,12 @@ struct
     method with_env env =
       {< env = env >}
 
-    method value =
+    method! value =
       function
         | `Variable var when IntMap.mem var env -> IntMap.find var env, o#lookup_type var, o
         | v -> super#value v
 
-    method bindings =
+    method! bindings =
       function
         | b :: bs ->
             let b, o = o#binding b in
@@ -690,24 +689,13 @@ struct
     method private with_env env =
       {< env = env >}
 
-    method private with_rec_env recenv =
-      {< rec_env = rec_env >}
-
-    method private with_mutrec_env mutrec_env =
-      {< mutrec_env = mutrec_env >}
-
     method with_envs (env, rec_env, mutrec_env) =
-       (* This three-stage update is a workaround for a camlp4 parsing bug
-          http://caml.inria.fr/mantis/view.php?id=4673
-       *)
-      ((o#with_env env)
-         #with_rec_env rec_env)
-         #with_mutrec_env mutrec_env
+      {< env = env; rec_env = rec_env; mutrec_env = mutrec_env >}
 
-    method init (x, (_, name, _)) =
+    method init (x, _) =
       o#with_env (IntMap.add x 0 env)
 
-    method initrec (x, (_, name, _)) =
+    method initrec (x, _) =
       o#with_envs (IntMap.add x 0 env, IntMap.add x (0, false) rec_env, IntMap.add x (0, true) mutrec_env)
 
     method set_rec_status f (r,m) =
@@ -747,19 +735,19 @@ struct
       else
         o#with_env (IntMap.add x 1 env)
 
-    method var =
+    method! var =
       fun x ->
         if IntMap.mem x env then
           x, o#lookup_type x, o#inc x
         else
           super#var x
 
-    method binding b =
+    method! binding b =
       match b with
-        | `Let (x, (tyvars, `Return _)) ->
+        | `Let (x, (_, `Return _)) ->
             let b, o = super#binding b in
               b, o#init x
-        | `Fun (f, (tyvars, _, _), _, _) ->
+        | `Fun (f, _, _, _) ->
             let b, o = super#binding b in
               b, o#init f
         | `Rec defs ->
@@ -799,7 +787,7 @@ struct
 
   let eliminator tyenv (env, rec_env, mutrec_env) =
   object (o)
-    inherit Transform.visitor(tyenv) as super
+    inherit Transform.visitor(tyenv)
 
     val env = env
     val rec_env = rec_env
@@ -812,15 +800,15 @@ struct
       IntMap.mem f env && (IntMap.find f env = 0
           && (not (IntMap.mem f mutrec_env) || fst (IntMap.find f mutrec_env) = 0))
 
-    method bindings =
+    method! bindings =
       function
         | b :: bs ->
             begin
               let b, o = o#binding b in
                 match b with
-                  | `Let ((x, (_, name, _)), (_tyvars, _)) when o#is_dead x ->
+                  | `Let ((x, _), (_tyvars, _)) when o#is_dead x ->
                       o#bindings bs
-                  | `Fun ((f, (_, name, _)), _, _, _) when o#is_dead f ->
+                  | `Fun ((f, _), _, _, _) when o#is_dead f ->
                       o#bindings bs
                   | `Rec defs ->
                       Debug.if_set show_rec_uses (fun () -> "Rec block:");
