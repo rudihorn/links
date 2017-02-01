@@ -82,12 +82,14 @@ type typ =
     | `Record of row
     | `Variant of row
     | `Table of typ * typ * typ
-    | `Lens of typ
+    | `Lens of lens_sort 
     | `Alias of ((string * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
+and lens_sort      = fn_dep list * string * typ
+and fn_dep = string * string
 and field_spec = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
 and row_var = meta_row_var

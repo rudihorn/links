@@ -195,6 +195,7 @@ and iterpatt = [
 ]
 and sec = [`Minus | `FloatMinus | `Project of name | `Name of name]
 and declared_linearity = [ `Lin | `Unl ]
+and fn_dep = string * string
 and phrasenode = [
 | `Constant         of constant
 | `Var              of name
@@ -231,8 +232,9 @@ and phrasenode = [
 | `DBDelete         of pattern * phrase * phrase option
 | `DBInsert         of phrase * name list * phrase * phrase option
 | `DBUpdate         of pattern * phrase * phrase option * (name * phrase) list
-| `LensLit          of phrase * Types.datatype option
-| `LensDropLit      of phrase * string * string * phrase * Types.datatype option
+| `LensLit          of phrase * Types.lens_sort option
+| `LensDropLit      of phrase * string * string * phrase * Types.lens_sort option
+| `LensSelectLit    of phrase * phrase * Types.lens_sort option 
 | `LensGetLit       of phrase * Types.datatype option
 | `LensPutLit       of phrase * phrase * Types.datatype option
 | `Xml              of name * (name * (phrase list)) list * phrase option * phrase list

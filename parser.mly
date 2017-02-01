@@ -188,7 +188,7 @@ let datatype d = d, None
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON COLONCOLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY 
 %token UPDATE DELETE INSERT VALUES SET RETURNING
-%token LENS LENSDROP DETERMINED BY
+%token LENS LENSDROP LENSSELECT DETERMINED BY
 %token PUT GET
 %token READONLY DEFAULT
 %token ESCAPE
@@ -835,6 +835,7 @@ lens_expression:
 | LENSDROP VARIABLE DETERMINED BY VARIABLE DEFAULT exp FROM exp  { `LensDropLit ($9, $2, $5, $7, None), pos() } 
 | GET exp                                                      { `LensGetLit ($2, None), pos() }
 | PUT exp WITH exp                                             { `LensPutLit ($2, $4, None), pos() }
+| LENSSELECT FROM exp WHERE exp                                    { `LensSelectLit ($3, $5, None), pos() } 
 
 
 record_labels:

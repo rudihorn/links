@@ -148,9 +148,9 @@ sig
 
   val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype) -> tail_computation sem
 
-  val lens_handle : value sem * datatype -> tail_computation sem
+  val lens_handle : value sem * Types.lens_sort -> tail_computation sem
 
-  val lens_drop_handle : value sem * string * string * value sem * datatype -> tail_computation sem
+  val lens_drop_handle : value sem * string * string * value sem * Types.lens_sort -> tail_computation sem
 
   val lens_get : value sem * datatype -> tail_computation sem
 
@@ -476,10 +476,10 @@ struct
 		(fun keys ->  lift (`Special (`Table (database, table, keys, (r, w, n))),
                                `Table (r, w, n)))))
 
-  let lens_handle (table, rtype) =
+  let lens_handle (table, sort) =
       bind table 
         (fun table -> 
-            lift (`Special (`Lens (table, rtype)), `Lens (rtype))) 
+            lift (`Special (`Lens (table, sort)), `Lens (sort))) 
 
   let lens_drop_handle (lens, drop, key, default, rtype) =
       bind lens

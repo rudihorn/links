@@ -88,6 +88,7 @@ struct
     (* | `Fork _ *)
     | `LensLit _
     | `LensDropLit _
+    | `LensSelectLit _
     | `LensGetLit _
     | `LensPutLit _
     | `DBDelete _
@@ -1772,22 +1773,29 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                  | `Table (r,_,_) -> r
                  | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
-           `LensLit(erase table, Some trowtype), `Lens (trowtype), merge_usages [usages table]
+           let lens_sort = ([], "", trowtype) in
+           `LensLit(erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
            let lens = tc lens
            and default = tc default in
-           let trowtype = match typ lens with `Lens (r) -> 
-               try LensHelpers.remove_record_type drop r
+           let lens_sort = match typ lens with `Lens (fds, cond, r) -> 
+               try (fds, cond, LensHelpers.remove_record_type drop r)
                  with NotFound _ -> Gripers.die pos ("There is no column with name " ^ drop ^ " in the underlying lens.") in
-             `LensDropLit (erase lens, drop, key, erase default, Some trowtype), `Lens (trowtype), merge_usages [usages lens; usages default]
+             `LensDropLit (erase lens, drop, key, erase default, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages lens; usages default]
+        | `LensSelectLit (lens, predicate, _) ->
+           let lens = tc lens
+           and predicate = tc predicate in
+           let (fds, cond, rowtype) = match typ lens with `Lens r -> r in
+           let lens_sort = (fds, cond, rowtype) in
+               `LensSelectLit(erase lens, erase predicate, Some (lens_sort)), `Lens(lens_sort), merge_usages [usages lens; usages predicate]
         | `LensGetLit (lens, _) ->
            let lens = tc lens in
-           let trowtype = match typ lens with `Lens(r) -> r in
+           let trowtype = match typ lens with `Lens(fds, cond, r) -> r in
            `LensGetLit (erase lens, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens]
         | `LensPutLit (lens, data, _) ->
            let lens = tc lens in 
            let data = tc data in
-           let trowtype = match typ lens with `Lens(r) -> r in
+           let trowtype = match typ lens with `Lens(fds, cond, r) -> r in
            `LensPutLit (erase lens, erase data, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens; usages data]
         | `DBDelete (pat, from, where) ->
             let pat  = tpc pat in

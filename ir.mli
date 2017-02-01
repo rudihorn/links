@@ -76,8 +76,8 @@ and binding =
 and special =
   [ `Wrong of Types.datatype
   | `Database of value
-  | `Lens of value * Types.datatype
-  | `LensDrop of value * string * string * value* Types.datatype
+  | `Lens of value * Types.lens_sort
+  | `LensDrop of value * string * string * value* Types.lens_sort
   | `LensGet of value * Types.datatype
   | `LensPut of value * value * Types.datatype
   | `Table of value * value * value * (Types.datatype * Types.datatype * Types.datatype)

@@ -181,6 +181,7 @@ let keywords = [
  "in"       , IN;
  "lens"     , LENS;
  "lensdrop" , LENSDROP;
+ "lensselect", LENSSELECT;
  "open"     , OPEN;
  "yields"   , YIELDS;
 (*  "infix"    , INFIX; *)

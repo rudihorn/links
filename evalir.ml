@@ -417,18 +417,18 @@ module Eval = struct
   and special env cont : Ir.special -> Proc.thread_result Lwt.t = function
     | `Wrong _                    -> raise Wrong
     | `Database v                 -> apply_cont cont env (`Database (db_connect (value env v)))
-    | `Lens (table, typ) -> 
+    | `Lens (table, lens_sort) -> 
       begin
+          let (_, _, typ) = lens_sort in
           match value env table, (TypeUtils.concrete_type typ) with 
             | `Table tinfo, `Record row ->
-                 apply_cont cont env (`Lens (tinfo, row))
-            | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, row))
+                 apply_cont cont env (`Lens (tinfo, lens_sort))
+            | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, lens_sort))
       end
-    | `LensDrop (lens, drop, key, def, rtype) as le -> 
+    | `LensDrop (lens, drop, key, def, sort) as le -> 
         let lens = value env lens in 
         let def = match value env def with #Value.primitive_value_basis as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
-        let rtype = match rtype with `Record row -> row in
-          apply_cont cont env (`LensDrop (lens, drop, key, def, rtype))
+          apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
     | `LensGet (lens, rtype) as le ->
         let lens = value env lens in
         let res = LensHelpers.lens_get lens in

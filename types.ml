@@ -129,12 +129,14 @@ type typ =
     | `Record of row
     | `Variant of row
     | `Table of typ * typ * typ
-    | `Lens of typ
+    | `Lens of lens_sort 
     | `Alias of ((string * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
+and lens_sort      = fn_dep list * string * typ
+and fn_dep         = string * string
 and field_spec     = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
 and row_var        = meta_row_var
@@ -809,7 +811,7 @@ let free_type_vars, free_row_type_vars =
       | `Table (r, w, n)         ->
           S.union_all
             [free_type_vars' rec_vars r; free_type_vars' rec_vars w; free_type_vars' rec_vars n]
-      | `Lens r                  -> free_type_vars' rec_vars r
+      | `Lens (_, _, r)          -> free_type_vars' rec_vars r
       | `Alias ((_, ts), datatype) ->
           S.union (S.union_all (List.map (free_tyarg_vars' rec_vars) ts)) (free_type_vars' rec_vars datatype)
       | `Application (_, datatypes) -> S.union_all (List.map (free_tyarg_vars' rec_vars) datatypes)
@@ -1159,8 +1161,8 @@ let rec normalise_datatype rec_names t =
       | `Variant row             -> `Variant (nr row)
       | `Table (r, w, n)         ->
           `Table (nt r, nt w, nt n)
-      | `Lens (r)                ->
-          `Lens (nt r)
+      | `Lens (fds, cond, r)                ->
+          `Lens (fds, cond, nt r)
       | `Alias ((name, ts), datatype) ->
           `Alias ((name, ts), nt datatype)
       | `Application (abs, datatypes) ->
@@ -1396,7 +1398,7 @@ struct
             (fbtv f) @ (free_bound_row_type_vars ~include_aliases bound_vars m) @ (fbtv t)
         | `Record row
         | `Variant row -> free_bound_row_type_vars ~include_aliases bound_vars row
-        | `Lens (r) -> fbtv r
+        | `Lens (fds, cond, r) -> fbtv r
         | `Table (r, w, n) -> (fbtv r) @ (fbtv w) @ (fbtv n)
         | `ForAll (tyvars, body) ->
             let bound_vars, vars =
@@ -1855,7 +1857,7 @@ struct
                datatype bound_vars p r ^ "," ^
                datatype bound_vars p w ^ "," ^
                datatype bound_vars p n ^ ")"
-          | `Lens (typ) -> "Lens(" ^ datatype bound_vars p typ ^ ")"
+          | `Lens (fds, cond, typ) -> "Lens(" ^ datatype bound_vars p typ ^ ")"
           | `Alias ((s,[]), t) ->  s
           | `Alias ((s,ts), _) ->  s ^ " ("^ String.concat "," (List.map (type_arg bound_vars p) ts) ^")"
           | `Application (l, [elems]) when Abstype.Eq_t.eq l list ->  "["^ (type_arg bound_vars p) elems ^"]"
@@ -2165,7 +2167,7 @@ let make_fresh_envs : datatype -> datatype IntMap.t * row IntMap.t * field_spec 
       | `Record row
       | `Variant row             -> make_env_r boundvars row
       | `Table (r, w, n)         -> union [make_env boundvars r; make_env boundvars w; make_env boundvars n]
-      | `Lens (r)                -> union [make_env boundvars r]
+      | `Lens (fds, cond, r)     -> union [make_env boundvars r]
       | `Alias ((name, ts), d)   -> union (List.map (make_env_ta boundvars) ts @ [make_env boundvars d])
       | `Application (_, ds)     -> union (List.map (make_env_ta boundvars) ds)
       | `ForAll (qs, t)          ->
