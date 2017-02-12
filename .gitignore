@@ -27,6 +27,7 @@ xmlParser.mli
 # Emacs temporary and backup files
 \#*
 .*.swp
+.vscode
 .#*
 
 # documentation

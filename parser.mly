@@ -849,7 +849,7 @@ lens_expression:
 | LENSDROP VARIABLE DETERMINED BY VARIABLE DEFAULT exp FROM exp  { `LensDropLit ($9, $2, $5, $7, None), pos() } 
 | GET exp                                                      { `LensGetLit ($2, None), pos() }
 | PUT exp WITH exp                                             { `LensPutLit ($2, $4, None), pos() }
-| LENSSELECT FROM exp WHERE exp                                    { `LensSelectLit ($3, $5, None), pos() } 
+| LENSSELECT FROM exp WHERE exp                                { `LensSelectLit ($3, $5, None), pos() } 
 
 
 record_labels:
