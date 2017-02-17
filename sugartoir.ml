@@ -148,6 +148,8 @@ sig
 
   val lens_drop_handle : value sem * string * string * value sem * Types.lens_sort -> tail_computation sem
 
+  val lens_select_handle : value sem * value sem * Types.lens_sort -> tail_computation sem
+
   val lens_get : value sem * datatype -> tail_computation sem
 
   val lens_put : value sem * value sem * datatype -> tail_computation sem
@@ -471,6 +473,13 @@ struct
             (fun default ->
                lift (`Special (`LensDrop (lens, drop, key, default, rtype)), `Lens (rtype))))
 
+  let lens_select_handle (lens, pred, sort) = 
+      bind lens
+        (fun lens ->
+            bind pred 
+            (fun pred -> 
+               lift (`Special (`LensSelect (lens, pred, sort)), `Lens (sort))))
+
   let lens_get (lens, rtype) =
       bind lens 
         (fun lens ->
@@ -785,8 +794,7 @@ struct
                 end
           | `TupleLit [e] ->
               (* It isn't entirely clear whether there should be any 1-tuples at this stage,
-                 but if there are we should get rid of them.
-
+                 but if there are we should get rid of the
                  The parser certainly doesn't disallow them.
               *)
               ec e
@@ -841,6 +849,10 @@ struct
               let lens = ev lens in
               let default = ev default in
                 I.lens_drop_handle (lens, drop, key, default, t)
+          | `LensSelectLit (lens, pred, Some t) ->
+              let lens = ev lens in
+              let pred = ev pred in
+                I.lens_select_handle (lens, pred, t)
           | `LensGetLit (lens, Some t) ->
               let lens = ev lens in
                 I.lens_get (lens, t)

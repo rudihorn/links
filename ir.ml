@@ -82,6 +82,7 @@ and special =
   | `Database of value 
   | `Lens of value * Types.lens_sort
   | `LensDrop of value * string * string * value * Types.lens_sort
+  | `LensSelect of value * value * Types.lens_sort
   | `LensGet of value * Types.datatype
   | `LensPut of value * value * Types.datatype
   | `Table of (value * value * value * (Types.datatype * Types.datatype * Types.datatype))
@@ -435,6 +436,10 @@ module type TRANSFORM =
             let lens, _, o = o#value lens in
             let default, _, o = o#value default in
               `LensDrop (lens, drop, key, default, rtype), `Lens (rtype), o
+        | `LensSelect (lens, pred, sort) ->
+            let lens, _, o = o#value lens in
+            let pred, _, o = o#value pred in
+              `LensSelect (lens, pred, sort), `Lens (sort), o
         | `LensGet (lens, rtype) ->
             let lens, _, o = o#value lens in
               `LensGet (lens, rtype), Types.make_list_type rtype, o

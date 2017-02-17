@@ -47,27 +47,35 @@ let rec is_memory_lens (lens : Value.t) =
     | `LensDrop (lens, drop, key, def, rtype) -> is_memory_lens lens
     | _ -> failwith (string_of_value lens)
 
-let rec lens_get (lens : Value.t) =
+let rec lens_get (lens : Value.t) env =
     match lens with
     | `Lens _ -> failwith "Non memory lenses not implemented."
     | `LensMem (table, rtype) -> table
     | `LensDrop (lens, drop, key, def, rtype) ->
-        let records = lens_get lens in
+        let records = lens_get lens env in
         let result = List.map (fun a -> drop_record_row drop a) (unbox_list records) in
           `List result
+    | `LensSelect (lens, pred, sort) ->
+        let records = lens_get lens env in
+        let _ = match pred with
+         | `FunctionPtr (x, fvs) -> 
+            Debug.print ("Pred: " ^ (string_of_int x ^ opt_app string_of_value "" fvs) ^ "\n") in
+        (* let result = List.filter pred (unbox_list records) in *)
+        (* let fn = fun r -> Evalir.Eval.apply  *)
+          `List [] 
 
-let rec lens_put_mem (lens : Value.t) (data : Value.t) =
+let rec lens_put_mem (lens : Value.t) (data : Value.t) env =
     match lens with
     | `Lens _ -> data
     | `LensMem _ -> data
     | `LensDrop (l, drop, key, def, rtype) -> 
-            let records = lens_get l in
+            let records = lens_get l env in
             let newRecords = List.map (fun x -> restore_column drop key def x records) (unbox_list data) in
                 box_list newRecords
 
-let rec lens_put (lens : Value.t) (data : Value.t) =
+let rec lens_put (lens : Value.t) (data : Value.t) env =
     if is_memory_lens lens then
-        lens_put_mem lens data
+        lens_put_mem lens data env
     else
         data
 

@@ -74,6 +74,7 @@ type t = [
 | `Lens of table * Types.lens_sort
 | `LensMem of t * Types.lens_sort
 | `LensDrop of t * string * string * t * Types.lens_sort
+| `LensSelect of t * t * Types.lens_sort
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
 | `PrimitiveFunction of string * Var.var option

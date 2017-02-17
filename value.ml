@@ -239,6 +239,7 @@ and t = [
 | `Lens of table * Types.lens_sort
 | `LensMem of t * Types.lens_sort
 | `LensDrop of t * string * string * t * Types.lens_sort
+| `LensSelect of t * t * Types.lens_sort
 | `Record of (string * t) list
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)

@@ -451,14 +451,20 @@ struct
         let lens = value env lens in 
         let def = match value env def with #Value.primitive_value_basis as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
+    | `LensSelect (lens, pred, sort) ->
+        let lens = value env lens in
+        let _ = Debug.print ("PredEval: " ^ string_of_value pred) in
+        let pred = value env pred in 
+          apply_cont cont env (`LensSelect (lens, pred, sort))
     | `LensGet (lens, rtype) as le ->
         let lens = value env lens in
-        let res = LensHelpers.lens_get lens in
+        let callfn = 
+        let res = LensHelpers.lens_get lens env in
           apply_cont cont env res
     | `LensPut (lens, data, rtype) as le ->
         let lens = value env lens in
         let data = value env data in
-        let res = LensHelpers.lens_put lens data in
+        let res = LensHelpers.lens_put lens data env in
           apply_cont cont env res
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin

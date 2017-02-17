@@ -6,6 +6,8 @@
 *.cmxa
 *.cmo
 *.cmi
+*.cmt
+*.cmti
 *.cmx
 *.annot
 *.output
