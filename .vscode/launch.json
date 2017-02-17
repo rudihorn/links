@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "OCaml",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "../mylinks/in_memory_select_get.links"
+            ],
+            "stopOnEntry": false
+        }
+    ]
+}

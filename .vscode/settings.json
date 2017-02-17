@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "*.ml": "ocaml",
+        "*.mli": "ocaml"
+    }, 
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "*.swp": true,
+        "*.cmi": true,
+        "*.cmo": true,
+        "*.annot": true
+    }
+}
