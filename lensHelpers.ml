@@ -3,6 +3,9 @@ open Utility
 open Value
 
 (* Helper methods *)
+let lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
+    fn_dep
+
 let try_find p l = try Some (List.find p l) with Not_found -> None | NotFound _ -> None
 
 let get_record_val (key : string) (r : Value.t) = 
@@ -39,6 +42,46 @@ let restore_column (drop : string) (key : string) (default : Value.t) (row : Val
         | Some r -> get_record_val drop r
         | None -> default in
         box_record ((drop, dropVal) :: unbox_record row) 
+
+(* record revision *)
+
+let apply_fd_update (m : Value.t) (n : Value.t) (fd_left, fd_right : Types.fn_dep) : Value.t =
+    (* assume we know that n and m have the same values for columns in left(fd) *)
+    let n_cols = unbox_record n in
+    let m_cols = List.map (fun (k, v) -> 
+            if List.exists (fun a -> a = k) fd_right then
+                let _, n_v = List.find (fun (n_k, _) -> n_k = k) n_cols in
+                k, n_v
+            else
+                k, v
+        ) (unbox_record m) in
+        box_record m_cols
+
+let apply_fd_record_row_revision (m : Value.t) (n : Value.t) (fd_left, fd_right : Types.fn_dep) : bool * Value.t =
+    let n_cols = unbox_record n in
+    (* check if all columns in left(fd) match *)
+    let is_match = List.for_all (fun (k, v) -> 
+        if List.exists (fun a -> a = k) fd_left then
+            let _, n_v = List.find (fun (n_k, _) -> n_k = k) n_cols in
+                v = n_v
+        else
+            true
+    ) (unbox_record m) in
+    if is_match then
+        (* if so apply fd update *)
+        true, apply_fd_update m n (fd_left, fd_right)
+    else
+        (* otherwise return record unchanged *)
+        false, m
+
+let apply_fd_record_revision (m : Value.t) (n : Value.t) (fds : Types.fn_dep list) : bool * Value.t =
+    List.fold_right (fun nrow (upd, mrow) ->
+            List.fold_right (fun fd (upd, mrow) ->
+                let upd_t, mrow = apply_fd_record_row_revision mrow nrow fd in
+                upd_t || upd, mrow
+            ) fds (upd, mrow)
+        ) (unbox_list n) (false, m) 
+
 
 (* get / put operations *)
 
@@ -79,6 +122,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
                 (* if the record matches P remove it *)
                 if not (unbox_bool (callfn pred [r])) then
                     begin
+                        let upd, r = apply_fd_record_revision r data (lens_sort_fn_deps fn_dep) in
                         output := r :: !output
                     end
                 else
