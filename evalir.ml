@@ -458,13 +458,21 @@ struct
           apply_cont cont env (`LensSelect (lens, pred, sort))
     | `LensGet (lens, rtype) as le ->
         let lens = value env lens in
-        let callfn = 
-        let res = LensHelpers.lens_get lens env in
+        let callfn = fun fnptr ps -> 
+          let p = apply [] env (fnptr, ps) in
+          let _, res = Proc.run (fun unit -> p) in
+          res in
+        (* let callfn = fun fnptr -> fnptr in *)
+        let res = LensHelpers.lens_get lens callfn in
           apply_cont cont env res
     | `LensPut (lens, data, rtype) as le ->
         let lens = value env lens in
         let data = value env data in
-        let res = LensHelpers.lens_put lens data env in
+        let callfn = fun fnptr ps -> 
+          let p = apply [] env (fnptr, ps) in
+          let _, res = Proc.run (fun unit -> p) in
+          res in
+        let res = LensHelpers.lens_put lens data callfn in
           apply_cont cont env res
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin

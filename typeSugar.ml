@@ -88,6 +88,7 @@ struct
     | `CP _
     (* | `Fork _ *)
     | `LensLit _
+    | `LensKeysLit _
     | `LensDropLit _
     | `LensSelectLit _
     | `LensGetLit _
@@ -1990,6 +1991,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
         | `TableLit _ -> assert false
         | `LensLit (table, _) ->
            let table = tc table in
+           let _ = Debug.print "lens lit" in
            let trowtype = 
                begin
                  match typ table with
@@ -1998,11 +2000,23 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                end in
            let lens_sort = ([], "", trowtype) in
            `LensLit(erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
+        | `LensKeysLit (table, keys, _) ->
+           let table = tc table in
+           let _ = Debug.print "lens keys lit" in
+           let trowtype = 
+               begin
+                 match typ table with
+                 | `Table (r,_,_) -> r
+                 | `Application (_, [`Type (`Record r)]) -> `Record r
+               end in
+           let fds = LensHelpers.get_fds keys trowtype in
+           let lens_sort = (fds, "", trowtype) in
+           `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
            let lens = tc lens
            and default = tc default in
            let lens_sort = match typ lens with `Lens (fds, cond, r) -> 
-               try (fds, cond, LensHelpers.remove_record_type drop r)
+               try (fds, cond, LensHelpers.remove_record_column drop r)
                  with NotFound _ -> Gripers.die pos ("There is no column with name " ^ drop ^ " in the underlying lens.") in
              `LensDropLit (erase lens, drop, key, erase default, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages lens; usages default]
         | `LensSelectLit (lens, predicate, _) ->

@@ -101,6 +101,7 @@ SOURCES = $(OPC)                                \
           desugarFors.mli desugarFors.ml                 \
           desugarDbs.mli desugarDbs.ml                   \
           desugarFuns.mli desugarFuns.ml                 \
+          desugarLenses.mli desugarLenses.ml             \
           desugarProcesses.mli desugarProcesses.ml       \
           desugarInners.mli desugarInners.ml             \
 	  desugarCP.mli desugarCP.ml                     \

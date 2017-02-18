@@ -134,7 +134,7 @@ type typ =
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
 and lens_sort      = fn_dep list * string * typ
-and fn_dep         = string * string
+and fn_dep         = string list * string list
 and field_spec     = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
 and row_var        = meta_row_var

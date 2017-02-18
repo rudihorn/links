@@ -11,6 +11,8 @@
         "*.swp": true,
         "*.cmi": true,
         "*.cmo": true,
+        "*.cmt": true,
+        "*.cmti": true,
         "*.annot": true
     }
 }

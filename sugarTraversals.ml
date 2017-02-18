@@ -303,6 +303,11 @@ class map =
               let _x = o#phrase _x in
               let _x_i1 = o#option (fun o -> o#unknown) _x_i1 in
               `LensLit (_x, _x_i1)
+      | `LensKeysLit ((_x, _x_i1, _x_i2)) ->
+              let _x = o#phrase _x in
+              let _x_i1 = o#phrase _x_i1 in
+              let _x_i2 = o#option (fun o -> o#unknown) _x_i2 in
+              `LensKeysLit (_x, _x_i1, _x_i2)
       | `LensDropLit ((_x, _x_i1, _x_i2, _x_i3, _x_i4)) ->
           let _x = o#phrase _x in
           let _x_i1 = o#string _x_i1 in
@@ -882,6 +887,11 @@ class fold =
           let o = o#phrase _x in
           let o = o#option (fun o -> o#unknown) _x_i1 in
             o 
+      | `LensKeysLit ((_x, _x_i1, _x_i2)) ->
+          let o = o#phrase _x in 
+          let o = o#phrase _x_i1 in
+          let o = o#option (fun o -> o#unknown) _x_i2 in
+            o
       | `LensDropLit ((_x, _x_i1, _x_i2, _x_i3, _x_i4)) ->
           let o = o#phrase _x in
           let o = o#string _x_i1 in
@@ -1491,6 +1501,11 @@ class fold_map =
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#option (fun o -> o#unknown) _x_i1 in 
             (o, (`LensLit (_x, _x_i1)))
+      | `LensKeysLit ((_x, _x_i1, _x_i2)) ->
+          let (o, _x) = o#phrase _x in
+          let (o, _x_i1) = o#phrase _x_i1 in
+          let (o, _x_i2) = o#option (fun o -> o#unknown) _x_i2 in
+            (o, (`LensKeysLit (_x, _x_i1, _x_i2)))
       | `LensDropLit ((_x, _x_i1, _x_i2, _x_i3, _x_i4)) ->
           let (o, _x) = o#phrase _x in
           let (o, _x_i1) = o#string _x_i1 in

@@ -234,6 +234,9 @@ and phrasenode = [
 | `DBInsert         of phrase * name list * phrase * phrase option
 | `DBUpdate         of pattern * phrase * phrase option * (name * phrase) list
 | `LensLit          of phrase * Types.lens_sort option
+(* the lens keys lit is a literal that takes an expression and is converted into a LensLit
+   with the corresponding table keys marked in the lens_sort *)
+| `LensKeysLit      of phrase * phrase * Types.lens_sort option
 | `LensDropLit      of phrase * string * string * phrase * Types.lens_sort option
 | `LensSelectLit    of phrase * phrase * Types.lens_sort option 
 | `LensGetLit       of phrase * Types.datatype option

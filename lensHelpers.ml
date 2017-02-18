@@ -15,10 +15,12 @@ let records_equal recA recB =
     not (List.exists (fun (name, value) -> get_record_val name recB <> value) (unbox_record recA))
 
     (* Drop related methods *)
-let remove_record_type (a : string) (r : typ) =
-    match r with `Record (fields, row_var, dual) -> 
+let remove_record_column (a : string) (r : typ) =
+    match r with 
+    | `Record (fields, row_var, dual) -> 
         let (entry, fields) = StringMap.pop a fields in
         `Record (fields, row_var, dual)
+    | _ -> failwith "Expected a record."
 
 let drop_record_row (a : string) (record : Value.t) =
     let columns = List.filter (fun (name, value) -> name <> a) (unbox_record record) in
@@ -47,35 +49,65 @@ let rec is_memory_lens (lens : Value.t) =
     | `LensDrop (lens, drop, key, def, rtype) -> is_memory_lens lens
     | _ -> failwith (string_of_value lens)
 
-let rec lens_get (lens : Value.t) env =
+let rec lens_get (lens : Value.t) callfn =
     match lens with
     | `Lens _ -> failwith "Non memory lenses not implemented."
     | `LensMem (table, rtype) -> table
     | `LensDrop (lens, drop, key, def, rtype) ->
-        let records = lens_get lens env in
+        let records = lens_get lens callfn in
         let result = List.map (fun a -> drop_record_row drop a) (unbox_list records) in
           `List result
     | `LensSelect (lens, pred, sort) ->
-        let records = lens_get lens env in
-        let _ = match pred with
-         | `FunctionPtr (x, fvs) -> 
-            Debug.print ("Pred: " ^ (string_of_int x ^ opt_app string_of_value "" fvs) ^ "\n") in
-        (* let result = List.filter pred (unbox_list records) in *)
-        (* let fn = fun r -> Evalir.Eval.apply  *)
-          `List [] 
+        let records = lens_get lens callfn in
+        let res = List.filter (fun x -> unbox_bool (callfn pred [x])) (unbox_list records) in 
+           box_list(res)
+    | _ -> failwith "Not a lens."
 
-let rec lens_put_mem (lens : Value.t) (data : Value.t) env =
+let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
     match lens with
     | `Lens _ -> data
     | `LensMem _ -> data
     | `LensDrop (l, drop, key, def, rtype) -> 
-            let records = lens_get l env in
+            let records = lens_get l callfn in
             let newRecords = List.map (fun x -> restore_column drop key def x records) (unbox_list data) in
                 box_list newRecords
+    | `LensSelect (l, pred, sort) ->
+            let data = Array.of_list (List.map (fun r -> r,false) (unbox_list data)) in
+            let records = unbox_list (lens_get l callfn) in
+            let output = ref [] in
+            let _ = List.map (fun r -> 
+                (* if the record matches P remove it *)
+                if not (unbox_bool (callfn pred [r])) then
+                    begin
+                        output := r :: !output
+                    end
+                else
+                   () 
+            ) records in
+            `List records 
+    | _ -> failwith "Not a lens."
 
-let rec lens_put (lens : Value.t) (data : Value.t) env =
+let rec lens_put (lens : Value.t) (data : Value.t) callfn =
     if is_memory_lens lens then
-        lens_put_mem lens data env
+        lens_put_mem lens data callfn 
     else
         data
 
+let get_fd (keys : Sugartypes.name list) (rowType : Types.typ) : Types.fn_dep =
+    match rowType with `Record (fields, row_var, dual) ->
+        let fields = List.fold_right (fun col columns -> StringMap.remove col columns) keys fields in
+        let notkeys = StringMap.to_list (fun x y -> x) fields in
+            (keys, notkeys)
+    | _ -> failwith "Expected a record."
+
+let get_phrasenode (phrase, _ : Sugartypes.phrase) =
+    phrase
+
+let get_pos (_, pos : Sugartypes.phrase) =
+    pos
+
+let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fn_dep list =
+    match (get_phrasenode key) with
+    | `TupleLit keys -> [get_fd (List.map (fun x -> match (get_phrasenode x) with `Var name -> name) keys) rowType]
+    | `Var name -> [get_fd [name] rowType]
+    | _ -> failwith "Expected a tuple or a variable."

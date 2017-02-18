@@ -8,6 +8,7 @@
             "program": "${workspaceRoot}/links",
             "console": "internalConsole",
             "arguments": [
+                "--config=../mylinks/links.config",
                 "../mylinks/in_memory_select_get.links"
             ],
             "stopOnEntry": false

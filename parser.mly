@@ -846,6 +846,7 @@ database_expression:
 lens_expression:
 | database_expression                                          { $1 }
 | LENS exp                                                     { `LensLit ($2, None), pos()}
+| LENS exp TABLEKEYS exp                                       { `LensKeysLit ($2, $4, None), pos()}
 | LENSDROP VARIABLE DETERMINED BY VARIABLE DEFAULT exp FROM exp  { `LensDropLit ($9, $2, $5, $7, None), pos() } 
 | GET exp                                                      { `LensGetLit ($2, None), pos() }
 | PUT exp WITH exp                                             { `LensPutLit ($2, $4, None), pos() }
