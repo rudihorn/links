@@ -45,11 +45,15 @@ let restore_column (drop : string) (key : string) (default : Value.t) (row : Val
 
 (* record revision *)
 
-let apply_fd_update (m : Value.t) (n : Value.t) (fd_left, fd_right : Types.fn_dep) : Value.t =
+let fd_left (fd_left, _ : Types.fn_dep) = fd_left
+
+let fd_right (_, fd_right : Types.fn_dep) = fd_right
+
+let apply_fd_update (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : Value.t =
     (* assume we know that n and m have the same values for columns in left(fd) *)
     let n_cols = unbox_record n in
     let m_cols = List.map (fun (k, v) -> 
-            if List.exists (fun a -> a = k) fd_right then
+            if List.exists (fun a -> a = k) (fd_right fd) then
                 let _, n_v = List.find (fun (n_k, _) -> n_k = k) n_cols in
                 k, n_v
             else
@@ -57,30 +61,34 @@ let apply_fd_update (m : Value.t) (n : Value.t) (fd_left, fd_right : Types.fn_de
         ) (unbox_record m) in
         box_record m_cols
 
-let apply_fd_record_row_revision (m : Value.t) (n : Value.t) (fd_left, fd_right : Types.fn_dep) : bool * Value.t =
+let is_fd_record_match (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool =
     let n_cols = unbox_record n in
     (* check if all columns in left(fd) match *)
     let is_match = List.for_all (fun (k, v) -> 
-        if List.exists (fun a -> a = k) fd_left then
+        if List.exists (fun a -> a = k) (fd_left fd) then
             let _, n_v = List.find (fun (n_k, _) -> n_k = k) n_cols in
                 v = n_v
         else
             true
     ) (unbox_record m) in
-    if is_match then
+        is_match
+
+let apply_fd_record_row_revision (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool * Value.t =
+    if is_fd_record_match m n fd then
         (* if so apply fd update *)
-        true, apply_fd_update m n (fd_left, fd_right)
+        true, apply_fd_update m n fd
     else
         (* otherwise return record unchanged *)
         false, m
 
 let apply_fd_record_revision (m : Value.t) (n : Value.t) (fds : Types.fn_dep list) : bool * Value.t =
+    (* m of `Record and n of `List `Record *)
     List.fold_right (fun nrow (upd, mrow) ->
             List.fold_right (fun fd (upd, mrow) ->
                 let upd_t, mrow = apply_fd_record_row_revision mrow nrow fd in
                 upd_t || upd, mrow
             ) fds (upd, mrow)
-        ) (unbox_list n) (false, m) 
+    ) (unbox_list n) (false, m) 
 
 
 (* get / put operations *)
@@ -90,21 +98,34 @@ let rec is_memory_lens (lens : Value.t) =
     | `Lens _ -> false
     | `LensMem _ -> true
     | `LensDrop (lens, drop, key, def, rtype) -> is_memory_lens lens
-    | _ -> failwith (string_of_value lens)
+    | `LensSelect (lens, pred, sort) -> is_memory_lens lens
+    | _ -> failwith ("Unknown lens (is_memory_lens) :" ^ (string_of_value lens))
 
-let rec lens_get (lens : Value.t) callfn =
+let rec lens_get_mem (lens : Value.t) callfn =
     match lens with
     | `Lens _ -> failwith "Non memory lenses not implemented."
     | `LensMem (table, rtype) -> table
     | `LensDrop (lens, drop, key, def, rtype) ->
-        let records = lens_get lens callfn in
+        let records = lens_get_mem lens callfn in
         let result = List.map (fun a -> drop_record_row drop a) (unbox_list records) in
           `List result
     | `LensSelect (lens, pred, sort) ->
-        let records = lens_get lens callfn in
+        let records = lens_get_mem lens callfn in
         let res = List.filter (fun x -> unbox_bool (callfn pred [x])) (unbox_list records) in 
-           box_list(res)
+           box_list res
     | _ -> failwith "Not a lens."
+
+let rec lens_get (lens : Value.t) callfn =
+    if is_memory_lens lens then
+        lens_get_mem lens callfn 
+    else
+        box_list [] 
+
+let mark_found_records (n : Value.t) (data : (Value.t * bool) array) : unit = 
+    Array.iteri (fun i (row, marked) -> 
+        if not marked && (records_equal row n) then
+            Array.set data i (row, true)
+    ) data
 
 let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
     match lens with
@@ -113,22 +134,26 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
     | `LensDrop (l, drop, key, def, rtype) -> 
             let records = lens_get l callfn in
             let newRecords = List.map (fun x -> restore_column drop key def x records) (unbox_list data) in
-                box_list newRecords
+                lens_put_mem l (box_list newRecords) callfn
     | `LensSelect (l, pred, sort) ->
-            let data = Array.of_list (List.map (fun r -> r,false) (unbox_list data)) in
+            let arrData = Array.of_list (List.map (fun r -> r,false) (unbox_list data)) in
             let records = unbox_list (lens_get l callfn) in
             let output = ref [] in
             let _ = List.map (fun r -> 
                 (* if the record matches P remove it *)
                 if not (unbox_bool (callfn pred [r])) then
                     begin
-                        let upd, r = apply_fd_record_revision r data (lens_sort_fn_deps fn_dep) in
+                        let upd, r = apply_fd_record_revision r data (lens_sort_fn_deps sort) in
+                        if upd then
+                            mark_found_records r arrData;
                         output := r :: !output
                     end
                 else
                    () 
             ) records in
-            `List records 
+            let filteredData = List.filter (fun (r,m) -> not m) (Array.to_list arrData) in
+            let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
+            lens_put_mem l (box_list output) callfn
     | _ -> failwith "Not a lens."
 
 let rec lens_put (lens : Value.t) (data : Value.t) callfn =
@@ -150,8 +175,13 @@ let get_phrasenode (phrase, _ : Sugartypes.phrase) =
 let get_pos (_, pos : Sugartypes.phrase) =
     pos
 
+let get_var_name (var : Sugartypes.phrasenode) = 
+    match var with
+    | `Var name -> name
+    | _ -> failwith "Expected a `Var type"
+
 let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fn_dep list =
     match (get_phrasenode key) with
-    | `TupleLit keys -> [get_fd (List.map (fun x -> match (get_phrasenode x) with `Var name -> name) keys) rowType]
+    | `TupleLit keys -> [get_fd (List.map (fun x -> get_var_name (get_phrasenode x))  keys) rowType]
     | `Var name -> [get_fd [name] rowType]
     | _ -> failwith "Expected a tuple or a variable."

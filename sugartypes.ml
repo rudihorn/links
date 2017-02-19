@@ -239,6 +239,7 @@ and phrasenode = [
 | `LensKeysLit      of phrase * phrase * Types.lens_sort option
 | `LensDropLit      of phrase * string * string * phrase * Types.lens_sort option
 | `LensSelectLit    of phrase * phrase * Types.lens_sort option 
+| `LensJoinLit      of phrase * phrase * phrase * Types.lens_sort option
 | `LensGetLit       of phrase * Types.datatype option
 | `LensPutLit       of phrase * phrase * Types.datatype option
 | `Xml              of name * (name * (phrase list)) list * phrase option * phrase list

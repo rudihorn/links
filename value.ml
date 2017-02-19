@@ -479,6 +479,7 @@ and string_of_value : t -> string = function
   | `Lens (_, _) -> "(lens)"
   | `LensMem (_, _) -> "(lens)" 
   | `LensDrop (lens, dr, key, def, typ) -> "(lensdrop " ^ dr ^ " determined by " ^ key ^ " default " ^ string_of_value def ^ " from " ^ string_of_value lens
+  | `LensSelect (lens, pred, sort) -> "(lensselect " ^ string_of_value lens ^ " where " ^ string_of_value pred ^ ")"
 and string_of_primitive : primitive_value -> string = function
   | `Bool value -> string_of_bool value
   | `Int value -> string_of_int value

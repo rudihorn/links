@@ -91,6 +91,7 @@ struct
     | `LensKeysLit _
     | `LensDropLit _
     | `LensSelectLit _
+    | `LensJoinLit _
     | `LensGetLit _
     | `LensPutLit _
     | `DBDelete _

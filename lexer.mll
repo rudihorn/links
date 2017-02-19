@@ -182,6 +182,7 @@ let keywords = [
  "lens"     , LENS;
  "lensdrop" , LENSDROP;
  "lensselect", LENSSELECT;
+ "lensjoin" , LENSJOIN;
  "open"     , OPEN;
  "yields"   , YIELDS;
 (*  "infix"    , INFIX; *)
@@ -194,6 +195,7 @@ let keywords = [
  "native"   , NATIVE;
  "nu"       , NU;
  "offer"    , OFFER;
+ "on"       , ON;
  "orderby"  , ORDERBY;
  "op"       , OP;
  "page"     , PAGE;

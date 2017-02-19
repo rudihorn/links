@@ -2,7 +2,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "OCaml",
+            "name": "In Memory Select Put",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/in_memory_select_put.links"
+            ],
+            "stopOnEntry": false
+        }, 
+        {
+            "name": "In Memory Select Get",
             "type": "ocamldebug",
             "request": "launch",
             "program": "${workspaceRoot}/links",
