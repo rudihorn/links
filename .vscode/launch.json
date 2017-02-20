@@ -24,6 +24,54 @@
                 "../mylinks/in_memory_select_get.links"
             ],
             "stopOnEntry": false
+        },
+        {
+            "name": "In Memory Drop Get",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/in_memory_drop_get.links"
+            ],
+            "stopOnEntry": false
+        },
+        {
+            "name": "In Memory Drop Put",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/in_memory_drop_put.links"
+            ],
+            "stopOnEntry": false
+        },
+        {
+            "name": "In Memory Join Get",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/in_memory_join_get.links"
+            ],
+            "stopOnEntry": false
+        },
+        {
+            "name": "In Memory Join Put",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/in_memory_join_put.links"
+            ],
+            "stopOnEntry": false
         }
     ]
 }

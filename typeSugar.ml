@@ -2017,15 +2017,21 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let lens = tc lens
            and default = tc default in
            let lens_sort = match typ lens with `Lens (fds, cond, r) -> 
-               try (fds, cond, LensHelpers.remove_record_column drop r)
+               try (fds, cond, LensHelpers.remove_record_type_column drop r)
                  with NotFound _ -> Gripers.die pos ("There is no column with name " ^ drop ^ " in the underlying lens.") in
              `LensDropLit (erase lens, drop, key, erase default, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages lens; usages default]
         | `LensSelectLit (lens, predicate, _) ->
            let lens = tc lens
            and predicate = tc predicate in
-           let (fds, cond, rowtype) = match typ lens with `Lens r -> r in
-           let lens_sort = (fds, cond, rowtype) in
+           let lens_sort = LensHelpers.get_lens_type_sort (typ lens) in
                `LensSelectLit(erase lens, erase predicate, Some (lens_sort)), `Lens(lens_sort), merge_usages [usages lens; usages predicate]
+        | `LensJoinLit (lens1, lens2, on, _) ->
+           let lens1 = tc lens1 
+           and lens2 = tc lens2 in
+           let sort1 = LensHelpers.get_lens_type_sort (typ lens1)
+           and sort2 = LensHelpers.get_lens_type_sort (typ lens2) in
+           let sort = LensHelpers.join_lens_sort sort1 sort2 on in
+               `LensJoinLit (erase lens1, erase lens2, on, Some sort), `Lens(sort), merge_usages [usages lens1; usages lens2]
         | `LensGetLit (lens, _) ->
            let lens = tc lens in
            let trowtype = match typ lens with `Lens(fds, cond, r) -> r in

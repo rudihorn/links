@@ -79,6 +79,7 @@ and special =
   | `Lens of value * Types.lens_sort
   | `LensDrop of value * string * string * value* Types.lens_sort
   | `LensSelect of value * value * Types.lens_sort
+  | `LensJoin of value * value * string list * Types.lens_sort
   | `LensGet of value * Types.datatype
   | `LensPut of value * value * Types.datatype
   | `Table of value * value * value * (Types.datatype * Types.datatype * Types.datatype)

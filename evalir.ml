@@ -456,6 +456,10 @@ struct
         let _ = Debug.print ("PredEval: " ^ string_of_value pred) in
         let pred = value env pred in 
           apply_cont cont env (`LensSelect (lens, pred, sort))
+    | `LensJoin (lens1, lens2, on, sort) ->
+        let lens1 = value env lens1 in
+        let lens2 = value env lens2 in
+          apply_cont cont env (`LensJoin (lens1, lens2, on, sort))
     | `LensGet (lens, rtype) as le ->
         let lens = value env lens in
         let callfn = fun fnptr ps -> 

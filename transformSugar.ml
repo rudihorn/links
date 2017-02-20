@@ -460,6 +460,11 @@ class transform (env : Types.typing_environment) =
           let (o, predicate, _) = o#phrase predicate in
           let (o, t) = o#lens_sort t in
             (o, `LensSelectLit (lens, predicate, Some t), `Lens t)
+      | `LensJoinLit (lens1, lens2, on, Some t) ->
+          let (o, lens1, _) = o#phrase lens1 in
+          let (o, lens2, _) = o#phrase lens2 in
+          let (o, t) = o#lens_sort t in
+            (o, `LensJoinLit (lens1, lens2, on, Some t), `Lens t)
       | `LensGetLit (lens, Some t) -> 
           let (o, lens, _) = o#phrase lens in
           let (o, t) = o#datatype t in

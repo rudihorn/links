@@ -53,6 +53,10 @@ end
 module List =
 struct
   include List
+
+  let find2 p l =
+    find p l
+
   let find p l =
     try find p l
     with Not_found -> not_found "List.find" "<matching predicate>"

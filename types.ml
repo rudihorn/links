@@ -119,6 +119,12 @@ type ('t, 'r) session_type_basis =
     | `End ]
       deriving (Show)
 
+type lens_delete_mode =
+  [ `DeleteLeft
+  | `DeleteRight
+  | `DeleteBoth ]
+      deriving (Show)
+
 type typ =
     [ `Not_typed
     | `Primitive of primitive
