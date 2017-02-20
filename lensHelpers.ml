@@ -45,7 +45,7 @@ let try_find p l = try Some (List.find p l) with Not_found -> None | NotFound _ 
 
 let get_record_val (key : string) (r : Value.t) = 
     let columns = match r with `Record c -> c in
-    let (_, value) = List.find2 (fun (name, value) -> name = key) columns in
+    let (_, value) = List.find (fun (name, value) -> name = key) columns in
     value
 
 let records_equal recA recB =
@@ -118,7 +118,7 @@ let is_row_cols_record_match (m : Value.t) (n : Value.t) (cols : string list) : 
                 let n_v = get_record_val col m in
                 let m_v = get_record_val col n in
                     n_v = m_v
-            with Not_found -> false 
+            with NotFound _ -> false 
         ) cols in
     is_match
 
@@ -219,11 +219,13 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
                 if not (unbox_bool (callfn pred [r])) then
                     begin
                         let upd, r = apply_fd_record_revision r data (get_lens_sort_fn_deps sort) in
-                        if upd && not (unbox_bool (callfn pred[r])) then
-                        begin
-                            mark_found_records r arrData;
+                        if upd then
+                            begin
+                                if not (unbox_bool (callfn pred[r])) then
+                                    mark_found_records r arrData
+                            end
+                        else
                             output := r :: !output
-                        end
                     end
                 else
                    () 
@@ -254,8 +256,10 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             let not_on_cols = remove_list_values sort_cols on in 
             let removed_left, removed_any = List.partition (fun r -> contains_record (drop_record_columns not_on_cols r) data) removed in
             let rec1 = List.filter (fun r -> not (contains_record r (box_list removed_left))) (unbox_list rec1) in
+            let rec1 = lens_put_mem l1 (box_list rec1) callfn in
             let rec2 = List.filter (fun r -> not (contains_record r (box_list removed_any))) (unbox_list rec2) in
-                box_record (["t1", box_list rec1; "t2", box_list rec2])
+            let rec2 = lens_put_mem l2 (box_list rec2) callfn in
+                box_record (["t1", rec1; "t2", rec2])
     | _ -> failwith "Not a lens."
 
 let rec lens_put (lens : Value.t) (data : Value.t) callfn =
