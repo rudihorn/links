@@ -1,6 +1,7 @@
 open Types
 open Utility
 open Value
+open LensFDHelpers
 
 (* Helper methods *)
 let get_lens_type_sort (t : Types.typ) =
@@ -44,7 +45,7 @@ let update_rowtype_cols (cols : Types.field_spec_map) (rowType : Types.typ) =
 let try_find p l = try Some (List.find p l) with Not_found -> None | NotFound _ -> None
 
 let get_record_val (key : string) (r : Value.t) = 
-    let columns = match r with `Record c -> c in
+    let columns = unbox_record r in
     let (_, value) = List.find (fun (name, value) -> name = key) columns in
     value
 
@@ -94,11 +95,9 @@ let restore_column (drop : string) (key : string) (default : Value.t) (row : Val
 
 (* record revision *)
 
-let fd_left (fd_left, _ : Types.fn_dep) = fd_left
-
-let fd_right (_, fd_right : Types.fn_dep) = fd_right
-
 let apply_fd_update (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : Value.t =
+    (* update all columns from the right side of the functional dependency fd 
+       in m with the value from n  *)
     (* assume we know that n and m have the same values for columns in left(fd) *)
     let n_cols = unbox_record n in
     let m_cols = List.map (fun (k, v) -> 
@@ -111,6 +110,7 @@ let apply_fd_update (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : Value.t =
         box_record m_cols
 
 let is_row_cols_record_match (m : Value.t) (n : Value.t) (cols : string list) : bool =
+    (* determines wether the records m and n have the same values for the columns in cols *)
     (* check if all columns in left(fd) match *)
     let is_match = 
         List.for_all (fun col -> 
@@ -123,9 +123,12 @@ let is_row_cols_record_match (m : Value.t) (n : Value.t) (cols : string list) : 
     is_match
 
 let is_fd_record_match (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool =
+    (* checks wether two records m and n match w.r.t. the functional dependency fd *)
     is_row_cols_record_match m n (fd_left fd)
 
 let apply_fd_record_row_revision (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool * Value.t =
+   (* first check if the two records match w.r.t. the given functional dependency fd and if so apply the updates
+      from record n to record m, otherwise return m unchanged *)
     if is_fd_record_match m n fd then
         (* if so apply fd update *)
         true, apply_fd_update m n fd
@@ -202,6 +205,16 @@ let apply_fd_merge_record_revision (n : Value.t) (m : Value.t) (fds : Types.fn_d
     let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
         (box_list output)
 
+let rec lens_put_delta  (lens : Value.t) (data : (Value.t * int) list) callfn = 
+    match lens with
+    | `Lens _ ->  data
+    | `LensMem _ -> data
+    | `LensSelect (l, pred, sort) ->
+        data
+    | `LensJoin  (l1, l2, on, sort) ->
+        data
+    | _ -> failwith "Unsupported lens."
+
 let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
     match lens with
     | `Lens _ -> data
@@ -235,6 +248,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             lens_put_mem l (box_list output) callfn 
     | `LensJoin (l1, l2, on, sort) ->
             let fds = get_lens_sort_fn_deps sort in
+            let _ = debug_print_fd_tree (get_fd_tree fds) in
             let sort_cols = get_lens_sort_cols_list sort in
             let l1_sort = get_lens_sort l1 in
             let l1_cols = get_lens_sort_cols_list l1_sort in

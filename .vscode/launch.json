@@ -1,6 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "In Memory Select Put",
             "type": "ocamldebug",
@@ -70,6 +71,18 @@
             "arguments": [
                 "--config=../mylinks/links.config",
                 "../mylinks/in_memory_join_put.links"
+            ],
+            "stopOnEntry": false
+        },
+        {
+            "name": "Delta Put",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/delta_lenses_test.links"
             ],
             "stopOnEntry": false
         }

@@ -2022,9 +2022,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
              `LensDropLit (erase lens, drop, key, erase default, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages lens; usages default]
         | `LensSelectLit (lens, predicate, _) ->
            let lens = tc lens
-           and predicate = tc predicate in
+           (* and predicate = tc predicate *) in
+           let _ = LensQueryHelper.calculate_predicate predicate lens in
            let lens_sort = LensHelpers.get_lens_type_sort (typ lens) in
-               `LensSelectLit(erase lens, erase predicate, Some (lens_sort)), `Lens(lens_sort), merge_usages [usages lens; usages predicate]
+               `LensSelectLit(erase lens, predicate, Some (lens_sort)), `Lens(lens_sort), merge_usages [usages lens]
         | `LensJoinLit (lens1, lens2, on, _) ->
            let lens1 = tc lens1 
            and lens2 = tc lens2 in

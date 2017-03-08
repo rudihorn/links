@@ -453,7 +453,6 @@ struct
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
     | `LensSelect (lens, pred, sort) ->
         let lens = value env lens in
-        let _ = Debug.print ("PredEval: " ^ string_of_value pred) in
         let pred = value env pred in 
           apply_cont cont env (`LensSelect (lens, pred, sort))
     | `LensJoin (lens1, lens2, on, sort) ->

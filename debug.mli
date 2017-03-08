@@ -2,6 +2,9 @@
 
 val debugging_enabled : bool Settings.setting
 
+(** print a debug message without line feed if debugging is enabled *)
+val print_no_lf : string -> unit
+
 (** print a debug message if debugging is enabled *)
 val print : string -> unit
 

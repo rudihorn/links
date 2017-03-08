@@ -86,7 +86,9 @@ SOURCES = $(OPC)                                \
           defaultAliases.ml                     \
 					requestData.mli requestData.ml        \
           value.mli value.ml                    \
-		  lensHelpers.ml						\
+          lensFDHelpers.ml                       \
+          lensQueryHelper.ml                   \
+		      lensHelpers.ml						                \
           eventHandlers.mli eventHandlers.ml    \
           xmlParser.mly xmlLexer.mll            \
           parseXml.mli parseXml.ml              \

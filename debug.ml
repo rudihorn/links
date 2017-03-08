@@ -3,12 +3,16 @@ let debugging_enabled = Settings.add_bool ("debug", false, `User)
 
 (** print a debug message if debugging is enabled *)
 let print message =
-  (if Settings.get_value(debugging_enabled) then prerr_endline message; flush stderr)
+  (if Settings.get_value(debugging_enabled) then prerr_endline message)
+
+(** print a debug message if debugging is enabled *)
+let print_no_lf message =
+  (if Settings.get_value(debugging_enabled) then prerr_string message)
 
 (** print a debug message if debugging is enabled; [message] is a lazy expr. *)
 let print_l message =
   (if Settings.get_value(debugging_enabled) then
-     prerr_endline(Lazy.force message); flush stderr)
+     prerr_endline(Lazy.force message))
 
 (** Print a formatted debugging message if debugging is enabled *)
 let f fmt = Printf.kprintf print fmt
