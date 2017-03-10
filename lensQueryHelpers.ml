@@ -96,6 +96,9 @@ let rec replace_var (expr : phrase) (repl : (string * Value.t) list)  :  phrase=
 let create_phrase_and (left : phrase) (right : phrase) =
     `InfixAppl (([], `And), left, right), Sugartypes.dummy_position
 
+let create_phrase_or (left : phrase) (right : phrase) =
+    `InfixAppl (([], `Or), left, right), Sugartypes.dummy_position
+
 let create_phrase_equal (left : phrase) (right : phrase) =
     `InfixAppl (([], `Name "=="), left, right), Sugartypes.dummy_position
 
@@ -107,6 +110,9 @@ let create_phrase_constant_of_record_col (r : Value.t) (key : string) =
 
 let create_phrase_not (arg : phrase) = 
     `FnAppl (create_phrase_var "not", [arg]), Sugartypes.dummy_position
+
+let create_phrase_tuple (arg : phrase) =
+    `TupleLit [arg], Sugartypes.dummy_position
 
 (*let calculate_predicate (expr : phrase) pred = 
     (* let _ = Debug.print (construct_query expr) in

@@ -196,7 +196,20 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
                 | -1 -> [(t,m)]
                 | 0 -> [(t,m)]
                 | +1 -> 
-                    let query_phrase = create_phrase_and (create_phrase_not pred) (pred) in
+                    let fds = get_lens_sort_fn_deps sort in
+                    let gen_equals = fun fd ->
+                        create_phrase_equal (create_phrase_var fd) (create_phrase_constant_of_record_col t fd) in
+                    let gen_pred = fun fd -> 
+                        let key = fd_left fd in
+                        let closure = get_fd_transitive_closure key fds in
+                        let closure = List.map (fun a -> (a,get_record_val a t)) closure in
+                        let keyCheck = List.fold_left (fun a fd -> create_phrase_and a (gen_equals fd)) (gen_equals (List.hd key)) (List.tl key) in
+                        let predCheck = replace_var pred closure in
+                            create_phrase_tuple (create_phrase_and keyCheck predCheck) in
+                    let upd_pred = List.fold_left (fun a fd -> create_phrase_or a (gen_pred fd)) (gen_pred (List.hd fds)) (List.tl fds) in
+                    let query_phrase = create_phrase_and (create_phrase_not pred) (create_phrase_tuple upd_pred) in
+                    (* let _ = Debug.print (construct_query query_phrase) in
+                    let _ = debug_print_fd_tree (get_fd_tree fds) in *)
                     let others = lens_get (`LensSelect (l, query_phrase, sort)) None in
                     let others = List.map (fun x -> (x,-1)) (unbox_list others) in
                     let _ = Debug.print (string_of_int (List.length others)) in
