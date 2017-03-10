@@ -2017,13 +2017,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let lens = tc lens
            and default = tc default in
            let lens_sort = match typ lens with `Lens (fds, cond, r) -> 
-               try (fds, cond, LensHelpers.remove_record_type_column drop r)
+               try (fds, cond, LensRecordHelpers.remove_record_type_column drop r)
                  with NotFound _ -> Gripers.die pos ("There is no column with name " ^ drop ^ " in the underlying lens.") in
              `LensDropLit (erase lens, drop, key, erase default, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages lens; usages default]
         | `LensSelectLit (lens, predicate, _) ->
            let lens = tc lens
            (* and predicate = tc predicate *) in
-           let _ = LensQueryHelper.calculate_predicate predicate lens in
+           (* let _ = LensQueryHelpers.calculate_predicate predicate lens in *)
            let lens_sort = LensHelpers.get_lens_type_sort (typ lens) in
                `LensSelectLit(erase lens, predicate, Some (lens_sort)), `Lens(lens_sort), merge_usages [usages lens]
         | `LensJoinLit (lens1, lens2, on, _) ->

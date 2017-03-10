@@ -87,7 +87,8 @@ SOURCES = $(OPC)                                \
 					requestData.mli requestData.ml        \
           value.mli value.ml                    \
           lensFDHelpers.ml                       \
-          lensQueryHelper.ml                   \
+          lensRecordHelpers.ml                   \
+          lensQueryHelpers.ml                   \
 		      lensHelpers.ml						                \
           eventHandlers.mli eventHandlers.ml    \
           xmlParser.mly xmlLexer.mll            \

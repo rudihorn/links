@@ -148,7 +148,7 @@ sig
 
   val lens_drop_handle : value sem * string * string * value sem * Types.lens_sort -> tail_computation sem
 
-  val lens_select_handle : value sem * value sem * Types.lens_sort -> tail_computation sem
+  val lens_select_handle : value sem * Sugartypes.phrase * Types.lens_sort -> tail_computation sem
 
   val lens_join_handle : value sem * value sem * string list * Types.lens_sort -> tail_computation sem
 
@@ -478,9 +478,7 @@ struct
   let lens_select_handle (lens, pred, sort) = 
       bind lens
         (fun lens ->
-            bind pred 
-            (fun pred -> 
-               lift (`Special (`LensSelect (lens, pred, sort)), `Lens (sort))))
+           lift (`Special (`LensSelect (lens, pred, sort)), `Lens (sort)))
 
   let lens_join_handle (lens1, lens2, on, sort) =
       bind lens1 
@@ -860,7 +858,6 @@ struct
                 I.lens_drop_handle (lens, drop, key, default, t)
           | `LensSelectLit (lens, pred, Some t) ->
               let lens = ev lens in
-              let pred = ev pred in
                 I.lens_select_handle (lens, pred, t)
           | `LensJoinLit (lens1, lens2, on, Some t) ->
               let lens1 = ev lens1 in

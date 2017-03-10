@@ -239,7 +239,7 @@ and t = [
 | `Lens of table * Types.lens_sort
 | `LensMem of t * Types.lens_sort
 | `LensDrop of t * string * string * t * Types.lens_sort
-| `LensSelect of t * t * Types.lens_sort
+| `LensSelect of t * Sugartypes.phrase * Types.lens_sort
 | `LensJoin of t * t * string list * Types.lens_sort
 | `Record of (string * t) list
 | `Variant of string * t
@@ -480,7 +480,7 @@ and string_of_value : t -> string = function
   | `Lens (_, _) -> "(lens)"
   | `LensMem (_, _) -> "(lens)" 
   | `LensDrop (lens, dr, key, def, typ) -> "(lensdrop " ^ dr ^ " determined by " ^ key ^ " default " ^ string_of_value def ^ " from " ^ string_of_value lens
-  | `LensSelect (lens, pred, sort) -> "(lensselect " ^ string_of_value lens ^ " where " ^ string_of_value pred ^ ")"
+  | `LensSelect (lens, pred, sort) -> "(lensselect " ^ string_of_value lens ^ ")"
   | `LensJoin (lens1, lens2, on, sort) -> "(lensjoin " ^ string_of_value lens1 ^ " with " ^ string_of_value lens2 ^ ")"
 and string_of_primitive : primitive_value -> string = function
   | `Bool value -> string_of_bool value

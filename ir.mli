@@ -78,7 +78,7 @@ and special =
   | `Database of value
   | `Lens of value * Types.lens_sort
   | `LensDrop of value * string * string * value* Types.lens_sort
-  | `LensSelect of value * value * Types.lens_sort
+  | `LensSelect of value * Sugartypes.phrase * Types.lens_sort
   | `LensJoin of value * value * string list * Types.lens_sort
   | `LensGet of value * Types.datatype
   | `LensPut of value * value * Types.datatype

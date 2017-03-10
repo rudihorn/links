@@ -8,6 +8,7 @@
         },
         {
             "taskName": "build",
+            "command": "make",
             "problemMatcher": {
                 "fileLocation":"relative",
                 "owner": "ocaml",

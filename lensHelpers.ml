@@ -2,8 +2,22 @@ open Types
 open Utility
 open Value
 open LensFDHelpers
+open LensQueryHelpers
+open LensRecordHelpers
 
 (* Helper methods *)
+
+let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
+    fn_dep
+
+let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = rowType
+
+let get_lens_sort_cols_list (sort : Types.lens_sort) : string list = 
+    let rowType = get_lens_sort_row_type sort in
+    let cols = get_rowtype_cols rowType in
+    let colsList = StringMap.to_list (fun k v -> k) cols in
+        colsList
+
 let get_lens_type_sort (t : Types.typ) =
     match t with
     | `Lens sort -> sort
@@ -18,136 +32,6 @@ let get_lens_sort (v : Value.t) =
     | `LensJoin (lens1, lens2, on, sort) -> sort
     | e -> failwith "Did not match a lens value (get_lens_sort)."
 
-let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
-    fn_dep
-
-let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = rowType
-
-let get_rowtype_cols (rowType : Types.typ) = 
-    match rowType with 
-    | `Record (fields, row_var, dual) -> fields 
-    | e -> failwith "Expected a record."
-
-let get_lens_sort_cols_list (sort : Types.lens_sort) : string list = 
-    let rowType = get_lens_sort_row_type sort in
-    let cols = get_rowtype_cols rowType in
-    let colsList = StringMap.to_list (fun k v -> k) cols in
-        colsList
-
-let remove_list_values (l : string list) (remove : string list) = 
-    List.filter (fun x -> not (List.mem x remove)) l
-
-let update_rowtype_cols (cols : Types.field_spec_map) (rowType : Types.typ) =
-    match rowType with 
-    | `Record (_, row_var, dual) -> `Record (cols, row_var, dual)
-    | e -> failwith "Expected a record."
-
-let try_find p l = try Some (List.find p l) with Not_found -> None | NotFound _ -> None
-
-let get_record_val (key : string) (r : Value.t) = 
-    let columns = unbox_record r in
-    let (_, value) = List.find (fun (name, value) -> name = key) columns in
-    value
-
-let records_equal recA recB =
-    (* this function checks that every entry in recA is equal in recB *)
-    not (List.exists (fun (name, value) -> get_record_val name recB <> value) (unbox_record recA))
-
-let contains_record (recA : Value.t) (recordsB : Value.t) =
-    let recordsB = unbox_list recordsB in
-    List.exists (fun recB -> records_equal recA recB) recordsB
-
-    (* Drop related methods *)
-let remove_record_type_column (a : string) (r : typ) =
-    let fields = get_rowtype_cols r in
-    let (entry, fields) = StringMap.pop a fields in
-        update_rowtype_cols fields r
-
-let drop_record_columns (a : string list) (record : Value.t) =
-    let columns = List.filter (fun (name, _) -> not (List.mem name a)) (unbox_record record) in
-        box_record columns
-
-let drop_records_columns (a : string list) (records : Value.t) =
-    let records = unbox_list records in
-    let records = List.map (drop_record_columns a) records in
-        box_list records
-
-let drop_record_column (a : string) (record : Value.t) =
-    drop_record_columns [a] record
-
-let join_records (m : Value.t) (n : Value.t) (on : string list) = 
-    let n = drop_record_columns on n in
-    let out = List.append (unbox_record m) (unbox_record n) in
-        box_record out
-
-let restore_column (drop : string) (key : string) (default : Value.t) (row : Value.t) (records : Value.t) =
-    let unb_records = unbox_list records in
-    let record = try_find (fun x -> records_equal (drop_record_column drop x)  row) unb_records in
-    match record with
-    | Some r -> r
-    | None -> 
-        let keyVal = get_record_val key row in 
-        let record = try_find (fun x -> get_record_val key x = keyVal) unb_records in
-        let dropVal = match record with
-        | Some r -> get_record_val drop r
-        | None -> default in
-        box_record ((drop, dropVal) :: unbox_record row) 
-
-(* record revision *)
-
-let apply_fd_update (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : Value.t =
-    (* update all columns from the right side of the functional dependency fd 
-       in m with the value from n  *)
-    (* assume we know that n and m have the same values for columns in left(fd) *)
-    let n_cols = unbox_record n in
-    let m_cols = List.map (fun (k, v) -> 
-            if List.exists (fun a -> a = k) (fd_right fd) then
-                let _, n_v = List.find (fun (n_k, _) -> n_k = k) n_cols in
-                k, n_v
-            else
-                k, v
-        ) (unbox_record m) in
-        box_record m_cols
-
-let is_row_cols_record_match (m : Value.t) (n : Value.t) (cols : string list) : bool =
-    (* determines wether the records m and n have the same values for the columns in cols *)
-    (* check if all columns in left(fd) match *)
-    let is_match = 
-        List.for_all (fun col -> 
-            try 
-                let n_v = get_record_val col m in
-                let m_v = get_record_val col n in
-                    n_v = m_v
-            with NotFound _ -> false 
-        ) cols in
-    is_match
-
-let is_fd_record_match (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool =
-    (* checks wether two records m and n match w.r.t. the functional dependency fd *)
-    is_row_cols_record_match m n (fd_left fd)
-
-let apply_fd_record_row_revision (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool * Value.t =
-   (* first check if the two records match w.r.t. the given functional dependency fd and if so apply the updates
-      from record n to record m, otherwise return m unchanged *)
-    if is_fd_record_match m n fd then
-        (* if so apply fd update *)
-        true, apply_fd_update m n fd
-    else
-        (* otherwise return record unchanged *)
-        false, m
-
-let apply_fd_record_revision (m : Value.t) (n : Value.t) (fds : Types.fn_dep list) : bool * Value.t =
-    (* m of `Record and n of `List `Record *)
-    List.fold_right (fun nrow (upd, mrow) ->
-            List.fold_right (fun fd (upd, mrow) ->
-                let upd_t, mrow = apply_fd_record_row_revision mrow nrow fd in
-                upd_t || upd, mrow
-            ) fds (upd, mrow)
-    ) (unbox_list n) (false, m) 
-
-
-(* get / put operations *)
-
 let rec is_memory_lens (lens : Value.t) =
     match lens with
     | `Lens _ -> false
@@ -156,6 +40,8 @@ let rec is_memory_lens (lens : Value.t) =
     | `LensSelect (lens, pred, sort) -> is_memory_lens lens
     | `LensJoin (lens1, lens2, on, sort) -> is_memory_lens lens1 || is_memory_lens lens2
     | _ -> failwith ("Unknown lens (is_memory_lens) :" ^ (string_of_value lens))
+
+(* get / put operations *)
 
 let rec lens_get_mem (lens : Value.t) callfn =
     match lens with
@@ -167,7 +53,7 @@ let rec lens_get_mem (lens : Value.t) callfn =
           `List result
     | `LensSelect (lens, pred, sort) ->
         let records = lens_get_mem lens callfn in
-        let res = List.filter (fun x -> unbox_bool (callfn pred [x])) (unbox_list records) in 
+        let res = List.filter (fun x -> unbox_bool (calculate_predicate_rec pred x)) (unbox_list records) in 
            box_list res
     | `LensJoin (lens1, lens2, on, sort) ->
         let records1 = lens_get_mem lens1 callfn in
@@ -229,12 +115,12 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             let output = ref [] in
             let _ = List.map (fun r -> 
                 (* if the record matches P remove it *)
-                if not (unbox_bool (callfn pred [r])) then
+                if not (unbox_bool (calculate_predicate_rec pred r)) then
                     begin
                         let upd, r = apply_fd_record_revision r data (get_lens_sort_fn_deps sort) in
                         if upd then
                             begin
-                                if not (unbox_bool (callfn pred[r])) then
+                                if not (unbox_bool (calculate_predicate_rec pred r)) then
                                     mark_found_records r arrData
                             end
                         else
@@ -276,7 +162,53 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
                 box_record (["t1", rec1; "t2", rec2])
     | _ -> failwith "Not a lens."
 
-let rec lens_put (lens : Value.t) (data : Value.t) callfn =
+let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
+    match lens with 
+    | `Lens _ -> data
+    | `LensMem _ -> data
+    | `LensDrop (l, drop, key, def, rtype) ->
+            let query_phrase = fun t key -> create_phrase_equal (create_phrase_var key) (create_phrase_constant_of_record_col t key) in
+            let data = List.map (fun (t,m) -> 
+                    let col = lens_get (`LensSelect (l, query_phrase t key, get_lens_sort(lens))) None in
+                    let t = unbox_record t in
+                    let t = match unbox_list col with
+                    | [] -> box_record ((drop, def) :: t)
+                    | x :: xs -> box_record ((drop, get_record_val drop x) :: t) in
+                    t,m
+                ) data in
+                lens_delta_put_ex l data 
+    | `LensSelect (l, pred, sort) ->
+            let data = List.map (fun (t,m) ->
+                match m with
+                | -1 -> [(t,m)]
+                | 0 -> [(t,m)]
+                | +1 -> 
+                    let query_phrase = create_phrase_and (create_phrase_not pred) (pred) in
+                    let others = lens_get (`LensSelect (l, query_phrase, sort)) None in
+                    let others = List.map (fun x -> (x,-1)) (unbox_list others) in
+                    let _ = Debug.print (string_of_int (List.length others)) in
+                    (t,m) :: others
+                | _ -> failwith "Unexpected multiplicity"
+            ) data in
+            let data = List.flatten data in
+            lens_delta_put_ex l data
+    | _ -> failwith "Not a lens."
+
+let lens_debug_delta (delta : (Value.t * int) list) = 
+    List.map (fun (t,m) -> Debug.print (string_of_int m ^ ": " ^ string_of_value t)) delta
+
+let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
+    let dataOrig = unbox_list dataOrig in
+    let data = unbox_list data in
+    let delta = List.map (fun t -> if List.exists (records_equal t) dataOrig then (t,0) else (t,1)) data in
+    let deltaRemoved = List.filter (fun t -> not (List.exists (records_equal t) data)) dataOrig in
+    let delta = List.append delta (List.map (fun t -> (t,-1)) deltaRemoved) in
+    let _ = Debug.print "Input delta: "; lens_debug_delta delta in
+    lens_delta_put_ex lens delta
+
+  let rec lens_put (lens : Value.t) (data : Value.t) callfn =
+    let delta = lens_delta_put lens (lens_get lens callfn) data in
+    let _ = Debug.print "Put res: "; lens_debug_delta delta in
     if is_memory_lens lens then
         lens_put_mem lens data callfn 
     else
