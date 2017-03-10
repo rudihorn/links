@@ -36,7 +36,12 @@ let rec calculate_predicate (expr : phrase) (get_val : string -> Value.t) =
     let expr, pos = expr in
     match expr with
     | `Constant c -> value_of_constant c
-    | `Var v -> get_val v
+    | `Var v -> 
+        begin
+            try
+                get_val v
+            with NotFound _ -> failwith ("Could not find column " ^ v ^ ".")
+        end
     | `InfixAppl ((_, op), a1, a2) -> 
         let a1 = calculate_predicate a1 get_val in
         let a2 = calculate_predicate a2 get_val in

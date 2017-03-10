@@ -42,6 +42,17 @@ let get_fd_tree (fds : Types.fn_dep list) =
     let rootFDNode = get_fd_subnodes root fds in
         rootFDNode
 
+let get_fd_transitive_closure (key : string list) (fds : Types.fn_dep list)=
+    let rec get = fun attrs ->
+       let newAttrs = List.filter (fun fd ->
+            contains_all attrs (fd_left fd)) fds in
+       let newAttrs = List.flatten (List.map fd_right newAttrs) in
+       if List.length newAttrs > List.length attrs then
+            get newAttrs
+        else
+            attrs in
+    get key
+
 let rec print_list (l : string list) (out : string -> unit) =
     match l with
     | x :: [] -> out x

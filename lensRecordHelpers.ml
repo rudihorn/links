@@ -29,6 +29,10 @@ let records_equal recA recB =
     (* this function checks that every entry in recA is equal in recB *)
     not (List.exists (fun (name, value) -> get_record_val name recB <> value) (unbox_record recA))
 
+let records_match_on recA recB on =
+    List.for_all (fun col ->
+        get_record_val col recA = get_record_val col recB) on
+
 let contains_record (recA : Value.t) (recordsB : Value.t) =
     let recordsB = unbox_list recordsB in
     List.exists (fun recB -> records_equal recA recB) recordsB

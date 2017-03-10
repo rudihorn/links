@@ -162,10 +162,23 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
                 box_record (["t1", rec1; "t2", rec2])
     | _ -> failwith "Not a lens."
 
+type delete_side = [
+    | `Left
+    | `Any
+    | `Right
+    | `Both
+]
+
+let lens_debug_delta (delta : (Value.t * int) list) = 
+    List.map (fun (t,m) -> Debug.print (string_of_int m ^ ": " ^ string_of_value t)) delta
+
 let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
     match lens with 
-    | `Lens _ -> data
-    | `LensMem _ -> data
+    | `Lens _ -> 
+        let _ = lens_debug_delta data in data 
+    | `LensMem _ -> 
+        let _ = Debug.print "Put Lens Data:" in 
+        let _ = lens_debug_delta data in data
     | `LensDrop (l, drop, key, def, rtype) ->
             let query_phrase = fun t key -> create_phrase_equal (create_phrase_var key) (create_phrase_constant_of_record_col t key) in
             let data = List.map (fun (t,m) -> 
@@ -192,10 +205,34 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
             ) data in
             let data = List.flatten data in
             lens_delta_put_ex l data
+    | `LensJoin (l1, l2, on, sort) ->
+        let t3 = List.map (fun (t,m) -> 
+            let recs : (Value.t * int * delete_side) list =  
+                match m with
+                | -1 -> [if (List.exists (fun (t1,m1) -> m >= 0 && records_match_on t t1 on)  data) then (t, m, `Right) else (t, m, `Any)]
+                | 0 -> [(t,m,`Both)]
+                | 1 -> [if (List.exists (fun (t1, m1) -> m = 0 && records_match_on t t1 on) data) then (t,m, `Right) else (t, m, `Both)]
+                | _ -> failwith ("Unexpected multiplicity") in
+            recs
+        ) data in
+        let project_lens = (fun l t -> 
+            let l_sort = get_lens_sort l in
+            let l_cols = get_lens_sort_cols_list l_sort in
+            let rem_cols = remove_list_values (get_lens_sort_cols_list sort) l_cols in
+            List.map (fun (row,t) -> drop_record_columns rem_cols row,t) t
+            ) in
+        let t3 = List.flatten t3 in
+        let t1 = List.filter (fun (t,m,s) -> s = `Left || s = `Both || (s = `Any)) t3 in
+        let t1 = List.map (fun (t,m,s) -> (t,m)) t1 in
+        let t1 = project_lens l1 t1 in
+        let t2 = List.filter (fun (t,m,s) -> s = `Right || s = `Both || (s = `Any && false)) t3 in
+        let t2 = List.map (fun (t,m,s) -> (t,m)) t2 in
+        let t2 = project_lens l2 t2 in
+        let t2 = List.sort_uniq (fun (r1,m1) (r2,m2) -> if (records_equal r1 r2) then 0 else 1) t2 in
+        let t1 = lens_delta_put_ex  l1 t1 in
+        let t2 = lens_delta_put_ex l2 t2 in
+        t2
     | _ -> failwith "Not a lens."
-
-let lens_debug_delta (delta : (Value.t * int) list) = 
-    List.map (fun (t,m) -> Debug.print (string_of_int m ^ ": " ^ string_of_value t)) delta
 
 let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
     let dataOrig = unbox_list dataOrig in
@@ -208,7 +245,6 @@ let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
 
   let rec lens_put (lens : Value.t) (data : Value.t) callfn =
     let delta = lens_delta_put lens (lens_get lens callfn) data in
-    let _ = Debug.print "Put res: "; lens_debug_delta delta in
     if is_memory_lens lens then
         lens_put_mem lens data callfn 
     else
