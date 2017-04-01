@@ -6,17 +6,6 @@ open LensQueryHelpers
 open LensRecordHelpers
 
 (* Helper methods *)
-
-let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
-    fn_dep
-
-let get_lens_sort_cols (_, _, rowType : Types.lens_sort) = 
-  rowType
-
-let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = 
-  let map : field_spec_map = List.fold_left (fun a (table, col, alias, typ) -> StringMap.add alias (`Present typ) a) StringMap.empty rowType in
-  `Record (map, Unionfind.fresh `Closed, false)
-
 let get_record_type_sort_cols (tableName : string) (typ : Types.typ) = 
   let cols = get_rowtype_cols typ in
   let cols = StringMap.to_list (fun k v -> (tableName, k, k, LensRecordHelpers.get_field_spec_type v)) cols in
@@ -306,11 +295,39 @@ let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fn_dep list 
     [get_fd (get_phrase_columns key) rowType]
 
 let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Sugartypes.phrase) = 
-    let on_colums = get_phrase_columns key in
-    let cols1 = get_rowtype_cols (get_lens_sort_row_type sort1) in
+    let on_columns = get_phrase_columns key in
+    let get_alias = get_lens_col_alias in
+    let get_type = get_lens_col_type in
+    let rec get_new_alias alias columns num = 
+        let nal = alias ^ "_" ^ string_of_int num in
+        if List.exists (fun c -> get_alias c = nal) columns then
+            get_new_alias alias columns (num + 1)
+        else 
+            nal in
+    let on_match = List.for_all (fun onc -> 
+            let c2 = get_lens_sort_col_by_alias sort2 onc in
+            let c1 = get_lens_sort_col_by_alias sort1 onc in
+            match c1, c2 with
+            | Some c1, Some c2 -> get_type c1 = get_type c2
+            | _ -> false) on_columns in
+    if on_match then
+        let union = List.fold_left (fun  output c-> 
+            let c2 = get_lens_col_by_alias output (get_alias c) in
+            match c2 with 
+            | None -> c :: output
+            | Some c2 -> 
+                let is_on = List.mem (get_alias c) on_columns in
+                if is_on then
+                    output
+                else 
+                    (set_lens_col_alias c (get_new_alias (get_alias c) output 1)) :: output
+        ) (get_lens_sort_cols sort1) (get_lens_sort_cols sort2) in
+        let fn_deps = List.append (get_lens_sort_fn_deps sort1) (get_lens_sort_fn_deps sort2) in
+        (fn_deps, "", union)
+     else 
+        failwith "The key does not match between the two lenses."
 
-
-let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Sugartypes.phrase) = 
+(* let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Sugartypes.phrase) = 
     let on_columns = get_phrase_columns key in
     let cols1 = get_rowtype_cols (get_lens_sort_row_type sort1) in
     let cols2 = get_rowtype_cols (get_lens_sort_row_type sort2) in
@@ -322,3 +339,4 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Su
             (fn_deps, "", rowType)
     else
         failwith "The key does not match between the two lenses."
+*)

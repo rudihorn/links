@@ -2038,12 +2038,14 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                `LensJoinLit (erase lens1, erase lens2, on, Some sort), `Lens(sort), merge_usages [usages lens1; usages lens2]
         | `LensGetLit (lens, _) ->
            let lens = tc lens in
-           let trowtype = match typ lens with `Lens(fds, cond, r) -> r in
+           let sort = LensHelpers.get_lens_type_sort (typ lens) in
+           let trowtype = LensRecordHelpers.get_lens_sort_row_type sort in
            `LensGetLit (erase lens, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens]
         | `LensPutLit (lens, data, _) ->
            let lens = tc lens in 
+           let sort = LensHelpers.get_lens_type_sort (typ lens) in
+           let trowtype = LensRecordHelpers.get_lens_sort_row_type sort in
            let data = tc data in
-           let trowtype = match typ lens with `Lens(fds, cond, r) -> r in
            `LensPutLit (erase lens, erase data, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens; usages data]
         | `DBDelete (pat, from, where) ->
             let pat  = tpc pat in

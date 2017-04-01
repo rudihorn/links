@@ -439,13 +439,13 @@ struct
   and special env cont : Ir.special -> Proc.thread_result Lwt.t = function
     | `Wrong _                    -> raise Wrong
     | `Database v                 -> apply_cont cont env (`Database (db_connect (value env v)))
-    | `Lens (table, lens_sort) -> 
+    | `Lens (table, sort) -> 
       begin
-          let (_, _, typ) = lens_sort in
+          let typ = LensRecordHelpers.get_lens_sort_row_type sort in
           match value env table, (TypeUtils.concrete_type typ) with 
-            | `Table tinfo, `Record row ->
-                 apply_cont cont env (`Lens (tinfo, lens_sort))
-            | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, lens_sort))
+            | `Table ((_, tableName, _, _) as tinfo), `Record row ->
+                 apply_cont cont env (`Lens (tinfo, LensRecordHelpers.set_lens_sort_table_name sort tableName))
+            | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, sort))
       end
     | `LensDrop (lens, drop, key, def, sort) as le -> 
         let lens = value env lens in 
