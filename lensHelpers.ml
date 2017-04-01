@@ -10,7 +10,17 @@ open LensRecordHelpers
 let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
     fn_dep
 
-let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = rowType
+let get_lens_sort_cols (_, _, rowType : Types.lens_sort) = 
+  rowType
+
+let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = 
+  let map : field_spec_map = List.fold_left (fun a (table, col, alias, typ) -> StringMap.add alias (`Present typ) a) StringMap.empty rowType in
+  `Record (map, Unionfind.fresh `Closed, false)
+
+let get_record_type_sort_cols (tableName : string) (typ : Types.typ) = 
+  let cols = get_rowtype_cols typ in
+  let cols = StringMap.to_list (fun k v -> (tableName, k, k, LensRecordHelpers.get_field_spec_type v)) cols in
+  cols
 
 let get_lens_sort_cols_list (sort : Types.lens_sort) : string list = 
     let rowType = get_lens_sort_row_type sort in
@@ -64,6 +74,11 @@ let rec lens_get_mem (lens : Value.t) callfn =
         ) (unbox_list records1) in
         box_list (List.concat output)
     | _ -> failwith "Not a lens."
+
+
+let rec lens_get_query (lens : Value.t) =
+  match lens with
+  | `Lens (table, sort) -> get_lens_sort_row_type sort
 
 let rec lens_get (lens : Value.t) callfn =
     if is_memory_lens lens then
@@ -289,6 +304,11 @@ let get_phrase_columns (key : Sugartypes.phrase) : string list =
 
 let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fn_dep list =
     [get_fd (get_phrase_columns key) rowType]
+
+let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Sugartypes.phrase) = 
+    let on_colums = get_phrase_columns key in
+    let cols1 = get_rowtype_cols (get_lens_sort_row_type sort1) in
+
 
 let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Sugartypes.phrase) = 
     let on_columns = get_phrase_columns key in

@@ -4,6 +4,7 @@ open Value
 open LensFDHelpers
 
 
+let get_lens_col_alias (_, _, alias, _ : Types.lens_col) = alias
 
 let get_rowtype_cols (rowType : Types.typ) = 
     match rowType with 
@@ -24,6 +25,11 @@ let get_record_val (key : string) (r : Value.t) =
     let columns = unbox_record r in
     let (_, value) = List.find (fun (name, value) -> name = key) columns in
     value
+      
+let get_field_spec_type (typ : Types.field_spec) = 
+    match typ with
+    | `Present t -> t
+    | _ -> failwith "Expected `Present"
 
 let records_equal recA recB =
     (* this function checks that every entry in recA is equal in recB *)
@@ -38,10 +44,9 @@ let contains_record (recA : Value.t) (recordsB : Value.t) =
     List.exists (fun recB -> records_equal recA recB) recordsB
 
 (* Drop related methods *)
-let remove_record_type_column (a : string) (r : typ) =
-    let fields = get_rowtype_cols r in
-    let (entry, fields) = StringMap.pop a fields in
-        update_rowtype_cols fields r
+let remove_record_type_column (a : string) (r : Types.lens_col list) =
+    let fields = List.filter (fun col -> get_lens_col_alias col = a) r in
+    fields
 
 let drop_record_columns (a : string list) (record : Value.t) =
     let columns = List.filter (fun (name, _) -> not (List.mem name a)) (unbox_record record) in

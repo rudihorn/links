@@ -1271,7 +1271,8 @@ let rec close_pattern_type : pattern list -> Types.datatype -> Types.datatype = 
                   List.nth ps i
               | `Nil | `Cons _ | `List _ | `Record _ | `Variant _ | `Negative _ -> assert false in
           let fields =
-            StringMap.fold
+            StringMap.fold(* true if the row variable is dualised *)
+
               (fun name ->
                  function
                    | `Present t ->
@@ -1999,7 +2000,8 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                  | `Table (r,_,_) -> r
                  | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
-           let lens_sort = ([], "", trowtype) in
+           let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
+           let lens_sort = ([], "", tcols) in
            `LensLit(erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensKeysLit (table, keys, _) ->
            let table = tc table in
@@ -2010,8 +2012,9 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                  | `Table (r,_,_) -> r
                  | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
+           let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
            let fds = LensHelpers.get_fds keys trowtype in
-           let lens_sort = (fds, "", trowtype) in
+           let lens_sort = (fds, "", tcols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
            let lens = tc lens

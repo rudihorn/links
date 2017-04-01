@@ -5,6 +5,16 @@ open Value
 open LensRecordHelpers
 
 
+type select_query = (string * string) list * (string * string) list * phrase
+                    
+let get_select_query_tables (tables, _, _) = tables
+
+let get_select_query_columns (_, cols, _) = cols
+
+let get_select_query_expr (_, _, expr) = expr
+
+
+
 let value_of_constant : Constant.constant -> Value.t  = function
     | `Int a -> `Int a
     | `Float f -> `Float f
@@ -66,16 +76,42 @@ let rec calculate_predicate (expr : phrase) (get_val : string -> Value.t) =
         end
     | _ -> failwith "Unknown phrasenode for calculate_predicate."
 
-let rec construct_query (expr : phrase) =
+
+class dummy_database = object(self)
+  inherit Value.database
+  method driver_name () = "dummy"
+  method exec query : Value.dbvalue =
+    failwith "Dummy database exec not supported."
+  method escape_string str =
+    "'" ^ Str.global_replace (Str.regexp "'") "''" str ^ "'"
+  method quote_field f =
+    "`" ^ Str.global_replace (Str.regexp "`") "``" f ^ "`"
+  method! make_insert_returning_query : (string * string list * string list list * string) -> string list =
+    failwith "Dummy database make_insert_returning_query not supported"
+end
+  
+let rec construct_query_db (expr : phrase) (db : Value.database) =
     let expr, pos = expr in
+    let construct_query expr = construct_query_db expr db in
     match expr with
     | `Constant c -> Constant.string_of_constant c
-    | `Var v -> "`" ^ v ^ "`"
-    | `InfixAppl ((_, op), a1, a2) -> construct_query a1 ^ " " ^ translate_op_to_sql (string_of_binop op) ^ " " ^ construct_query a2
+    | `Var v -> db#quote_field v
+    | `InfixAppl ((_, op), a1, a2) -> construct_query a1 ^ " " ^ translate_op_to_sql (string_of_binop op) ^ " " ^ construct_query a2 
     | `TupleLit l -> "(" ^ List.fold_left (fun a b -> a ^ ", " ^ (construct_query b)) (construct_query (List.hd l)) (List.tl l)  ^ ")"
     | `UnaryAppl ((_, op), a1) ->  string_of_unary_op op ^ construct_query a1
     | `FnAppl (fn, arg) -> String.uppercase_ascii (name_of_var fn) ^ " (" ^ construct_query (List.hd arg) ^ ")"
     | _ -> failwith "durr"
+
+let construct_query (expr : phrase) =
+  construct_query_db expr (new dummy_database)
+
+let construct_select_query (query : select_query) (db : Value.database) =
+  let colFn (col, alias) = col ^ " AS " ^ alias in 
+  let cols = get_select_query_columns query in
+  let cols = List.fold_left (fun a b -> a ^ ", " ^ colFn b) (colFn (List.hd cols)) (List.tl cols) in
+  let tables = get_select_query_tables query in
+  let tables = List.fold_left (fun a b -> a ^ ", " ^ colFn b) (colFn (List.hd tables)) (List.tl tables) in
+  "SELECT " ^ cols ^ " FROM " ^ tables ^ " WHERE " ^ construct_query_db (get_select_query_expr query) db
 
 let rec replace_var (expr : phrase) (repl : (string * Value.t) list)  :  phrase=
     let expr, pos = expr in

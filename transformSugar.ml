@@ -165,7 +165,6 @@ class transform (env : Types.typing_environment) =
 
     method lens_sort : Types.lens_sort -> ('self_type * Types.lens_sort) =
       fun (fds, cond, t) ->
-        let (o, t) = o#datatype t in
             (o, (fds, cond, t))
 
     method row : Types.row -> ('self_type * Types.row) =
