@@ -85,6 +85,18 @@
                 "../mylinks/delta_lenses_test.links"
             ],
             "stopOnEntry": false
+        },
+        {
+            "name": "Delta Lenses Test 2",
+            "type": "ocamldebug",
+            "request": "launch",
+            "program": "${workspaceRoot}/links",
+            "console": "internalConsole",
+            "arguments": [
+                "--config=../mylinks/links.config",
+                "../mylinks/delta_lenses_test_2.links"
+            ],
+            "stopOnEntry": false
         }
     ]
 }

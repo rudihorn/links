@@ -1,5 +1,6 @@
 open Utility
 open Sugartypes
+open Operations
 
 (* Helper function: add a group to a list of groups *)
 let add group groups = match group with

@@ -1,5 +1,6 @@
 (*pp deriving *)
 open Utility
+open Operations 
 
 module FieldEnv = Utility.StringMap
 type 'a stringmap = 'a Utility.stringmap
@@ -125,6 +126,14 @@ type lens_delete_mode =
   | `DeleteBoth ]
       deriving (Show)
 
+type lens_phrase = 
+  [ `Constant  of Constant.constant
+  | `Var       of Operations.name 
+  | `InfixAppl of Operations.binop * lens_phrase * lens_phrase
+  | `UnaryAppl of Operations.unary_op * lens_phrase 
+  | `TupleLit  of lens_phrase list
+  ]
+      deriving (Show)
 
 type typ =
     [ `Not_typed
@@ -140,8 +149,14 @@ type typ =
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
-and lens_sort      = fn_dep list * string * (lens_col list)
-and lens_col       = string * string * string * typ
+and lens_sort     = fn_dep list * lens_phrase option * (lens_col list)
+and lens_col      = {
+  table : string;
+  name : string; 
+  alias : string;
+  typ : typ;
+  present : bool;
+} 
 and fn_dep         = string list * string list
 and field_spec     = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
@@ -1782,7 +1797,7 @@ struct
                datatype bound_vars p w ^ "," ^
                datatype bound_vars p n ^ ")"
           | `Lens (fds, cond, cols) ->  
-                let fn (_,_,al,typ) = al ^ ":" ^ datatype bound_vars p typ in 
+                let fn col = col.alias  ^ ":" ^ datatype bound_vars p col.typ in 
                 "Lens(" ^ List.fold_left (fun a b -> a ^ ", " ^ fn b) (fn (List.hd cols)) (List.tl cols) ^ ")"
           | `Alias ((s,[]), _) ->  s
           | `Alias ((s,ts), _) ->  s ^ " ("^ String.concat "," (List.map (type_arg bound_vars p) ts) ^")"

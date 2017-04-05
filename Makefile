@@ -60,8 +60,9 @@ SOURCES = $(OPC)                                \
           debug.mli debug.ml                    \
           performance.mli performance.ml        \
           graph.ml                              \
-          types.mli types.ml                    \
+          operations.ml                         \
           constant.ml                           \
+          types.mli types.ml                    \
           sourceCode.ml                         \
           regex.ml                              \
           sugartypes.ml                         \
@@ -79,17 +80,17 @@ SOURCES = $(OPC)                                \
           closures.ml                           \
           parse.mli parse.ml                    \
           sugarTraversals.mli  sugarTraversals.ml       \
-					moduleUtils.mli moduleUtils.ml \
-					chaser.mli chaser.ml \
-					desugarModules.mli desugarModules.ml \
+          moduleUtils.mli moduleUtils.ml        \
+          chaser.mli chaser.ml \
+          desugarModules.mli desugarModules.ml \
           desugarDatatypes.mli desugarDatatypes.ml      \
           defaultAliases.ml                     \
-					requestData.mli requestData.ml        \
+          requestData.mli requestData.ml        \
           value.mli value.ml                    \
-          lensFDHelpers.ml                       \
-          lensRecordHelpers.ml                   \
+          lensFDHelpers.ml                      \
+          lensRecordHelpers.ml                  \
           lensQueryHelpers.ml                   \
-		      lensHelpers.ml						                \
+          lensHelpers.ml                        \
           eventHandlers.mli eventHandlers.ml    \
           xmlParser.mly xmlLexer.mll            \
           parseXml.mli parseXml.ml              \

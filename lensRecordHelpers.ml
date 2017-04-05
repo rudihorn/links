@@ -7,34 +7,37 @@ open LensFDHelpers
 let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
     fn_dep
 
+let get_lens_sort_pred (_, pred, _ : Types.lens_sort) = pred
+
 let get_lens_sort_cols (_, _, rowType : Types.lens_sort) = 
   rowType
 
 let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = 
-  let map : field_spec_map = List.fold_left (fun a (table, col, alias, typ) -> StringMap.add alias (`Present typ) a) StringMap.empty rowType in
-  `Record (map, Unionfind.fresh `Closed, false)
+    let rowType = List.filter (fun f -> f.present) rowType in
+    let map : field_spec_map = List.fold_left (fun a col -> StringMap.add col.alias (`Present col.typ) a) StringMap.empty rowType in
+    `Record (map, Unionfind.fresh `Closed, false)
 
 let set_lens_sort_table_name (fn_dep, pred, rowType : Types.lens_sort) (table : string) =
-    let rowType = List.map (fun (_, name, alias, typ) -> (table, name, alias, typ)) rowType in
+    let rowType = List.map (fun c -> {c with table = table;}) rowType in
     (fn_dep, pred, rowType)
 
 let get_lens_col_by_alias (cols : lens_col list) alias =
     try 
-        Some (List.find (fun (_,_,alias2,_) -> alias2 = alias) cols) 
+        Some (List.find (fun col -> col.alias = alias) cols) 
     with 
-        Not_found _ -> None
+        NotFound _ -> None
 
 let get_lens_sort_col_by_alias sort alias = 
     let cols = get_lens_sort_cols sort in
     get_lens_col_by_alias cols alias
 
-let get_lens_col_type (_, _, _, typ : Types.lens_col) = typ
+let get_lens_col_type (col : Types.lens_col) = col.typ
 
-let get_lens_col_alias (_, _, alias, _ : Types.lens_col) = alias
+let get_lens_col_alias (col : Types.lens_col) = col.alias
 
-let set_lens_col_alias (table, name, _, typ : Types.lens_col) (new_alias : string) = (table, name, new_alias, typ)
+let set_lens_col_alias (col : Types.lens_col) (new_alias : string) = { col with alias = new_alias; }
 
-let match_lens_col_alias (c1 : lens_col) (c2 : lens_col) = get_lens_col_alias c1 = get_lens_col_alias c2
+let match_lens_col_alias (c1 : lens_col) (c2 : lens_col) = c1.alias = c2.alias
 
 let get_rowtype_cols (rowType : Types.typ) = 
     match rowType with 

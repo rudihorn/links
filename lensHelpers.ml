@@ -8,7 +8,7 @@ open LensRecordHelpers
 (* Helper methods *)
 let get_record_type_sort_cols (tableName : string) (typ : Types.typ) = 
   let cols = get_rowtype_cols typ in
-  let cols = StringMap.to_list (fun k v -> (tableName, k, k, LensRecordHelpers.get_field_spec_type v)) cols in
+  let cols = StringMap.to_list (fun k v -> {table = tableName; name = k; alias = k; typ = get_field_spec_type v; present = true;}) cols in
   cols
 
 let get_lens_sort_cols_list (sort : Types.lens_sort) : string list = 
@@ -67,20 +67,55 @@ let rec lens_get_mem (lens : Value.t) callfn =
 
 let rec lens_get_query (lens : Value.t) =
   match lens with
-  | `Lens (table, sort) -> get_lens_sort_row_type sort
+  | `Lens (((db, _), table, _, _), sort) -> 
+        let cols = get_lens_sort_cols sort in
+        {
+            tables = [table, table];
+            cols = cols;
+            pred = None;
+            db = db;
+        }
+  | `LensSelect (lens, pred, sort) ->
+        let query = lens_get_query lens in
+        { query with pred = Some pred }
+        (* get_lens_sort_row_type sort *)
+  | `LensJoin (lens1, lens2, on, sort) ->
+        let q1 = lens_get_query lens1 in
+        let q2 = lens_get_query lens2 in
+        (* all table names must be unique, rename them *)
+        let tables2 = List.map (fun (n2, al2) -> 
+            try 
+                let tbl = List.find (fun (n1,al1) -> n1 = n2) q1.tables in
+                failwith "Cannot reuse a table twice in a join query!"
+            with
+                NotFound _ -> (n2, al2)
+        ) q2.tables in
+        let tables = List.append q1.tables q2.tables in
+        let cols = get_lens_sort_cols sort in
+        if (q1.db <> q2.db) then
+            failwith "Only single database expressions supported."
+        else
+            {tables = tables; cols = cols; pred = get_lens_sort_pred sort; db = q1.db}
+  | _ -> failwith "Unsupported lens for query"
 
+(* BUG: Lists can be too big for List.map; need to be careful about recursion *)
 let rec lens_get (lens : Value.t) callfn =
     if is_memory_lens lens then
         lens_get_mem lens callfn 
     else
-        box_list [] 
+        let _ = Debug.print "getting tables" in
+        let query = lens_get_query lens in
+        let sql = construct_select_query query  in
+        let mappings = List.map (fun c -> get_lens_col_alias c, get_lens_col_type c) query.cols in
+        let res = execute_select mappings sql query.db in
+        let _ = Debug.print sql in
+        res
 
 let mark_found_records (n : Value.t) (data : (Value.t * bool) array) : unit = 
     Array.iteri (fun i (row, marked) -> 
         if not marked && (records_equal row n) then
             Array.set data i (row, true)
     ) data
-
 
 let apply_fd_merge_record_revision (n : Value.t) (m : Value.t) (fds : Types.fn_dep list) = 
     (* `List `Record * `List `Record * fds *)
@@ -267,7 +302,7 @@ let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
     else
         data
 
-let get_fd (keys : Sugartypes.name list) (rowType : Types.typ) : Types.fn_dep =
+let get_fd (keys : Operations.name list) (rowType : Types.typ) : Types.fn_dep =
     match rowType with `Record (fields, row_var, dual) ->
         let fields = List.fold_right (fun col columns -> StringMap.remove col columns) keys fields in
         let notkeys = StringMap.to_list (fun x y -> x) fields in
@@ -294,8 +329,15 @@ let get_phrase_columns (key : Sugartypes.phrase) : string list =
 let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fn_dep list =
     [get_fd (get_phrase_columns key) rowType]
 
-let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Sugartypes.phrase) = 
-    let on_columns = get_phrase_columns key in
+let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_sort = 
+    let (fds, oldPred, cols) = sort in
+    let pred = match oldPred with 
+    | None -> pred
+    | Some oldPred -> create_phrase_and (create_phrase_tuple pred) (create_phrase_tuple oldPred) in
+    let pred = Some pred in
+    (fds, pred, cols)
+
+let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_columns : string list) = 
     let get_alias = get_lens_col_alias in
     let get_type = get_lens_col_type in
     let rec get_new_alias alias columns num = 
@@ -311,19 +353,31 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (key : Su
             | Some c1, Some c2 -> get_type c1 = get_type c2
             | _ -> false) on_columns in
     if on_match then
-        let union = List.fold_left (fun  output c-> 
+        let union, join_renames = List.fold_left (fun (output, jrs) c-> 
             let c2 = get_lens_col_by_alias output (get_alias c) in
             match c2 with 
-            | None -> c :: output
+            | None -> c :: output, jrs
             | Some c2 -> 
+                let _ = Debug.print ("duplicate " ^ c.alias) in
                 let is_on = List.mem (get_alias c) on_columns in
                 if is_on then
-                    output
+                    let new_alias = get_new_alias c.alias output 1 in
+                    let _ = Debug.print ("alias " ^ c.alias ^ " -> " ^ new_alias) in
+                    {c with alias = new_alias; present = false;} :: output, (c.alias, new_alias) :: jrs
                 else 
-                    (set_lens_col_alias c (get_new_alias (get_alias c) output 1)) :: output
-        ) (get_lens_sort_cols sort1) (get_lens_sort_cols sort2) in
+                    (set_lens_col_alias c (get_new_alias (get_alias c) output 1)) :: output, jrs
+        ) (get_lens_sort_cols sort1, []) (get_lens_sort_cols sort2) in
+        let pred = match get_lens_sort_pred sort1, get_lens_sort_pred sort2 with
+        | None, None -> None
+        | Some p1, None -> Some p1
+        | None, Some p2 -> Some (rename_var p2 join_renames)
+        | Some p1, Some p2 -> Some (create_phrase_and (create_phrase_tuple p1) (create_phrase_tuple (rename_var p2 join_renames))) in
+        let join_pred = List.fold_left (fun pred (alias, newalias) -> 
+            let jn = create_phrase_equal (create_phrase_var alias) (create_phrase_var newalias) in
+            match pred with Some p -> Some (create_phrase_and p jn) | None -> Some jn
+        ) pred join_renames in
         let fn_deps = List.append (get_lens_sort_fn_deps sort1) (get_lens_sort_fn_deps sort2) in
-        (fn_deps, "", union)
+        (fn_deps, join_pred, union)
      else 
         failwith "The key does not match between the two lenses."
 

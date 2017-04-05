@@ -449,15 +449,21 @@ struct
       end
     | `LensDrop (lens, drop, key, def, sort) as le -> 
         let lens = value env lens in 
+        let sort = LensHelpers.get_lens_sort lens in
         let def = match value env def with #Value.primitive_value_basis as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
     | `LensSelect (lens, pred, sort) ->
         let lens = value env lens in
+        let pred = LensQueryHelpers.lens_phrase_of_phrase pred in
+        let sort = LensHelpers.get_lens_sort lens in
+        let sort = LensHelpers.select_lens_sort sort pred in
           apply_cont cont env (`LensSelect (lens, pred, sort))
     | `LensJoin (lens1, lens2, on, sort) ->
         let lens1 = value env lens1 in
         let lens2 = value env lens2 in
-          apply_cont cont env (`LensJoin (lens1, lens2, on, sort))
+        let get_sort = LensHelpers.get_lens_sort in
+        let sort = LensHelpers.join_lens_sort (get_sort lens1) (get_sort lens2) on in
+         apply_cont cont env (`LensJoin (lens1, lens2, on, sort))
     | `LensGet (lens, rtype) as le ->
         let lens = value env lens in
         let callfn = fun fnptr ps -> 

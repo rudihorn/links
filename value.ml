@@ -239,7 +239,7 @@ and t = [
 | `Lens of table * Types.lens_sort
 | `LensMem of t * Types.lens_sort
 | `LensDrop of t * string * string * t * Types.lens_sort
-| `LensSelect of t * Sugartypes.phrase * Types.lens_sort
+| `LensSelect of t * Types.lens_phrase * Types.lens_sort
 | `LensJoin of t * t * string list * Types.lens_sort
 | `Record of (string * t) list
 | `Variant of string * t

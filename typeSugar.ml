@@ -1993,7 +1993,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
         | `TableLit _ -> assert false
         | `LensLit (table, _) ->
            let table = tc table in
-           let _ = Debug.print "lens lit" in
            let trowtype = 
                begin
                  match typ table with
@@ -2001,11 +2000,10 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                  | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
            let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
-           let lens_sort = ([], "", tcols) in
+           let lens_sort = ([], None, tcols) in
            `LensLit(erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensKeysLit (table, keys, _) ->
            let table = tc table in
-           let _ = Debug.print "lens keys lit" in
            let trowtype = 
                begin
                  match typ table with
@@ -2014,7 +2012,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                end in
            let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
            let fds = LensHelpers.get_fds keys trowtype in
-           let lens_sort = (fds, "", tcols) in
+           let lens_sort = (fds, None, tcols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
            let lens = tc lens
@@ -2034,7 +2032,8 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            and lens2 = tc lens2 in
            let sort1 = LensHelpers.get_lens_type_sort (typ lens1)
            and sort2 = LensHelpers.get_lens_type_sort (typ lens2) in
-           let sort = LensHelpers.join_lens_sort sort1 sort2 on in
+           let _ = Debug.print "test" in
+           let sort = LensHelpers.join_lens_sort sort1 sort2 (LensHelpers.get_phrase_columns on) in
                `LensJoinLit (erase lens1, erase lens2, on, Some sort), `Lens(sort), merge_usages [usages lens1; usages lens2]
         | `LensGetLit (lens, _) ->
            let lens = tc lens in
@@ -2320,7 +2319,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
             and p = tc p
             and rettyp = Types.fresh_type_variable (`Any, `Any) in
               unify ~handle:Gripers.unary_apply
-                ((Sugartypes.string_of_unary_op op, opt),
+                ((Operations.string_of_unary_op op, opt),
                  no_pos (`Function (Types.make_tuple_type [typ p], context.effect_row, rettyp)));
               `UnaryAppl ((tyargs, op), erase p), rettyp, merge_usages [usages p; op_usage]
         | `InfixAppl ((_, op), l, r) ->
@@ -2329,7 +2328,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
             and r = tc r
             and rettyp = Types.fresh_type_variable (`Any, `Any) in
               unify ~handle:Gripers.infix_apply
-                ((Sugartypes.string_of_binop op, opt),
+                ((Operations.string_of_binop op, opt),
                  no_pos (`Function (Types.make_tuple_type [typ l; typ r],
                                     context.effect_row, rettyp)));
               `InfixAppl ((tyargs, op), erase l, erase r), rettyp, merge_usages [usages l; usages r; op_usages]

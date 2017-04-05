@@ -88,6 +88,15 @@ type ('t, 'r) session_type_basis =
     | `End ]
       deriving (Show)
 
+type lens_phrase = 
+  [ `Constant  of Constant.constant
+  | `Var       of Operations.name 
+  | `InfixAppl of Operations.binop * lens_phrase * lens_phrase
+  | `UnaryAppl of Operations.unary_op * lens_phrase 
+  | `TupleLit  of lens_phrase list
+  ]
+    deriving (Show)
+
 type typ =
     [ `Not_typed
     | `Primitive of primitive
@@ -102,8 +111,14 @@ type typ =
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
-and lens_sort      = fn_dep list * string * (lens_col list)
-and lens_col       = string * string * string * typ
+and lens_sort      = fn_dep list * lens_phrase option * (lens_col list)
+and lens_col       = {
+  table : string;
+  name : string; 
+  alias : string;
+  typ : typ;
+  present : bool;
+} 
 and fn_dep = string list * string list
 and field_spec = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
