@@ -41,7 +41,6 @@ type constant = Constant.constant
 
 type location = Sugartypes.location
   deriving (Show)
-
 type value =
   [ `Constant of constant
   | `Variable of var

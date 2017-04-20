@@ -26,7 +26,7 @@ let get_lens_sort (v : Value.t) =
     match v with
     | `Lens (a, sort) -> sort
     | `LensMem (a, sort) -> sort
-    | `LensDrop  (lens, drop, key, def, sort) -> sort
+    | `LensDrop (lens, drop, key, def, sort) -> sort
     | `LensSelect (lens, pred, sort) -> sort
     | `LensJoin (lens1, lens2, on, sort) -> sort
     | e -> failwith "Did not match a lens value (get_lens_sort)."
@@ -57,6 +57,7 @@ let rec lens_get_mem (lens : Value.t) callfn =
     | `LensJoin (lens1, lens2, on, sort) ->
         let records1 = lens_get_mem lens1 callfn in
         let records2 = lens_get_mem lens2 callfn in
+        let on = List.map (fun (a, _, _) -> a) on in
         let output = List.map (fun r1 -> 
             let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 on) (unbox_list records2) in
             List.map (fun r2 ->  join_records r1 r2 on) rows
@@ -172,6 +173,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
             lens_put_mem l (box_list output) callfn 
     | `LensJoin (l1, l2, on, sort) ->
+            let oldOn = List.map (fun (a, _, _) -> a) on in
             let fds = get_lens_sort_fn_deps sort in
             let _ = debug_print_fd_tree (get_fd_tree fds) in
             let sort_cols = get_lens_sort_cols_list sort in
@@ -186,13 +188,13 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             let rec2 = lens_get l2 callfn in
             let rec2 = apply_fd_merge_record_revision rec2 (drop_records_columns remcols2 data) fds in
             let removed = List.map (fun r1 ->
-                let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 on) (unbox_list rec2) in
-                let rows = List.map (fun r2 -> join_records r1 r2 on) rows in
+                let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 oldOn) (unbox_list rec2) in
+                let rows = List.map (fun r2 -> join_records r1 r2 oldOn) rows in
                 let rows = List.filter (fun r -> not (contains_record r data)) rows in
                     rows
             ) (unbox_list rec1) in
             let removed = List.concat removed in
-            let not_on_cols = remove_list_values sort_cols on in 
+            let not_on_cols = remove_list_values sort_cols oldOn in 
             let removed_left, removed_any = List.partition (fun r -> contains_record (drop_record_columns not_on_cols r) data) removed in
             let rec1 = List.filter (fun r -> not (contains_record r (box_list removed_left))) (unbox_list rec1) in
             let rec1 = lens_put_mem l1 (box_list rec1) callfn in
@@ -258,12 +260,13 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
             let data = List.flatten data in
             lens_delta_put_ex l data
     | `LensJoin (l1, l2, on, sort) ->
+        let on = List.map (fun (a,_,_) -> a) on in
         let t3 = List.map (fun (t,m) -> 
             let recs : (Value.t * int * delete_side) list =  
                 match m with
-                | -1 -> [if (List.exists (fun (t1,m1) -> m >= 0 && records_match_on t t1 on)  data) then (t, m, `Right) else (t, m, `Any)]
+                | -1 -> [if (List.exists (fun (t1,m1) -> m >= 0 && records_match_on t t1 on)  data) then (t, m, `Left) else (t, m, `Any)]
                 | 0 -> [(t,m,`Both)]
-                | 1 -> [if (List.exists (fun (t1, m1) -> m = 0 && records_match_on t t1 on) data) then (t,m, `Right) else (t, m, `Both)]
+                | 1 -> [if (List.exists (fun (t1, m1) -> m = 0 && records_match_on t t1 on) data) then (t,m, `Left) else (t, m, `Both)]
                 | _ -> failwith ("Unexpected multiplicity") in
             recs
         ) data in
@@ -377,7 +380,12 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_colum
             match pred with Some p -> Some (create_phrase_and p jn) | None -> Some jn
         ) pred join_renames in
         let fn_deps = List.append (get_lens_sort_fn_deps sort1) (get_lens_sort_fn_deps sort2) in
-        (fn_deps, join_pred, union)
+        (* determine the on column renames as a tuple (join, left, right) *)
+        let jrs = List.map (fun on -> 
+            let left = on in
+            let (_, right) = List.find (fun (a,b) -> a = on) join_renames in
+            on, left, right) on_columns in
+        (fn_deps, join_pred, union), jrs 
      else 
         failwith "The key does not match between the two lenses."
 

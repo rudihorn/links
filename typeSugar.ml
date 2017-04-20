@@ -2033,7 +2033,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let sort1 = LensHelpers.get_lens_type_sort (typ lens1)
            and sort2 = LensHelpers.get_lens_type_sort (typ lens2) in
            let _ = Debug.print "test" in
-           let sort = LensHelpers.join_lens_sort sort1 sort2 (LensHelpers.get_phrase_columns on) in
+           let sort, _ = LensHelpers.join_lens_sort sort1 sort2 (LensHelpers.get_phrase_columns on) in
                `LensJoinLit (erase lens1, erase lens2, on, Some sort), `Lens(sort), merge_usages [usages lens1; usages lens2]
         | `LensGetLit (lens, _) ->
            let lens = tc lens in

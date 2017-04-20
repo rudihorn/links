@@ -1,6 +1,8 @@
 open Types
 open Utility
 
+
+
 type fd_node = [
     | `FDNode of (string list) * (fd_node list)
 ]
@@ -53,6 +55,9 @@ let get_fd_transitive_closure (key : string list) (fds : Types.fn_dep list)=
             attrs in
     get key
 
+let is_key (key : string list) (cols : string list) (fds : Types.fn_dep list) =
+    false
+
 let rec print_list (l : string list) (out : string -> unit) =
     match l with
     | x :: [] -> out x
@@ -63,6 +68,13 @@ let rec print_spacer (depth : int) (out : string -> unit) =
     match depth with 
     | 0 -> ()
     | n -> (out "  "); print_spacer (n - 1) out
+
+let debug_print_col_list (cols : string list) =
+    let inner = match cols with
+    | [] -> ""
+    | x :: xs -> List.fold_left (fun a b -> a ^ ", " ^ b) x xs in
+    "[" ^ inner ^ "]"
+
 
 let rec debug_print_fd_tree_ex (fd : fd_node) (depth : int) (out : string -> unit) =
     print_spacer depth out;
@@ -76,3 +88,7 @@ let debug_print_fd_tree (fd : fd_node) =
     let str = ref "" in
     let _ = debug_print_fd_tree_ex fd 0 (fun x -> str := !str ^ x) in
     Debug.print !str
+
+let find_update_records (fd : fd_node) (t, m : Value.t * int) (recs : (Value.t * int) list) =
+    let compl = List.filter (fun (t', m') -> m <> m') recs in
+    List.exists (fun (t', m') -> true) compl
