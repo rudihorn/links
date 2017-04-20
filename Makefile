@@ -6,7 +6,6 @@ include $(LINKSBASEMAKEFILE)
 SOURCES :=	$(SOURCES)		\
 		   	links.ml		\
 
-
 RESULT  = links
 
 include $(OCAMLMAKEFILE)
