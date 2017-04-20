@@ -8,7 +8,7 @@
 *)
 
 open Sugartypes
-open Operations
+open Operators
 
 class map =
   object ((o : 'self_type))

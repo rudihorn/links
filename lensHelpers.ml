@@ -305,7 +305,7 @@ let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
     else
         data
 
-let get_fd (keys : Operations.name list) (rowType : Types.typ) : Types.fn_dep =
+let get_fd (keys : Operators.name list) (rowType : Types.typ) : Types.fn_dep =
     match rowType with `Record (fields, row_var, dual) ->
         let fields = List.fold_right (fun col columns -> StringMap.remove col columns) keys fields in
         let notkeys = StringMap.to_list (fun x y -> x) fields in

@@ -18,7 +18,7 @@ type var_env =
 module Env = Env.String
 
 module Utils : sig
-  val dummy_source_name : unit -> name
+  val dummy_source_name : unit -> Operators.name
   val unify : Types.datatype * Types.datatype -> unit
   val instantiate : Types.environment -> string ->
                     (Types.type_arg list * Types.datatype)
@@ -2337,7 +2337,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
             and p = tc p
             and rettyp = Types.fresh_type_variable (`Any, `Any) in
               unify ~handle:Gripers.unary_apply
-                ((Operations.string_of_unary_op op, opt),
+                ((Operators.string_of_unary_op op, opt),
                  no_pos (`Function (Types.make_tuple_type [typ p], context.effect_row, rettyp)));
               `UnaryAppl ((tyargs, op), erase p), rettyp, merge_usages [usages p; op_usage]
         | `InfixAppl ((_, op), l, r) ->
@@ -2346,7 +2346,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
             and r = tc r
             and rettyp = Types.fresh_type_variable (`Any, `Any) in
               unify ~handle:Gripers.infix_apply
-                ((Operations.string_of_binop op, opt),
+                ((Operators.string_of_binop op, opt),
                  no_pos (`Function (Types.make_tuple_type [typ l; typ r],
                                     context.effect_row, rettyp)));
               `InfixAppl ((tyargs, op), erase l, erase r), rettyp, merge_usages [usages l; usages r; op_usages]
