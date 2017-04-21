@@ -141,6 +141,59 @@ type lens_phrase =
   ]
       deriving (Show)
 
+(* Lenses *)
+module ColSet = StringSet
+type colset = ColSet.t
+    deriving (Show)
+
+module FunDep = struct 
+    type t = colset * colset
+
+    let left (l,_) = l
+    let right (_,r) = r 
+    
+    let compare (l1,r1) (l2, r2) = 
+        let res = ColSet.compare l1 l2 in
+        if res = 0 then
+            ColSet.compare r1 r2
+        else
+            res
+
+    let of_lists (left, right : string list * string list) : t =
+        let left = ColSet.of_list left in
+        let right = ColSet.of_list right in
+        (left, right)
+
+    
+    module Show_t = Deriving_Show.Defaults(
+        struct
+            type a = ColSet.t * ColSet.t
+            let format formatter (left, right) =
+                Format.pp_open_box formatter 0;
+                ColSet.Show_t.format formatter left;
+                Format.pp_print_string formatter " -> ";
+                ColSet.Show_t.format formatter right;
+                Format.pp_close_box formatter ();
+        end
+    )
+end
+type fundep = FunDep.t
+    deriving (Show)
+
+module FunDepSet = struct
+    include Set.Make(FunDep)
+
+    let of_lists (fds : (string list * string list) list) : t =
+        let fds = List.map FunDep.of_lists fds in
+        of_list fds
+end
+
+type fundepset = FunDepSet.t
+    deriving (Show)
+(* End of Lenses *)
+
+
+
 type typ =
     [ `Not_typed
     | `Primitive of primitive
@@ -155,7 +208,7 @@ type typ =
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
-and lens_sort     = fn_dep list * lens_phrase option * (lens_col list)
+and lens_sort     = fundepset * lens_phrase option * (lens_col list)
 and lens_col      = {
   table : string;
   name : string; 
@@ -163,7 +216,6 @@ and lens_col      = {
   typ : typ;
   present : bool;
 } 
-and fn_dep         = string list * string list
 and field_spec     = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
 and row_var        = meta_row_var

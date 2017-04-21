@@ -88,6 +88,7 @@ type ('t, 'r) session_type_basis =
     | `End ]
       deriving (Show)
 
+(* Lenses *)
 type lens_phrase = 
   [ `Constant  of Constant.constant
   | `Var       of Operations.name 
@@ -96,6 +97,35 @@ type lens_phrase =
   | `TupleLit  of lens_phrase list
   ]
     deriving (Show)
+
+module ColSet = Utility.StringSet
+type colset = ColSet.t
+    deriving (Show)
+
+module FunDep : sig 
+    type t = colset * colset 
+
+    val left    : t -> colset
+    val right   : t -> colset
+    
+    val compare : t -> t -> int
+
+    val of_lists : string list * string list -> t
+    
+    module Show_t : Deriving_Show.Show with type a = t
+end
+type fundep = FunDep.t
+    deriving (Show)
+
+module FunDepSet : sig 
+    include Utility.Set with type elt = fundep
+
+    val of_lists : (string list * string list) list -> t
+end
+
+type fundepset = FunDepSet.t
+    deriving (Show)
+(* End Lenses *)
 
 type typ =
     [ `Not_typed
@@ -111,7 +141,7 @@ type typ =
     | `MetaTypeVar of meta_type_var
     | `ForAll of (quantifier list ref * typ)
     | (typ, row) session_type_basis ]
-and lens_sort      = fn_dep list * lens_phrase option * (lens_col list)
+and lens_sort      = fundepset * lens_phrase option * (lens_col list)
 and lens_col       = {
   table : string;
   name : string; 
@@ -119,7 +149,6 @@ and lens_col       = {
   typ : typ;
   present : bool;
 } 
-and fn_dep = string list * string list
 and field_spec = [ `Present of typ | `Absent | `Var of meta_presence_var ]
 and field_spec_map = field_spec field_env
 and row_var = meta_row_var

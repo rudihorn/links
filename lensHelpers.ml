@@ -59,7 +59,7 @@ let rec lens_get_mem (lens : Value.t) callfn =
         let records2 = lens_get_mem lens2 callfn in
         let on = List.map (fun (a, _, _) -> a) on in
         let output = List.map (fun r1 -> 
-            let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 on) (unbox_list records2) in
+            let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 (ColSet.of_list on)) (unbox_list records2) in
             List.map (fun r2 ->  join_records r1 r2 on) rows
         ) (unbox_list records1) in
         box_list (List.concat output)
@@ -111,25 +111,6 @@ let rec lens_get (lens : Value.t) callfn =
         let res = execute_select mappings sql query.db in
         let _ = Debug.print sql in
         res
-
-let mark_found_records (n : Value.t) (data : (Value.t * bool) array) : unit = 
-    Array.iteri (fun i (row, marked) -> 
-        if not marked && (records_equal row n) then
-            Array.set data i (row, true)
-    ) data
-
-let apply_fd_merge_record_revision (n : Value.t) (m : Value.t) (fds : Types.fn_dep list) = 
-    (* `List `Record * `List `Record * fds *)
-    let arrM = Array.of_list (List.map (fun r -> r,false) (unbox_list m)) in
-    let output = ref [] in
-    let _ = List.map (fun r ->
-        let upd, r = apply_fd_record_revision r m fds in
-            mark_found_records r arrM;
-            output := r :: !output
-    ) (unbox_list n) in
-    let filteredData = List.filter (fun (r,m) -> not m) (Array.to_list arrM) in
-    let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
-        (box_list output)
 
 let rec lens_put_delta  (lens : Value.t) (data : (Value.t * int) list) callfn = 
     match lens with
@@ -188,7 +169,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             let rec2 = lens_get l2 callfn in
             let rec2 = apply_fd_merge_record_revision rec2 (drop_records_columns remcols2 data) fds in
             let removed = List.map (fun r1 ->
-                let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 oldOn) (unbox_list rec2) in
+                let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 (ColSet.of_list oldOn)) (unbox_list rec2) in
                 let rows = List.map (fun r2 -> join_records r1 r2 oldOn) rows in
                 let rows = List.filter (fun r -> not (contains_record r data)) rows in
                     rows
@@ -241,13 +222,15 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
                     let gen_equals = fun fd ->
                         create_phrase_equal (create_phrase_var fd) (create_phrase_constant_of_record_col t fd) in
                     let gen_pred = fun fd -> 
-                        let key = fd_left fd in
+                        let key = FunDep.left fd in
                         let closure = get_fd_transitive_closure key fds in
-                        let closure = List.map (fun a -> (a,get_record_val a t)) closure in
-                        let keyCheck = List.fold_left (fun a fd -> create_phrase_and a (gen_equals fd)) (gen_equals (List.hd key)) (List.tl key) in
+                        let closure = List.map (fun a -> (a,get_record_val a t)) (ColSet.elements closure) in
+                        let keyl = ColSet.elements key in
+                        let keyCheck = List.fold_left (fun a fd -> create_phrase_and a (gen_equals fd)) (gen_equals (List.hd keyl)) (List.tl keyl) in
                         let predCheck = replace_var pred closure in
                             create_phrase_tuple (create_phrase_and keyCheck predCheck) in
-                    let upd_pred = List.fold_left (fun a fd -> create_phrase_or a (gen_pred fd)) (gen_pred (List.hd fds)) (List.tl fds) in
+                    let fdl = FunDepSet.elements fds in
+                    let upd_pred = List.fold_left (fun a fd -> create_phrase_or a (gen_pred fd)) (gen_pred (List.hd fdl)) (List.tl fdl) in
                     let query_phrase = create_phrase_and (create_phrase_not pred) (create_phrase_tuple upd_pred) in
                     (* let _ = Debug.print (construct_query query_phrase) in
                     let _ = debug_print_fd_tree (get_fd_tree fds) in *)
@@ -261,6 +244,7 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
             lens_delta_put_ex l data
     | `LensJoin (l1, l2, on, sort) ->
         let on = List.map (fun (a,_,_) -> a) on in
+        (* let left_upd, left_nupd = List.partition (fun a -> is_update_record ) *)
         let t3 = List.map (fun (t,m) -> 
             let recs : (Value.t * int * delete_side) list =  
                 match m with
@@ -305,10 +289,12 @@ let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
     else
         data
 
-let get_fd (keys : Operators.name list) (rowType : Types.typ) : Types.fn_dep =
+let get_fd (keys : Operators.name list) (rowType : Types.typ) : Types.fundep =
     match rowType with `Record (fields, row_var, dual) ->
         let fields = List.fold_right (fun col columns -> StringMap.remove col columns) keys fields in
+        let keys = ColSet.of_list keys in
         let notkeys = StringMap.to_list (fun x y -> x) fields in
+        let notkeys = ColSet.of_list notkeys in
             (keys, notkeys)
     | _ -> failwith "Expected a record."
 
@@ -329,8 +315,8 @@ let get_phrase_columns (key : Sugartypes.phrase) : string list =
     | `Var name -> [name]
     | _ -> failwith "Expected a tuple or a variable."
 
-let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fn_dep list =
-    [get_fd (get_phrase_columns key) rowType]
+let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fundepset =
+    FunDepSet.of_list [get_fd (get_phrase_columns key) rowType]
 
 let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_sort = 
     let (fds, oldPred, cols) = sort in
@@ -379,7 +365,7 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_colum
             let jn = create_phrase_equal (create_phrase_var alias) (create_phrase_var newalias) in
             match pred with Some p -> Some (create_phrase_and p jn) | None -> Some jn
         ) pred join_renames in
-        let fn_deps = List.append (get_lens_sort_fn_deps sort1) (get_lens_sort_fn_deps sort2) in
+        let fn_deps = FunDepSet.union (get_lens_sort_fn_deps sort1) (get_lens_sort_fn_deps sort2) in
         (* determine the on column renames as a tuple (join, left, right) *)
         let jrs = List.map (fun on -> 
             let left = on in

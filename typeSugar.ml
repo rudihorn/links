@@ -2010,7 +2010,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                  | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
            let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
-           let lens_sort = ([], None, tcols) in
+           let lens_sort = (Types.FunDepSet.empty, None, tcols) in
            `LensLit(erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensKeysLit (table, keys, _) ->
            let table = tc table in

@@ -1,10 +1,9 @@
 open Types
 open Utility
 open Value
-open LensFDHelpers
 
 
-let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fn_dep list =
+let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fundepset =
     fn_dep
 
 let get_lens_sort_pred (_, pred, _ : Types.lens_sort) = pred
@@ -110,55 +109,3 @@ let restore_column (drop : string) (key : string) (default : Value.t) (row : Val
         | Some r -> get_record_val drop r
         | None -> default in
         box_record ((drop, dropVal) :: unbox_record row) 
-
-(* record revision *)
-
-let apply_fd_update (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : Value.t =
-    (* update all columns from the right side of the functional dependency fd 
-       in m with the value from n  *)
-    (* assume we know that n and m have the same values for columns in left(fd) *)
-    let n_cols = unbox_record n in
-    let m_cols = List.map (fun (k, v) -> 
-            if List.exists (fun a -> a = k) (fd_right fd) then
-                let _, n_v = List.find (fun (n_k, _) -> n_k = k) n_cols in
-                k, n_v
-            else
-                k, v
-        ) (unbox_record m) in
-        box_record m_cols
-
-let is_row_cols_record_match (m : Value.t) (n : Value.t) (cols : string list) : bool =
-    (* determines wether the records m and n have the same values for the columns in cols *)
-    (* check if all columns in left(fd) match *)
-    let is_match = 
-        List.for_all (fun col -> 
-            try 
-                let n_v = get_record_val col m in
-                let m_v = get_record_val col n in
-                    n_v = m_v
-            with NotFound _ -> false 
-        ) cols in
-    is_match
-
-let is_fd_record_match (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool =
-    (* checks wether two records m and n match w.r.t. the functional dependency fd *)
-    is_row_cols_record_match m n (fd_left fd)
-
-let apply_fd_record_row_revision (m : Value.t) (n : Value.t) (fd : Types.fn_dep) : bool * Value.t =
-   (* first check if the two records match w.r.t. the given functional dependency fd and if so apply the updates
-      from record n to record m, otherwise return m unchanged *)
-    if is_fd_record_match m n fd then
-        (* if so apply fd update *)
-        true, apply_fd_update m n fd
-    else
-        (* otherwise return record unchanged *)
-        false, m
-
-let apply_fd_record_revision (m : Value.t) (n : Value.t) (fds : Types.fn_dep list) : bool * Value.t =
-    (* m of `Record and n of `List `Record *)
-    List.fold_right (fun nrow (upd, mrow) ->
-            List.fold_right (fun fd (upd, mrow) ->
-                let upd_t, mrow = apply_fd_record_row_revision mrow nrow fd in
-                upd_t || upd, mrow
-            ) fds (upd, mrow)
-    ) (unbox_list n) (false, m) 

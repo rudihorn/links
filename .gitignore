@@ -2,6 +2,8 @@
 *~
 *.o
 *.a
+*.cache
+*.log
 *.cma
 *.cmxa
 *.cmo
@@ -12,6 +14,7 @@
 *.annot
 *.output
 links
+linksTests
 jsonlex.ml
 jsonparse.ml
 jsonparse.mli
