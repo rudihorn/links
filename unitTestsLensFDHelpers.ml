@@ -104,12 +104,22 @@ let run_join_test_case_1 data exp1 exp2 dbg =
         (["D"], ["E"])
     ] in
     let on = ["B", "table1", "B"] in
-    let l1 = construct_join_lens dat_fd_set_1 "table1" [] in
-    let l2 = construct_join_lens dat_fd_set_2 "table2" [] in
+    let l1 = construct_join_lens dat_fd_set_1 "table1" (List.map (rec_constr ["A"; "B"; "C"]) [
+        [5; 5; 5];
+        [6; 5; 5];
+        [7; 7; 7];
+        [9; 9; 9];
+    ]) in
+    let l2 = construct_join_lens dat_fd_set_2 "table2" (List.map (rec_constr ["B"; "D"; "E"]) [
+        [5; 5; 5];
+        [6; 5; 5];
+        [7; 7; 7];
+        [8; 8; 8];
+    ]) in
     let constr_cmp_left data = List.map (delt_constr ["A"; "B"; "C"]) data in
     let constr_cmp_right data = List.map (delt_constr ["B"; "D"; "E"]) data in
     let constr_data = List.map (delt_constr ["A"; "B"; "C"; "D"; "E"]) in
-    let (outp1, outp2) = LensHelpers.lens_delta_put_join l1 l2 on (constr_data data) in
+    let (outp1, outp2) = LensHelpers.lens_delta_put_join l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) (constr_data data) in
     let _ = if dbg then
         let _ = LensHelpers.lens_debug_delta outp1 in
         let _ = LensHelpers.lens_debug_delta outp2 in
@@ -127,6 +137,14 @@ let test_join_1_insert_new test_ctx =
         [1; 1; 1], 1
     ] [
         [1; 1; 1], 1
+    ] false
+
+let test_join_1_delete test_ctx = 
+    run_join_test_case_1 [
+        [1; 1; 1; 1; 1], -1
+    ] [
+        [1; 1; 1], -1
+    ] [
     ] false
 
 let test_join_1_update_right test_ctx =
@@ -147,7 +165,7 @@ let test_join_1_left_remove_left_add test_ctx =
         [1; 1; 1], -1;
         [2; 1; 1], +1
     ] [
-    ] false
+    ] false 
 
 let test_join_1_left_remove_left_add_2 test_ctx =
     run_join_test_case_1 [
@@ -158,7 +176,7 @@ let test_join_1_left_remove_left_add_2 test_ctx =
         [1; 2; 1], +1
     ] [
         [2; 1; 1], +1
-    ] false
+    ] false 
 
 let test_join_1_left_update test_ctx =
     run_join_test_case_1 [
@@ -169,7 +187,6 @@ let test_join_1_left_update test_ctx =
         [1; 1; 2], +1
     ] [
     ] false
-
 
 let test_join_1_weird_fd_right_change test_ctx =
     run_join_test_case_1 [
@@ -182,18 +199,44 @@ let test_join_1_weird_fd_right_change test_ctx =
         [2; 2; 1], +1
     ] false
 
-let test_join_side_effects test_ctx =
+let test_join_1_change_right_existing test_ctx =
     run_join_test_case_1 [
-        [1; 1; 1; 1; 1], -1;
-        [1; 1; 2; 1; 1], +1;
-        [2; 1; 2; 1; 1], 0
+        [5; 5; 5; 5; 5], -1;
+        [5; 5; 5; 5; 6], +1
     ] [
-        [1; 1; 1], -1;
-        [1; 2; 1], +1
     ] [
-        [2; 2; 1], +1
+        [5; 5; 5], -1;
+        [5; 5; 6], +1;
     ] false
 
+let test_join_1_change_add_existing test_ctx =
+    run_join_test_case_1 [
+        [1; 5; 1; 5; 6], +1
+    ] [
+        [1; 5; 1], +1;
+    ] [
+        [5; 5; 6], +1;
+        [5; 5; 5], -1;
+    ] false 
+
+let test_join_1_change_add_right test_ctx =
+    run_join_test_case_1 [
+        [9; 9; 9; 9; 9], +1
+    ] [
+    ] [
+        [9; 9; 9], +1;
+    ] false 
+
+let test_join_1_add_left_neutral test_ctx =
+    run_join_test_case_1 [
+        [5; 5; 5; 5; 5], 0;
+        [1; 5; 5; 5; 5], +1;
+    ] [
+        [5; 5; 5], 0;
+        [1; 5; 5], 1;
+    ] [
+        [5; 5; 5], 0;
+    ] false 
 
 let suite =
     "lens_fd_helpers">:::
@@ -203,13 +246,18 @@ let suite =
         "find_update_recs">:: test_find_update_recs;
         "is_update_record">:: test_is_update_record;
         "join_update_filter">:: test_join_update_filter;
+
         "join_1_insert_new">:: test_join_1_insert_new;
+        "join_1_delete">:: test_join_1_delete;
         "join_1_update_right">:: test_join_1_update_right;
         "join_1_left_remove_left_add">:: test_join_1_left_remove_left_add;
         "join_1_left_remove_left_add_2">:: test_join_1_left_remove_left_add_2;
         "join_1_left_update">:: test_join_1_left_update;
         "join_1_weird_fd_right_change">::test_join_1_weird_fd_right_change;
-
+        "join_1_change_right_existing">::test_join_1_change_right_existing;
+        "join_1_change_add_existing">::test_join_1_change_add_existing;
+        "join_1_change_add_right">::test_join_1_change_add_right;
+        "join_1_add_left_neutral">::test_join_1_add_left_neutral;
     ];;
 
 let () =

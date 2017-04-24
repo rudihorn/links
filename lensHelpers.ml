@@ -230,6 +230,7 @@ let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
     lens_get (`LensSelect (lens, phrase, sort)) None
 
 let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * string) list) 
+    (left_pred : lens_phrase) (right_pred : lens_phrase)
     (data : (Value.t * int) list) : (Value.t * int) list * (Value.t * int) list = 
     let sort_left = get_lens_sort l1 in
     let fds_left = get_lens_sort_fn_deps sort_left in
@@ -256,7 +257,8 @@ let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * s
         let in_right = (is_neutral || upd_right) && not (compl_exists_right && not upd_right) && not (ntrl_exists_right) in
         (* some records require a check for existing data *)
         let find_left =  not (compl_exists_left || ntrl_exists_left) && not in_left && m = 1 in
-        let del_left = not (compl_exists_left || ntrl_exists_left) && m = -1 in
+        let del_left_pre = not (compl_exists_left || ntrl_exists_left) && m = -1 in
+        let p_res = del_left_pre && unbox_bool (calculate_predicate_rec left_pred t) in
         let found_left = if find_left then
             let phrase = List.fold_left (fun phrase on -> match phrase with
                 | Some phrase -> Some (create_phrase_and phrase (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on)))
@@ -266,21 +268,13 @@ let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * s
             unbox_list res
         else
             [] in
-        let found_any = List.length found_left > 0 in
-        let found_same = found_any && List.exists (fun t' -> records_match_on t t' cols_left) found_left in
-        let update_found = found_any && not (found_same) in
-        let in_left = in_left || find_left && not found_any || update_found || del_left in
-        let left = if in_left then 
-            if update_found then 
-                List.append [(t,m)] (List.map (fun t -> (t,-1)) found_left)
-            else
-                [(t,m)]
-        else
-            [] in
+        let found_any_left = List.length found_left > 0 in
+        let found_same_left = found_any_left && List.exists (fun t' -> records_match_on t t' cols_left) found_left in
+        let update_found_left = found_any_left && not (found_same_left) in
         (* same for right *)
         let find_right = not (compl_exists_right || ntrl_exists_right) && not in_right && m = 1 in
-        let q_res = false in
-        let del_right = not (compl_exists_right || ntrl_exists_right && m = -1) && q_res in
+        let del_right_pre = not (compl_exists_left || ntrl_exists_right) && m = -1 in
+        let q_res = del_right_pre && unbox_bool (calculate_predicate_rec right_pred t) in
         let found_right = if find_right then
             let phrase = List.fold_left (fun phrase on -> match phrase with
                 | Some phrase -> Some (create_phrase_and phrase (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on)))
@@ -290,12 +284,29 @@ let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * s
             unbox_list res
         else
             [] in
-        let found_any = List.length found_right > 0 in
-        let found_same = found_any && List.exists (fun t' -> records_match_on t t' cols_right) found_right in
-        let update_found = found_any && not (found_same) in
-        let in_right = in_right || find_right && not found_any || update_found || del_right in
+        let found_any_right = List.length found_right > 0 in
+        let found_same_right = found_any_right && List.exists (fun t' -> records_match_on t t' cols_right) found_right in
+        let update_found_right = found_any_right && not (found_same_right) in
+        (* finalize deletes *)
+        let del_left = del_left_pre && (p_res || not in_right && not del_right_pre) in
+        let del_right = del_right_pre && (q_res || not in_left && not del_left_pre) in
+        (* let _ = Debug.print ("other " ^ string_of_bool compl_exists_left ^ string_of_int m) in
+        let_ = Debug.print ("del " ^ string_of_bool p_res ^ string_of_bool q_res ^ string_of_bool del_left_pre ^ string_of_bool del_right_pre) in *)
+        let _ = if (del_left_pre || del_right_pre) && not (del_left || del_right) then
+            failwith "Predicates don't complement each other."
+        else () in
+        (* finally sum up all of it *)
+        let in_left = in_left || (find_left && not found_any_left) || update_found_left || del_left in
+        let left = if in_left then 
+            if update_found_left then 
+                List.append [(t,m)] (List.map (fun t -> (t,-1)) found_left)
+            else
+                [(t,m)]
+        else
+            [] in
+        let in_right = in_right || (find_right && not found_any_right) || update_found_right || del_right in
         let right = if in_right then
-            if update_found then
+            if update_found_right then
                 List.append [(t,m)] (List.map (fun t -> (t,-1)) found_right)
             else
                 [(t,m)]
