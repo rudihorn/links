@@ -104,6 +104,13 @@ let find_update_record (fd : fundep) (t, m : Value.t * int) (recs : (Value.t * i
 let is_update_record (fds : fundepset) (r : Value.t * int) (recs : (Value.t * int) list) =
     FunDepSet.exists (fun fd -> OptionUtils.is_some (find_update_record fd r recs)) fds
 
+let lens_join_split_updates (fds_left : fundepset) (fds_right : fundepset) (data : (Value.t * int) list) =
+    let upd_left, n_updleft = List.partition (fun l -> is_update_record fds_left l data) data in
+    let upd_right, n_update = List.partition (fun l -> is_update_record fds_right l data) n_updleft in
+    let upd_left_right, upd_left = List.partition (fun l -> is_update_record fds_right l data) upd_left in
+    upd_left_right, upd_left, upd_right, n_update
+
+
 (* record revision *)
 
 let apply_fd_update (m : Value.t) (n : Value.t) (fd : Types.fundep) : Value.t =

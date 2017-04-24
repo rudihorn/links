@@ -80,14 +80,18 @@ let remove_record_type_column (a : string) (r : Types.lens_col list) =
     let fields = List.filter (fun col -> get_lens_col_alias col = a) r in
     fields
 
+let project_record_columns (a : colset) (record : Value.t) =
+    let columns = List.filter (fun (name, _) -> ColSet.mem name a) (unbox_record record) in
+    box_record columns
+
 let drop_record_columns (a : string list) (record : Value.t) =
     let columns = List.filter (fun (name, _) -> not (List.mem name a)) (unbox_record record) in
-        box_record columns
+    box_record columns
 
 let drop_records_columns (a : string list) (records : Value.t) =
     let records = unbox_list records in
     let records = List.map (drop_record_columns a) records in
-        box_list records
+    box_list records
 
 let drop_record_column (a : string) (record : Value.t) =
     drop_record_columns [a] record
@@ -95,7 +99,7 @@ let drop_record_column (a : string) (record : Value.t) =
 let join_records (m : Value.t) (n : Value.t) (on : string list) = 
     let n = drop_record_columns on n in
     let out = List.append (unbox_record m) (unbox_record n) in
-        box_record out
+    box_record out
 
 let restore_column (drop : string) (key : string) (default : Value.t) (row : Value.t) (records : Value.t) =
     let unb_records = unbox_list records in

@@ -42,6 +42,23 @@ let rec is_memory_lens (lens : Value.t) =
 
 (* get / put operations *)
 
+let rec get_primary_key (lens : Value.t) =
+    match lens with 
+    | `Lens (a, sort) -> 
+        let fds = get_lens_sort_fn_deps sort in
+        let fd = FunDepSet.min_elt fds in
+        let left = FunDep.left fd in
+        left
+    | `LensMem (a, sort) ->  
+        let fds = get_lens_sort_fn_deps sort in
+        let fd = FunDepSet.min_elt fds in
+        let left = FunDep.left fd in
+        left
+    | `LensDrop (lens, _, _, _, _) -> get_primary_key lens
+    | `LensSelect (lens, _, _) -> get_primary_key lens
+    | `LensJoin (lens1, _, _, _) -> (* right table has to be defined by left table *) get_primary_key lens1 
+    | _ -> failwith ("Unknown lens (get_primary_key) : " ^ (string_of_value lens))
+
 let rec lens_get_mem (lens : Value.t) callfn =
     match lens with
     | `Lens _ -> failwith "Non memory lenses not implemented."
@@ -194,6 +211,107 @@ type delete_side = [
 let lens_debug_delta (delta : (Value.t * int) list) = 
     List.map (fun (t,m) -> Debug.print (string_of_int m ^ ": " ^ string_of_value t)) delta
 
+let project_lens (l : Value.t) (t : (Value.t * int) list) = 
+    let l_sort = get_lens_sort l in
+    let l_cols = get_lens_sort_cols l_sort in
+    let cols = ColSet.of_list (List.map (fun c -> c.alias) l_cols) in
+    List.map (fun (row,t) -> project_record_columns cols row,t) t
+
+let is_update_row data prim cols (t,m) = 
+    if m = 0 then
+        false
+    else
+        let sameleft = fun t2 -> records_match_on t t2 prim in
+        let diffright = fun t2 -> not (records_match_on t t2 cols) in
+        List.exists (fun (t',m') -> m = - m && sameleft t' && diffright t') data
+
+let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
+    let sort = get_lens_sort lens in
+    lens_get (`LensSelect (lens, phrase, sort)) None
+
+let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * string) list) 
+    (data : (Value.t * int) list) : (Value.t * int) list * (Value.t * int) list = 
+    let sort_left = get_lens_sort l1 in
+    let fds_left = get_lens_sort_fn_deps sort_left in
+    let prim_left = get_primary_key l1 in
+    let prim_left_l = ColSet.elements prim_left in 
+    let cols_left = List.map (fun l -> l.alias) (get_lens_sort_cols sort_left) in
+    let sort_right = get_lens_sort l2 in
+    let fds_right = get_lens_sort_fn_deps sort_right in
+    let cols_right = List.map (fun l -> l.alias) (get_lens_sort_cols sort_right) in
+    let on_simp = List.map (fun (a,_,_) -> a) on in
+    (* other *)
+    let res = List.map (fun (t,m) ->
+        let is_neutral = m = 0 in
+        (* helpers left *)
+        let ntrl_exists_left = not is_neutral && List.exists (fun (t',m') -> m' = 0 && records_match_on t t' prim_left_l) data in
+        let compl_exists_left = not is_neutral && List.exists (fun (t',m') -> m' = - m && records_match_on t t' prim_left_l) data in
+        let upd_left = compl_exists_left && List.exists (fun (t',m') -> m' = - m && records_match_on t t' prim_left_l && not (records_match_on t t' cols_left)) data in
+        (* helpers right *)
+        let ntrl_exists_right = not is_neutral && List.exists (fun (t',m') -> m' = 0 && records_match_on t t' on_simp) data in
+        let compl_exists_right = not is_neutral && List.exists (fun (t',m') -> m' = - m && records_match_on t t' on_simp) data in
+        let upd_right = compl_exists_left && List.exists (fun (t',m') -> m' = - m && records_match_on t t' on_simp && not (records_match_on t t' cols_right)) data in
+        (* use helpers *)
+        let in_left = (is_neutral || upd_left) && not (compl_exists_left && not upd_left) && not (ntrl_exists_left) in
+        let in_right = (is_neutral || upd_right) && not (compl_exists_right && not upd_right) && not (ntrl_exists_right) in
+        (* some records require a check for existing data *)
+        let find_left =  not (compl_exists_left || ntrl_exists_left) && not in_left && m = 1 in
+        let del_left = not (compl_exists_left || ntrl_exists_left) && m = -1 in
+        let found_left = if find_left then
+            let phrase = List.fold_left (fun phrase on -> match phrase with
+                | Some phrase -> Some (create_phrase_and phrase (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on)))
+                | None -> Some (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on))
+            ) None prim_left_l in
+            let res = lens_get_select l1 (OptionUtils.val_of phrase) in
+            unbox_list res
+        else
+            [] in
+        let found_any = List.length found_left > 0 in
+        let found_same = found_any && List.exists (fun t' -> records_match_on t t' cols_left) found_left in
+        let update_found = found_any && not (found_same) in
+        let in_left = in_left || find_left && not found_any || update_found || del_left in
+        let left = if in_left then 
+            if update_found then 
+                List.append [(t,m)] (List.map (fun t -> (t,-1)) found_left)
+            else
+                [(t,m)]
+        else
+            [] in
+        (* same for right *)
+        let find_right = not (compl_exists_right || ntrl_exists_right) && not in_right && m = 1 in
+        let q_res = false in
+        let del_right = not (compl_exists_right || ntrl_exists_right && m = -1) && q_res in
+        let found_right = if find_right then
+            let phrase = List.fold_left (fun phrase on -> match phrase with
+                | Some phrase -> Some (create_phrase_and phrase (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on)))
+                | None -> Some (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on))
+            ) None on_simp in
+            let  res = lens_get_select l2 (OptionUtils.val_of phrase) in
+            unbox_list res
+        else
+            [] in
+        let found_any = List.length found_right > 0 in
+        let found_same = found_any && List.exists (fun t' -> records_match_on t t' cols_right) found_right in
+        let update_found = found_any && not (found_same) in
+        let in_right = in_right || find_right && not found_any || update_found || del_right in
+        let right = if in_right then
+            if update_found then
+                List.append [(t,m)] (List.map (fun t -> (t,-1)) found_right)
+            else
+                [(t,m)]
+        else   
+            [] in
+        left, right
+    ) data in
+    let all_lefts = List.map (fun (a,b) -> a) res in
+    let all_lefts = List.flatten all_lefts in
+    let all_lefts = project_lens l1 all_lefts in
+    let all_rights = List.map (fun (a,b) -> b) res in
+    let all_rights = List.flatten all_rights in
+    let all_rights = project_lens l2 all_rights in
+    all_lefts, all_rights
+
+
 let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
     match lens with 
     | `Lens _ -> 
@@ -248,7 +366,7 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
         let t3 = List.map (fun (t,m) -> 
             let recs : (Value.t * int * delete_side) list =  
                 match m with
-                | -1 -> [if (List.exists (fun (t1,m1) -> m >= 0 && records_match_on t t1 on)  data) then (t, m, `Left) else (t, m, `Any)]
+                | -1 -> [if (List.exists (fun (t1,m1) -> m >= 0 && records_match_on t t1 on) data) then (t, m, `Left) else (t, m, `Any)]
                 | 0 -> [(t,m,`Both)]
                 | 1 -> [if (List.exists (fun (t1, m1) -> m = 0 && records_match_on t t1 on) data) then (t,m, `Left) else (t, m, `Both)]
                 | _ -> failwith ("Unexpected multiplicity") in
