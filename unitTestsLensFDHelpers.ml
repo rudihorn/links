@@ -147,6 +147,17 @@ let test_join_1_delete test_ctx =
     ] [
     ] false
 
+let test_join_1_delete_l test_ctx = 
+    run_join_test_case_1 [
+        [1; 1; 1; 1; 1], -1;
+        [2; 1; 1; 1; 1], 0
+    ] [
+        [1; 1; 1], -1;
+        [2; 1; 1], 0
+    ] [
+        [1; 1; 1], 0
+    ] false 
+
 let test_join_1_update_right test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], +1;
@@ -249,6 +260,7 @@ let suite =
 
         "join_1_insert_new">:: test_join_1_insert_new;
         "join_1_delete">:: test_join_1_delete;
+        "join_1_delete_l">:: test_join_1_delete_l;
         "join_1_update_right">:: test_join_1_update_right;
         "join_1_left_remove_left_add">:: test_join_1_left_remove_left_add;
         "join_1_left_remove_left_add_2">:: test_join_1_left_remove_left_add_2;
