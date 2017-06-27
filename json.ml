@@ -1,6 +1,8 @@
 (* Side-effect-free JSON operations. *)
 open ProcessTypes
 open Utility
+open Types
+open Value
 
 (* Setting *)
 let show_json = Settings.add_bool("show_json", false, `User)
@@ -17,6 +19,22 @@ let parse_json str =
 let parse_json_b64 str = parse_json(Utility.base64decode str)
 
 
+
+let js_dq_escape_string str =
+  (* escape for placement in double-quoted string *)
+  Str.global_replace (Str.regexp_string "\"") "\\\""
+    (Str.global_replace (Str.regexp_string "\n") "\\n"
+       (Str.global_replace (Str.regexp_string "\\") "\\\\"
+          str))
+
+
+(** Escape the argument for inclusion in a double-quoted string. *)
+let js_dq_escape_char =
+  function
+    '"' -> "\\\""
+  | '\\' -> "\\\\"
+  | ch -> String.make 1 ch
+       
 (* Helper functions for jsonization *)
 (*
   SL:
@@ -30,6 +48,11 @@ let json_of_db (db, params) =
   let (name, args) = Value.parse_db_string params in
     "{_db:{driver:\"" ^ driver ^ "\",name:\"" ^ name ^ "\", args:\"" ^ args ^ "\"}}"
 
+(* let parse_json_db r : (Value.database * string) =
+   parse_json_record [
+      `Keys (["driver"; "name"; "args"], fun [driver; name; args] -> (driver, Value.reconstruct_db_string (unbox_string name, unbox_string args)))
+   ] r *)
+
 (*
 WARNING:
   May need to be careful about free type variables / aliases in row
@@ -39,21 +62,88 @@ let json_of_table ((db, params), name, keys, row) =
   let json_of_keylist ks = "[" ^ (mapstrcat ", " json_of_key ks) ^ "]" in
     "{_table:{db:'" ^ json_of_db (db, params) ^ "',name:\"" ^ name ^
       "\",row:\"" ^ Types.string_of_datatype (`Record row) ^
-      "\",keys:\"" ^ json_of_keylist keys ^ "\"}}"
+      "\",keys:\"" ^ json_of_keylist keys ^ "\"}}"  
 
-let js_dq_escape_string str =
-  (* escape for placement in double-quoted string *)
-  Str.global_replace (Str.regexp_string "\"") "\\\""
-    (Str.global_replace (Str.regexp_string "\n") "\\n"
-       (Str.global_replace (Str.regexp_string "\\") "\\\\"
-          str))
+(* let parse_json_db r =
+   let unbox_keys keys = List.map (fun a -> List.map (fun b -> unbox_string b) (unbox_list a)) (unbox_list keys) in
+   let unbox_database = function
+      | `Database db -> db
+      | _ -> failwith "Not a database" in
+   parse_json_record [
+      `Keys (["db"; "name"; "row"; "keys"], fun [db; name; row; keys] ->
+         unbox_database db, unbox_string name, DesugarDatatypes.read ~aliases:Env.String.empty (unbox_string row), unbox_keys keys)
+   ] r *)
 
-(** Escape the argument for inclusion in a double-quoted string. *)
-let js_dq_escape_char =
-  function
-    '"' -> "\\\""
-  | '\\' -> "\\\\"
-  | ch -> String.make 1 ch
+
+type json_node_type = 
+   [ `String 
+   | `Unquoted
+   ]
+
+let json_attr_str key value = key ^ ": \"" ^ js_dq_escape_string value ^ "\""
+let json_attr_unquoted key value = key ^ ": " ^ value 
+
+let json_node attributes = "{" ^ mapstrcat ", " (fun (k,t,v) ->
+   match t with
+   | `String -> json_attr_str k v
+   | `Unquoted -> json_attr_unquoted k v
+) attributes ^ "}"
+
+let json_node_str attributes = "{" ^ mapstrcat ", " (fun (k,v) -> json_attr_str k v) attributes ^ "}"
+
+
+let json_of_constant (const : Constant.constant) =
+  match const with
+  | `Float f -> string_of_float' f 
+  | `Int i -> string_of_int i 
+  | `Bool b -> string_of_bool b 
+  | `Char c -> json_node_str [("_c", js_dq_escape_char c)]
+  | `String s -> "\"" ^ js_dq_escape_string s ^ "\""
+
+let rec json_of_phrase (phrase : Types.lens_phrase) =
+  match phrase with
+  | `Constant c -> json_of_constant c
+  | `Var v -> json_node_str [("var", v)] 
+  | `InfixAppl (op,l,r) -> json_node [
+     ("infx", `String, Operators.string_of_binop op); 
+     ("l", `Unquoted, json_of_phrase l);
+     ("r", `Unquoted, json_of_phrase r)]
+  | `UnaryAppl (op,l) -> json_node [
+     ("unary", `String, Operators.string_of_unary_op op);
+     ("l", `Unquoted, json_of_phrase l)]
+  | `TupleLit (inner) -> json_node [("tuple", `Unquoted, json_of_phrase (List.hd inner))]
+
+
+let json_of_col (col : Types.lens_col) =
+   json_node [
+      ("table", `String, col.table);
+      ("name", `String, col.name);
+      ("alias", `String, col.alias);
+      ("typ", `String, Types.string_of_datatype col.typ);
+      ("present", `Unquoted, string_of_bool col.present)]
+
+
+
+let json_of_cols (cols : Types.lens_col list) =
+  "[" ^ mapstrcat ", " json_of_col cols ^ "]"
+
+let jsonize_sort (fundeps, phrase, cols : Types.lens_sort) =
+  let json_of_key k = "[" ^ (mapstrcat ", " (fun x -> "\"" ^ js_dq_escape_string x ^ "\"") (ColSet.elements k)) ^ "]" in
+  let json_of_fd (fd : fundep) = "[" ^ json_of_key (FunDep.left fd) ^ ", " ^ (json_of_key (FunDep.right fd)) ^ "]" in
+  let json_of_fds (fds : fundepset) = "[" ^ mapstrcat ", " (fun fd -> json_of_fd fd) (FunDepSet.elements fds) ^ "]" in
+  match phrase with 
+  | None ->
+     json_node [
+        ("fds", `Unquoted, json_of_fds fundeps);
+        ("cols", `Unquoted, json_of_cols cols)
+     ]
+  | Some phrase ->
+     json_node [
+        ("fds", `Unquoted, json_of_fds fundeps);
+        ("phrase", `Unquoted, json_of_phrase phrase);
+        ("cols", `Unquoted, json_of_cols cols)
+     ]
+
 
 let jsonize_location : Ir.location -> string = function
   | `Client  -> "client"
@@ -111,6 +201,10 @@ let rec jsonize_value : Value.t -> json_string =
       "{\"_clientSpawnLoc\":" ^ (ClientID.to_json client_id) ^ "}"
   | `SpawnLocation (`ServerSpawnLoc) ->
       "{\"_serverSpawnLoc\": [] }"
+  | `Lens (t, sort) -> json_node [
+     ("_lens", `Unquoted, json_of_table t);
+     ("_sort", `Unquoted, jsonize_sort sort);
+   ]
 and jsonize_primitive : Value.primitive_value -> string  = function
   | `Bool value -> string_of_bool value
   | `Int value -> string_of_int value

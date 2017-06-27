@@ -53,3 +53,16 @@ val jsonize_call :
   string -> (* Name of the function *)
   Value.t list -> (* Arguments *)
   json_string
+
+
+(* Internal Functions for Unit testing *)
+
+type json_node_type = 
+   [ `String 
+   | `Unquoted
+   ]
+
+val json_node : (string * json_node_type * string) list -> json_string
+val jsonize_sort : Types.lens_sort -> json_string
+
+

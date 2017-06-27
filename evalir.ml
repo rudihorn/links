@@ -498,6 +498,10 @@ struct
         let lens1 = value env lens1 in
         let lens2 = value env lens2 in
         let get_sort = LensHelpers.get_lens_sort in
+        let lens1, lens2 = if LensHelpers.join_lens_should_swap (get_sort lens1) (get_sort lens2) on then
+          lens2, lens1
+        else
+          lens1, lens2 in
         let sort, on = LensHelpers.join_lens_sort (get_sort lens1) (get_sort lens2) on in
          apply_cont cont env (`LensJoin (lens1, lens2, on, sort))
     | `LensGet (lens, rtype) as le ->

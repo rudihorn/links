@@ -109,6 +109,7 @@ let rec eq_types : (datatype * datatype) -> bool =
 
       | `Alias  _ -> assert false
       | `Table _  -> assert false
+      | `Lens _ -> true
 and eq_sessions : (datatype * datatype) -> bool =
   function
   | `Input (lt, _), `Input (rt, _)
@@ -523,6 +524,7 @@ fun rec_env ->
               (ut (lf, rf);
                ut (ld, rd);
                ut (lr, rr))
+          | `Lens _, `Lens _ -> ()
           | `Application (l, _), `Application (r, _) when l <> r ->
               raise (Failure
                        (`Msg ("Cannot unify abstract type '"^string_of_datatype t1^

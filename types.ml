@@ -464,6 +464,7 @@ let rec type_can_be_unl : var_set * var_set -> typ -> bool =
     | `Record r
     | `Variant r -> row_can_be_unl vars r
     | `Table _ -> true
+    | `Lens _ -> true
     | `Alias (_, t) -> tcu t
     (* We might support linear lists like this...
          but we'd need to replace hd and tl with a split operation. *)
@@ -508,7 +509,7 @@ let rec make_type_unl : var_set * var_set -> typ -> unit =
   fun ((rec_vars, quant_vars) as vars) ->
     function
     | `Not_typed -> assert false
-    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ -> ()
+    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Lens _ -> ()
     | `Record r | `Variant r -> make_row_unl vars r
     | `Alias (_, t) -> make_type_unl vars t
     | `ForAll (qs, t) -> make_type_unl (rec_vars, add_quantified_vars !qs quant_vars) t

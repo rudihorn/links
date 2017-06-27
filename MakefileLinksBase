@@ -126,6 +126,7 @@ SOURCES = $(OPC)                                \
           frontend.ml                           \
           dumpTypes.ml                          \
           compilePatterns.ml                    \
+			 jsonparsehelpers.ml							\
           jsonparse.mly                         \
           jsonlex.mll                           \
           js.ml                                 \

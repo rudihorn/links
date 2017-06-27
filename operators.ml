@@ -40,3 +40,12 @@ let string_of_binop =
     | `Or -> "||"
     | `Cons -> "::"
     | `Name name -> name
+
+let binop_of_string : string -> binop =
+   function
+      | "-" -> `Minus
+      | ".-" -> `FloatMinus
+      | "&&" -> `And
+      | "||" -> `Or
+      | "::" -> `Cons
+      | name -> `Name name

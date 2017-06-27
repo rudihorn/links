@@ -5,6 +5,8 @@ include $(LINKSBASEMAKEFILE)
 
 SOURCES :=	$(SOURCES)		\
 		   	unitTestsLensFDHelpers.ml	\
+				unitTestsJson.ml				\
+				unitTests.ml
 			
 
 PACKS :=	$(PACKS) oUnit

@@ -94,6 +94,23 @@ let construct_join_lens (fd_set : fundepset) (name : string) data =
     let l1 = `LensMem ((`List data), (fd_set, None, List.map (colFn "table1") cols)) in
     l1
 
+let cat_tex cols name delta =
+    let cs = List.fold_right (fun a b -> b ^ "c") cols "" in
+    let _ = Debug.print ("\\begin{array}{c|" ^ cs ^ "}") in
+    let _ = Debug.print ("\t" ^ name ^ 
+        (List.fold_left (fun a b -> a ^ " & " ^ b) "" cols )
+    ^ "\\\\") in
+    let _ = Debug.print "\t\\hline" in
+    let _ = if List.length delta = 0 then
+        Debug.print "\\\\"
+    else
+        let _ = List.map (fun (row, m) -> Debug.print (
+            (List.fold_left (fun a (_,b) -> a ^ "& " ^ string_of_int (unbox_int b) ^ " ") ("\t" ^ string_of_int m) (unbox_record row))
+        ^ "\\\\")) delta in
+        () in
+    let _ = Debug.print "\\end{array}" in
+    ()
+
 let run_join_test_case_1 data exp1 exp2 dbg =
     let dat_fd_set_1 = FunDepSet.of_lists [
         (["A"], ["B"]);
@@ -119,32 +136,50 @@ let run_join_test_case_1 data exp1 exp2 dbg =
     let constr_cmp_left data = List.map (delt_constr ["A"; "B"; "C"]) data in
     let constr_cmp_right data = List.map (delt_constr ["B"; "D"; "E"]) data in
     let constr_data = List.map (delt_constr ["A"; "B"; "C"; "D"; "E"]) in
-    let (outp1, outp2) = LensHelpers.lens_delta_put_join l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) (constr_data data) in
+    let data_c = constr_data data in
+    let (outp1, outp2) = LensHelpers.lens_delta_put_join l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data_c in
     let _ = if dbg then
         let _ = LensHelpers.lens_debug_delta outp1 in
+        let _ = Debug.print " " in
         let _ = LensHelpers.lens_debug_delta outp2 in
         ()
     else
         () in
-    let _ = assert_equal outp1 (constr_cmp_left exp1) in
-    let _ = assert_equal outp2 (constr_cmp_right exp2) in
+    let _ = if false then
+        let _ = cat_tex ["A"; "B"; "C"; "D"; "E"] "Q" data_c in
+        let _ = Debug.print "& \\Rightarrow" in
+        let _ = cat_tex ["A"; "B"; "C"] "R" outp1 in
+        let _ = Debug.print "+" in
+        let _ = cat_tex ["B"; "D"; "E"] "S" outp2 in
+        let _ = Debug.print "\\\\" in
+        let _ = Debug.print "\\\\" in 
+        ()
+    else
+        () in
+    let cmp_left = constr_cmp_left exp1 in
+    let cmp_left = List.sort_uniq LensRecordHelpers.compare_delta_entry cmp_left in
+    let cmp_right = constr_cmp_right exp2 in
+    let cmp_right = List.sort_uniq LensRecordHelpers.compare_delta_entry cmp_right in
+    let _ = assert_equal outp1 cmp_left in
+    let _ = assert_equal outp2 cmp_right in
     ()
 
 let test_join_1_insert_new test_ctx = 
     run_join_test_case_1 [
-        [1; 1; 1; 1; 1], +1
+        [1; 1; 1; 1; 1], +1;
     ] [
-        [1; 1; 1], 1
+        [1; 1; 1], 1;
     ] [
-        [1; 1; 1], 1
+        [1; 1; 1], 1;
     ] false
 
 let test_join_1_delete test_ctx = 
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1
     ] [
-        [1; 1; 1], -1
+        [1; 1; 1], -1;
     ] [
+        [1; 1; 1], 0;
     ] false
 
 let test_join_1_delete_l test_ctx = 
@@ -153,16 +188,17 @@ let test_join_1_delete_l test_ctx =
         [2; 1; 1; 1; 1], 0
     ] [
         [1; 1; 1], -1;
-        [2; 1; 1], 0
+        [2; 1; 1], 0;
     ] [
-        [1; 1; 1], 0
-    ] false 
+        [1; 1; 1], 0;
+    ] false
 
 let test_join_1_update_right test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], +1;
         [1; 1; 1; 2; 1], -1
     ] [
+        [1; 1; 1], 0;
     ] [
         [1; 1; 1], 1;
         [1; 2; 1], -1
@@ -171,11 +207,12 @@ let test_join_1_update_right test_ctx =
 let test_join_1_left_remove_left_add test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
-        [2; 1; 1; 1; 1], +1
+        [2; 1; 1; 1; 1], +1;
     ] [
         [1; 1; 1], -1;
-        [2; 1; 1], +1
+        [2; 1; 1], +1;
     ] [
+        [1; 1; 1], 0;
     ] false 
 
 let test_join_1_left_remove_left_add_2 test_ctx =
@@ -184,37 +221,41 @@ let test_join_1_left_remove_left_add_2 test_ctx =
         [1; 2; 1; 1; 1], +1
     ] [
         [1; 1; 1], -1;
-        [1; 2; 1], +1
+        [1; 2; 1], +1;
     ] [
-        [2; 1; 1], +1
-    ] false 
+        [1; 1; 1], 0;
+        [2; 1; 1], +1;
+    ] false
 
 let test_join_1_left_update test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
-        [1; 1; 2; 1; 1], +1
+        [1; 1; 2; 1; 1], +1;
     ] [
         [1; 1; 1], -1;
-        [1; 1; 2], +1
+        [1; 1; 2], +1;
     ] [
+        [1; 1; 1], 0;
     ] false
 
 let test_join_1_weird_fd_right_change test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
-        [1; 2; 1; 2; 1], +1
+        [1; 2; 1; 2; 1], +1;
     ] [
         [1; 1; 1], -1;
-        [1; 2; 1], +1
+        [1; 2; 1], +1;
     ] [
-        [2; 2; 1], +1
-    ] false
+        [1; 1; 1], 0;
+        [2; 2; 1], +1;
+    ] false 
 
 let test_join_1_change_right_existing test_ctx =
     run_join_test_case_1 [
         [5; 5; 5; 5; 5], -1;
-        [5; 5; 5; 5; 6], +1
+        [5; 5; 5; 5; 6], +1;
     ] [
+        [5; 5; 5], 0;
     ] [
         [5; 5; 5], -1;
         [5; 5; 6], +1;
@@ -222,7 +263,7 @@ let test_join_1_change_right_existing test_ctx =
 
 let test_join_1_change_add_existing test_ctx =
     run_join_test_case_1 [
-        [1; 5; 1; 5; 6], +1
+        [1; 5; 1; 5; 6], +1;
     ] [
         [1; 5; 1], +1;
     ] [
@@ -232,8 +273,9 @@ let test_join_1_change_add_existing test_ctx =
 
 let test_join_1_change_add_right test_ctx =
     run_join_test_case_1 [
-        [9; 9; 9; 9; 9], +1
+        [9; 9; 9; 9; 9], +1;
     ] [
+        [9; 9; 9], +1;
     ] [
         [9; 9; 9], +1;
     ] false 
@@ -247,7 +289,7 @@ let test_join_1_add_left_neutral test_ctx =
         [1; 5; 5], 1;
     ] [
         [5; 5; 5], 0;
-    ] false 
+    ] false
 
 let suite =
     "lens_fd_helpers">:::
@@ -272,5 +314,3 @@ let suite =
         "join_1_add_left_neutral">::test_join_1_add_left_neutral;
     ];;
 
-let () =
-    run_test_tt_main suite;;

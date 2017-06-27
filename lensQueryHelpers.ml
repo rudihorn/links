@@ -127,7 +127,9 @@ let rec construct_query_db (expr : lens_phrase) (db : Value.database) (mapCol : 
     | `Var v -> mapCol v
     | `InfixAppl (op, a1, a2) -> construct_query a1 ^ " " ^ translate_op_to_sql (string_of_binop op) ^ " " ^ construct_query a2 
     | `TupleLit l -> "(" ^ List.fold_left (fun a b -> a ^ ", " ^ (construct_query b)) (construct_query (List.hd l)) (List.tl l)  ^ ")"
-    | `UnaryAppl (op, a1) ->  string_of_unary_op op ^ construct_query a1
+    | `UnaryAppl (op, a1) ->  match string_of_unary_op op with
+        | "!" -> "NOT (" ^ construct_query a1 ^ ")"
+        | a -> a ^ " (" ^ construct_query a1 ^ ")"
     | _ -> failwith "durr"
 
 let construct_query (expr : lens_phrase) =
@@ -148,6 +150,24 @@ let construct_select_query (query : select_query) =
     let col = List.find (fun c -> c.alias = a) query.cols in
     db#quote_field col.table ^ "." ^ db#quote_field col.name in
    match query.pred with 
+  | Some qphrase -> sql ^ " WHERE " ^ construct_query_db qphrase db mapCol
+  | None -> sql
+
+let construct_select_query_sort db (sort : lens_sort) =
+  let colFn col = db#quote_field col.table ^ "." ^ db#quote_field col.name ^ " AS " ^ db#quote_field col.alias in 
+  let tableFn (table, alias) = db#quote_field table ^ " AS " ^ db#quote_field alias in
+  let cols = get_lens_sort_cols sort in
+  let colsF = List.filter (fun c -> c.present) cols in
+  let tables = List.map (fun c -> c.table) cols in
+  let tables = List.sort_uniq compare tables in
+  let tables = List.map (fun c -> (c,c)) tables in
+  let colsQ = List.fold_left (fun a b -> a ^ ", " ^ colFn b) (colFn (List.hd colsF)) (List.tl colsF) in
+  let tablesQ = List.fold_left (fun a b -> a ^ ", " ^ tableFn b) (tableFn (List.hd tables)) (List.tl tables) in
+  let sql = "SELECT " ^ colsQ ^ " FROM " ^ tablesQ in
+  let mapCol = fun a -> 
+    let col = List.find (fun c -> c.alias = a) cols in
+    db#quote_field col.table ^ "." ^ db#quote_field col.name in
+   match get_lens_sort_pred sort with 
   | Some qphrase -> sql ^ " WHERE " ^ construct_query_db qphrase db mapCol
   | None -> sql
 

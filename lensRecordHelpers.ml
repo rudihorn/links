@@ -11,10 +11,18 @@ let get_lens_sort_pred (_, pred, _ : Types.lens_sort) = pred
 let get_lens_sort_cols (_, _, rowType : Types.lens_sort) = 
   rowType
 
-let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = 
+let get_lens_sort_colset (_, _, rowType : Types.lens_sort) = 
+  let cols = List.map (fun (col) -> col.alias) rowType in
+  ColSet.of_list cols
+
+let get_record_type_from_cols rowType = 
     let rowType = List.filter (fun f -> f.present) rowType in
     let map : field_spec_map = List.fold_left (fun a col -> StringMap.add col.alias (`Present col.typ) a) StringMap.empty rowType in
     `Record (map, Unionfind.fresh `Closed, false)
+
+let get_lens_sort_row_type (_, _, rowType : Types.lens_sort) = 
+   let map = get_record_type_from_cols rowType in
+   map
 
 let set_lens_sort_table_name (fn_dep, pred, rowType : Types.lens_sort) (table : string) =
     let rowType = List.map (fun c -> {c with table = table;}) rowType in
@@ -74,6 +82,61 @@ let records_match_on recA recB on =
 let contains_record (recA : Value.t) (recordsB : Value.t) =
     let recordsB = unbox_list recordsB in
     List.exists (fun recB -> records_equal recA recB) recordsB
+
+let build_col_map (record : Value.t) =
+    let r = unbox_record record in
+    List.map (fun (n,a) -> n) r
+
+let reorder_record_cols cols r =
+    let vals = unbox_record r in
+    let vals = List.mapi (fun i n ->
+        let (n',v') = List.nth vals i in
+        if n' = n then
+            (n, v')
+        else
+            (n, get_record_val n r)
+    ) cols in
+    box_record vals
+
+let reorder_record_list_cols (recs : Value.t) =
+    let recs = unbox_list recs in
+    match recs with
+    | [] -> box_list []
+    | t::xs -> 
+        let cols = build_col_map t in
+        let xs = List.map (reorder_record_cols cols) xs in
+        box_list (t::xs)
+
+let reorder_delta_list_cols (recs : (Value.t * int) list) = 
+    match recs with 
+    | [] -> []
+    | (t,m)::xs -> 
+        let cols = build_col_map t in
+        let xs = List.map (fun (t,m) -> (reorder_record_cols cols t, m)) xs in
+        (t,m)::xs
+
+let reorder_delta_list_cols_sort (sort : lens_sort) (recs : (Value.t * int) list) = 
+    let cols = List.filter (fun c -> c.present) (get_lens_sort_cols sort) in
+    let cols = List.map (fun c -> c.alias) cols in
+    List.map (fun (t,m) -> (reorder_record_cols cols t, m)) recs
+
+let compare_records (recA : Value.t) (recB : Value.t) =
+    let recA = unbox_record recA in
+    let recB = unbox_record recB in
+    let rec cmp recA recB = match recA, recB with
+    | [], [] -> 0
+    | [], _ -> failwith "records not matching length"
+    | _, [] -> failwith "records not matching length"
+    | (n, x) :: xs, (n', y) :: ys -> if n <> n' then 
+            failwith "records not matching col order"
+        else
+            match compare x y with 0 -> cmp xs ys | n -> n in
+    cmp recA recB
+
+let compare_delta_entry (t,m) (t',m') =
+    match compare_records t t' with
+    | 0 -> compare m m'
+    | a -> a
 
 (* Drop related methods *)
 let remove_record_type_column (a : string) (r : Types.lens_col list) =
