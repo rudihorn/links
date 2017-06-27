@@ -10,6 +10,7 @@ let string_contents = ([^ '\"' '\\']* |"\\\"" |"\\\\" | "\\n" | "\\r" | "\\t" | 
 let def_nat = ['0'-'9']+
 let def_integer = '-'? def_nat
 let def_float = def_integer '.' def_nat ('e' def_integer)?
+let def_id = ['_''a'-'z''A'-'Z']['_''a'-'z''A'-'Z''0'-'9']*
 let def_blank = [' ' '\t' '\n']
 
 rule jsonlex = parse
@@ -26,6 +27,7 @@ rule jsonlex = parse
   | "false"                              { Jsonparse.FALSE }
   | "null"                               { Jsonparse.NULL }
   | ('\"' (string_contents as var) '\"') { Jsonparse.STRING (Utility.decode_escapes var) }
+  | def_id as var                        { Jsonparse.STRING var }
   | def_integer as var                   { Jsonparse.INT (int_of_string var) }
   | def_float as var                     { Jsonparse.FLOAT (float_of_string var) }
   | def_blank                            { jsonlex lexbuf }
