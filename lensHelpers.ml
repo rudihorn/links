@@ -5,6 +5,14 @@ open LensFDHelpers
 open LensQueryHelpers
 open LensRecordHelpers
 
+let query_timer = ref 0
+let query_count = ref 0
+
+(*** Lenses Force Memory ***)
+let lens_force_mem_enabled = Settings.add_bool ("lens_force_mem", false, `User)
+
+
+
 (** print a debug message if debugging is enabled *)
 let print message =
   (if true then print_endline message)
@@ -139,7 +147,9 @@ let rec lens_get (lens : Value.t) callfn =
         (* let query = lens_get_query lens in
         let sql = construct_select_query query  in *)
         let mappings = List.map (fun c -> get_lens_col_alias c, get_lens_col_type c) cols in
-        let res = execute_select mappings sql db in
+        let res = Debug.debug_time_out 
+            (fun () -> execute_select mappings sql db) 
+            (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
         let _ = Debug.print sql in
         res
 
@@ -486,7 +496,7 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
                 match m with
                 | -1 -> [(t,m)]
                 | 0 -> [(t,m)]
-                | +1 -> 
+                | 1 -> 
                     let fds = get_lens_sort_fn_deps sort in
                     let gen_equals = fun fd ->
                         create_phrase_equal (create_phrase_var fd) (create_phrase_constant_of_record_col t fd) in
@@ -555,15 +565,18 @@ let lens_delta_put (lens : Value.t) (dataOrig : Value.t) (data : Value.t) =
     let _ = print "Input delta: "; lens_debug_delta delta; print "" in
     lens_delta_put_ex lens delta
 
-  let rec lens_put (lens : Value.t) (data : Value.t) callfn =
-    let is_memory = is_memory_lens lens in
+let lens_put (lens : Value.t) (data : Value.t) callfn =
+    let is_memory = is_memory_lens lens || Settings.get_value lens_force_mem_enabled in
+    let () = query_timer := 0; query_count := 0 in
     (* let is_memory = true in *)
-    Debug.debug_time "lens#put" (fun () -> 
+    Debug.debug_time_out (fun () -> 
     if is_memory then
         lens_put_mem lens data callfn 
     else
         let delta = lens_delta_put lens (lens_get lens callfn) data in
         data
+    ) (fun time -> 
+        print ("lens#put took " ^ string_of_int time ^ " with query time " ^ string_of_int !query_timer ^ " with " ^ string_of_int !query_count ^ " queries")
     )
 
 let get_fd (keys : Operators.name list) (rowType : Types.typ) : Types.fundep =

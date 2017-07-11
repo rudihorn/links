@@ -91,9 +91,9 @@ type ('t, 'r) session_type_basis =
 (* Lenses *)
 type lens_phrase = 
   [ `Constant  of Constant.constant
-  | `Var       of Operations.name 
-  | `InfixAppl of Operations.binop * lens_phrase * lens_phrase
-  | `UnaryAppl of Operations.unary_op * lens_phrase 
+  | `Var       of Operators.name 
+  | `InfixAppl of Operators.binop * lens_phrase * lens_phrase
+  | `UnaryAppl of Operators.unary_op * lens_phrase 
   | `TupleLit  of lens_phrase list
   ]
     deriving (Show)

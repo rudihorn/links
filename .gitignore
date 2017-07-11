@@ -13,6 +13,7 @@
 *.cmx
 *.annot
 *.output
+.*.sw*
 links
 linksTests
 jsonlex.ml

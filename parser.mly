@@ -1,7 +1,7 @@
 %{
 
 open Utility
-open Operations
+open Operators
 open Sugartypes
 
 (* Generation of fresh type variables *)
@@ -235,7 +235,7 @@ let cp_unit p = `Unquote ([], (`TupleLit [], p)), p
 %type <Sugartypes.regex> regex_pattern
 %type <Sugartypes.regex list> regex_pattern_sequence
 %type <Sugartypes.pattern> pattern
-%type <(Operations.name * Sugartypes.position) * Sugartypes.declared_linearity * Sugartypes.funlit * Sugartypes.location * Sugartypes.position> tlfunbinding
+%type <(Operators.name * Sugartypes.position) * Sugartypes.declared_linearity * Sugartypes.funlit * Sugartypes.location * Sugartypes.position> tlfunbinding
 %type <Sugartypes.phrase> postfix_expression
 %type <Sugartypes.phrase> primary_expression
 %type <Sugartypes.phrase> atomic_expression
@@ -433,10 +433,6 @@ perhaps_cp_cases:
 perhaps_name:
 |                                                              { None }
 | cp_name                                                      { Some $1 }
-
-perhaps_exp:
-|                                                              { None }
-| exp                                                          { Some $1 }
 
 cp_expression:
 | LBRACE block_contents RBRACE                                 { `Unquote $2, pos () }
