@@ -15,6 +15,16 @@ let get_lens_sort_colset (_, _, rowType : Types.lens_sort) =
   let cols = List.map (fun (col) -> col.alias) rowType in
   ColSet.of_list cols
 
+module LensSort = struct
+    let fundeps = get_lens_sort_fn_deps
+    let predicate = get_lens_sort_pred
+    let cols = get_lens_sort_cols
+    let colset = get_lens_sort_colset
+
+    let make fds pred rowType : Types.lens_sort = (fds, pred, rowType)
+end
+
+
 let get_record_type_from_cols rowType = 
     let rowType = List.filter (fun f -> f.present) rowType in
     let map : field_spec_map = List.fold_left (fun a col -> StringMap.add col.alias (`Present col.typ) a) StringMap.empty rowType in
@@ -70,7 +80,6 @@ let get_field_spec_type (typ : Types.field_spec) =
     match typ with
     | `Present t -> t
     | _ -> failwith "Expected `Present"
-
 let records_equal recA recB =
     (* this function checks that every entry in recA is equal in recB *)
     not (List.exists (fun (name, value) -> get_record_val name recB <> value) (unbox_record recA))
@@ -176,3 +185,14 @@ let restore_column (drop : string) (key : string) (default : Value.t) (row : Val
         | Some r -> get_record_val drop r
         | None -> default in
         box_record ((drop, dropVal) :: unbox_record row) 
+
+module Record = struct
+    let equal = records_equal
+    let match_on = records_match_on
+    let project record cols = 
+        let d = unbox_record record in
+        let d = List.filter (fun (k,v) -> ColSet.mem k cols) d in
+        box_record d
+end
+
+

@@ -249,20 +249,121 @@ let is_update_row data prim cols (t,m) =
         let diffright = fun t2 -> not (records_match_on t t2 cols) in
         List.exists (fun (t',m') -> m = - m && sameleft t' && diffright t') data
 
-let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_sort = 
-    let (fds, oldPred, cols) = sort in
-    let pred = match oldPred with 
-    | None -> pred
-    | Some oldPred -> create_phrase_and (create_phrase_tuple pred) (create_phrase_tuple oldPred) in
-    let pred = Some pred in
-    (fds, pred, cols)
+let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_sort =
+    let oldPred = LensSort.predicate sort in
+    let pred = Phrase.combine_and oldPred (Some pred) in
+    (LensSort.fundeps sort, pred, LensSort.cols sort)
 
 let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
     let sort = get_lens_sort lens in
     let sort = select_lens_sort sort phrase in
     lens_get (`LensSelect (lens, phrase, sort)) None
 
-let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * string) list) 
+let rec calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list) =
+    let complements = List.filter (fun (t,m) -> m = -1) data in
+    let complements = List.map (fun (t,m) -> t) complements in
+    let additions = List.filter (fun (t,m) -> m = +1) data in
+    let additions = List.map (fun (t,m) -> t) additions in
+    (* get the key of the row for finding complements *)
+    let (key,_) = get_fd_root fds in
+    (* pair additions with their complements if they exist *)
+    let changes = List.map (fun t -> 
+        let compl = try
+            Some (List.find (fun b -> Record.match_on t b (ColSet.elements key)) complements)
+        with
+            NotFound _ -> None in
+        t, compl
+    ) additions in
+    (* for each functional dependency find changes *)
+    let rec loop fds =
+        if FunDepSet.is_empty fds then
+            []
+        else
+            let fd = get_fd_root fds in 
+            let fdl, fdr = FunDep.left fd, FunDep.right fd in
+            let changeset = List.map (fun (t,compl) ->
+                match compl with 
+                | None -> [Record.project t fdl, Record.project t fdr]
+                | Some t' -> 
+                        if Record.match_on t t' (ColSet.elements (ColSet.union fdr fdl)) then
+                            []
+                        else
+                            [Record.project t fdl, Record.project t fdr]
+            ) changes in
+            let changeset = List.flatten changeset in
+            let fds = FunDepSet.remove fd fds in
+            (fd,changeset) :: loop fds in
+    let res = loop fds in    
+    res
+
+let query_exists (lens : Value.t) phrase =
+    let sort = get_lens_sort lens in
+    let sort = select_lens_sort sort phrase in
+    if is_memory_lens lens then
+        let res = lens_get (`LensSelect (lens, phrase, sort)) None in
+        unbox_list res <> []
+    else
+        let db = lens_get_db lens in
+        let sql = construct_select_query_sort db sort in
+        let sql = "SELECT EXISTS(" ^ sql ^ ") AS t" in
+        let mappings = ["t", `Primitive `Bool] in
+        let res = Debug.debug_time_out 
+            (fun () -> execute_select mappings sql db)
+            (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
+        let _ = Debug.print sql in
+        let (_,v)::_ = unbox_record (List.hd (unbox_list res)) in
+        unbox_bool v
+
+let can_remove_phrase (sort : Types.lens_sort) (on : (string * string * string) list) (row : Value.t) (data : (Value.t * int) list) =
+    let on_simp = List.map (fun (a,_,_) -> a) on in
+    let fds = LensSort.fundeps sort in
+    (* let fd = get_defining_fd fds (ColSet.of_list on_simp) in *)
+    let fd = get_fd_root fds in
+    let key = FunDep.left fd in
+    (* phrase_on tries to find all records where on is identical to the values of row *)
+    let phrase_on = Phrase.matching_cols (ColSet.of_list on_simp) row in
+    let removed = List.filter (fun (r,m) -> m = -1 && Record.match_on r row on_simp) data in
+    let removed = List.map (fun (r,m) -> r) removed in
+    let removed = List.map (fun r -> 
+        let compl = List.filter (fun (r',m) -> m = +1 && Record.match_on r r' (ColSet.elements key)) data in
+        r,compl
+    ) removed in
+    let compls,dels = List.partition (fun (r,compl) -> compl <> []) removed in
+    let dels = List.map (fun (r,_) -> r) dels in
+    let compls = List.map (fun (r,x::xs) -> r,x) compls in
+    (* if there is a complement for a row, then find out where the change is in the complement and ignore rows with the same column value *)
+    let phrase_not_changed = List.fold_left (fun phrase (row,(compl,_)) ->
+        let rec sth col = 
+            let fd = FunDepSet.get_defining fds col in
+            let subres = 
+                if ColSet.subset key (FunDep.left fd) then
+                    []
+                else
+                    sth (FunDep.left fd) in
+            if Record.match_on row compl (ColSet.elements (FunDep.left fd)) && 
+                not (Record.match_on row compl (ColSet.elements (FunDep.right fd))) then
+                fd :: subres 
+            else
+                subres in
+        let brokenfds = sth (ColSet.of_list on_simp) in
+        let term = Phrase.combine_and_l (List.map (fun brokenfd ->
+                Phrase.negate (OptionUtils.val_of (Phrase.matching_cols (FunDep.left brokenfd) row))
+            ) brokenfds) in
+        Phrase.combine_and term phrase
+    ) None compls in
+    (* phrase_not_removed finds all records which aren't marked for deletion *)
+    let phrase_not_removed = List.fold_left (fun phrase delrow ->
+        let term = Phrase.negate (OptionUtils.val_of (Phrase.matching_cols key delrow)) in
+        Phrase.combine_and phrase (Some term)
+    ) None dels in
+    let phrase = Phrase.combine_and_l_opt [ 
+        phrase_on; 
+        phrase_not_removed; 
+        phrase_not_changed; 
+    ] in
+    phrase
+
+let lens_delta_put_join sort (l1 : Value.t) (l2 : Value.t) (on : (string * string * string) list) 
     (left_pred : lens_phrase) (right_pred : lens_phrase)
     (data : (Value.t * int) list) : (Value.t * int) list * (Value.t * int) list = 
     let sort_left = get_lens_sort l1 in
@@ -285,7 +386,7 @@ let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * s
         let ntrl_exists_right = not is_neutral && List.exists (fun (t',m') -> m' = 0 && records_match_on t t' on_simp) data in
         let compl_exists_right = not is_neutral && List.exists (fun (t',m') -> m' = - m && records_match_on t t' on_simp) data in
         let upd_right = compl_exists_left && List.exists (fun (t',m') -> m' = - m && records_match_on t t' on_simp && not (records_match_on t t' cols_right)) data in 
-        let remove_right = m = -1 && not compl_exists_right && not ntrl_exists_right in
+        let remove_right = m = -1 && not compl_exists_right && not ntrl_exists_right && not (query_exists l1 (OptionUtils.val_of (can_remove_phrase sort on t data))) in
         (* use helpers *)
         let left = if is_neutral then
             [(t,m)]
@@ -310,9 +411,9 @@ let lens_delta_put_join (l1 : Value.t) (l2 : Value.t) (on : (string * string * s
                 else (* m = +1 *)
                     [(t,m)] in
         let find_sim_right r = 
-            let phrase = List.fold_left (fun phrase on -> match phrase with
-                | Some phrase -> Some (create_phrase_and phrase (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on)))
-                | None -> Some (create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on))
+            let phrase = List.fold_left (fun phrase on ->
+                let term = create_phrase_equal (create_phrase_var on) (create_phrase_constant_of_record_col t on) in
+                Phrase.combine_and phrase (Some term)
             ) None on_simp in
             let res = lens_get_select l2 (OptionUtils.val_of phrase) in
             let res = unbox_list res in
@@ -522,7 +623,7 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
             let data = List.flatten data in
             lens_delta_put_ex l data
     | `LensJoin (l1, l2, on, sort) ->
-        let outp1, outp2 = lens_delta_put_join l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data in
+        let outp1, outp2 = lens_delta_put_join sort l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data in
         let t1 = lens_delta_put_ex l1 outp1 in
         let t2 = lens_delta_put_ex l2 outp2 in
         (*let on = List.map (fun (a,_,_) -> a) on in
@@ -645,11 +746,11 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_colum
             match c2 with 
             | None -> c :: output, jrs
             | Some c2 -> 
-                let _ = Debug.print ("duplicate " ^ c.alias) in
+                (* let _ = Debug.print ("duplicate " ^ c.alias) in *)
                 let is_on = List.mem (get_alias c) on_columns in
                 if is_on then
                     let new_alias = get_new_alias c.alias output 1 in
-                    let _ = Debug.print ("alias " ^ c.alias ^ " -> " ^ new_alias) in
+                    (* let _ = Debug.print ("alias " ^ c.alias ^ " -> " ^ new_alias) in *)
                     {c with alias = new_alias; present = false;} :: output, (c.alias, new_alias) :: jrs
                 else 
                     (set_lens_col_alias c (get_new_alias (get_alias c) output 1)) :: output, jrs
@@ -686,3 +787,5 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_colum
     else
         failwith "The key does not match between the two lenses."
 *)
+
+

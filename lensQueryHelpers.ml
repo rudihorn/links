@@ -95,6 +95,14 @@ let rec calculate_predicate (expr : lens_phrase) (get_val : string -> Value.t) =
                 box_int res 
             | op -> failwith ("Unsupported unary operation " ^ op)
         end
+    | `Case (inp, cases, otherwise) ->
+            let inp = calculate_predicate inp get_val in
+            try
+                let (k,v) = List.find (fun (k,v) -> k = constant_of_value inp) cases in
+                calculate_predicate v get_val
+            with
+                NotFound _ -> calculate_predicate otherwise get_val
+    
     (* | `FnAppl (fn, arg) ->
         begin
             match name_of_var fn with
@@ -127,9 +135,17 @@ let rec construct_query_db (expr : lens_phrase) (db : Value.database) (mapCol : 
     | `Var v -> mapCol v
     | `InfixAppl (op, a1, a2) -> construct_query a1 ^ " " ^ translate_op_to_sql (string_of_binop op) ^ " " ^ construct_query a2 
     | `TupleLit l -> "(" ^ List.fold_left (fun a b -> a ^ ", " ^ (construct_query b)) (construct_query (List.hd l)) (List.tl l)  ^ ")"
-    | `UnaryAppl (op, a1) ->  match string_of_unary_op op with
-        | "!" -> "NOT (" ^ construct_query a1 ^ ")"
-        | a -> a ^ " (" ^ construct_query a1 ^ ")"
+    | `UnaryAppl (op, a1) ->  
+        begin
+            match string_of_unary_op op with
+            | "!" -> "NOT (" ^ construct_query a1 ^ ")"
+            | a -> a ^ " (" ^ construct_query a1 ^ ")"
+        end
+    | `Case (inp, cases, otherwise) -> 
+            let inp = construct_query inp in
+            let cases = List.fold_left (fun a (k,v) -> a ^ " WHEN " ^ Constant.string_of_constant k ^ " THEN " ^ construct_query v) "" cases in
+            let otherwise = construct_query otherwise in
+            "CASE (" ^ inp ^ ")" ^ cases ^ " ELSE " ^ otherwise ^ " END"
     | _ -> failwith "durr"
 
 let construct_query (expr : lens_phrase) =
@@ -219,6 +235,43 @@ let create_phrase_not (arg : lens_phrase) =
 
 let create_phrase_tuple (arg : lens_phrase) =
     `TupleLit [arg]
+
+module Phrase = struct
+    let combine_and phrase1 phrase2 = 
+        match phrase1 with 
+        | Some x -> 
+            begin
+                match phrase2 with
+                | Some x' -> Some (create_phrase_and x x')
+                | None -> phrase1 
+            end
+        | None -> phrase2
+
+    let combine_and_l phrasel =
+        List.fold_left (fun phrase term ->
+            combine_and phrase (Some term)
+        ) None phrasel
+
+    let combine_and_l_opt phrasel =
+        List.fold_left (fun phrase term ->
+            combine_and phrase term
+        ) None phrasel
+
+    let var = create_phrase_var
+
+    let equal = create_phrase_equal
+
+    let constant_from_col = create_phrase_constant_of_record_col
+
+    let matching_cols (on : ColSet.t) row = 
+        let phrase = List.fold_left (fun phrase on -> 
+            let term = Some (equal (var on) (constant_from_col row on)) in
+            combine_and phrase term
+        ) None (ColSet.elements on) in
+        phrase
+
+    let negate = create_phrase_not
+end
 
 (*let calculate_predicate (expr : phrase) pred = 
     (* let _ = Debug.print (construct_query expr) in

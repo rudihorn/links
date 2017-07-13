@@ -94,6 +94,7 @@ type lens_phrase =
   | `Var       of Operators.name 
   | `InfixAppl of Operators.binop * lens_phrase * lens_phrase
   | `UnaryAppl of Operators.unary_op * lens_phrase 
+  | `Case      of lens_phrase * (Constant.constant * lens_phrase) list * lens_phrase
   | `TupleLit  of lens_phrase list
   ]
     deriving (Show)

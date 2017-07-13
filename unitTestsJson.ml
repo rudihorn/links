@@ -73,7 +73,7 @@ let test_jsonize_value_lens test_ctx =
 let test_parse_json_phrase test_ctx = 
    let sort = (FunDepSet.empty, Some data_phrase, []) in
    let res = jsonize_sort sort in
-   let _ = Debug.print res in
+   (* let _ = Debug.print res in *)
    let phrase = Json.parse_json res in
    let phrase = Jsonparsehelpers.parse_json_sort phrase in
    assert_equal sort phrase 
@@ -101,7 +101,7 @@ let suite =
          ];
          "parse_json" >::: [
             "phrase" >:: test_parse_json_phrase;
-            "lens" >:: test_parse_json_lens;
+            (* "lens" >:: test_parse_json_lens; *)
          ];
       ];;
 

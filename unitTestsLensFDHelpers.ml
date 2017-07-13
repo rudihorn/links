@@ -2,6 +2,7 @@
 
 open Debug
 open LensFDHelpers
+open LensHelpers
 open OUnit2
 open Types
 open Value
@@ -34,6 +35,18 @@ let rec_constr (cols : string list) (vals : int list) = Value.box_record (List.m
 let delt_constr (cols : string list) (vals, m : int list * int) = rec_constr cols vals, m
 let dat_update_recs = List.map (delt_constr ["A"; "B"; "C"]) [[1; 2; 3], -1; [1; 3; 2], +1; [2; 1; 3], -1; [2; 1; 4], +1; [3; 4; 5], 0; [4; 5; 6], 1; [5; 6; 7], -1]
 
+
+let dat_fd_set_1_recs = List.map (delt_constr ["A"; "B"; "C"; "D"; "E"; "F"; "G"]) [
+    [1; 1; 1; 1; 1; 1; 1], 0;
+    [2; 2; 2; 2; 2; 2; 2], -1;
+    [3; 2; 2; 2; 2; 2; 2], -1;
+    [2; 4; 2; 2; 2; 2; 2], -1;
+    [2; 4; 2; 2; 3; 2; 2], +1;
+    [4; 4; 2; 2; 2; 2; 2], -1; 
+    [4; 4; 3; 2; 4; 3; 3], +1;
+    [5; 5; 5; 5; 5; 5; 5], -1;
+    [6; 6; 6; 6; 6; 6; 6], +1;
+]
 
 (* Tests *)
 
@@ -94,6 +107,10 @@ let construct_join_lens (fd_set : fundepset) (name : string) data =
     let l1 = `LensMem ((`List data), (fd_set, None, List.map (colFn "table1") cols)) in
     l1
 
+let construct_join_lens_2 l1 l2 on =
+    let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
+    `LensJoin (l1, l2, on, sort)
+
 let cat_tex cols name delta =
     let cs = List.fold_right (fun a b -> b ^ "c") cols "" in
     let _ = Debug.print ("\\begin{array}{c|" ^ cs ^ "}") in
@@ -137,7 +154,8 @@ let run_join_test_case_1 data exp1 exp2 dbg =
     let constr_cmp_right data = List.map (delt_constr ["B"; "D"; "E"]) data in
     let constr_data = List.map (delt_constr ["A"; "B"; "C"; "D"; "E"]) in
     let data_c = constr_data data in
-    let (outp1, outp2) = LensHelpers.lens_delta_put_join l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data_c in
+    let l = construct_join_lens_2 l1 l2 ["B"] in
+    let (outp1, outp2) = LensHelpers.lens_delta_put_join (get_lens_sort l) l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data_c in
     let _ = if dbg then
         let _ = LensHelpers.lens_debug_delta outp1 in
         let _ = Debug.print " " in
@@ -291,6 +309,30 @@ let test_join_1_add_left_neutral test_ctx =
         [5; 5; 5], 0;
     ] false
 
+
+let test_calculate_fd_changelist test_ctx =
+    let data = dat_update_recs in
+    let fds = dat_fd_set_2 in
+    let changeset = calculate_fd_changelist fds data in
+    (* let _ = List.map (fun (fd,changes) ->
+        let _ = Debug.print (FunDep.Show_t.show fd) in
+        let _ = List.map (fun (chl, chr) ->
+            Debug.print ("  " ^ string_of_value chl ^ " -> " ^ string_of_value chr)
+        ) changes in
+        ()
+    ) changeset in *)
+    ()
+
+let test_can_remove_phrase test_ctx =
+    let data = dat_fd_set_1_recs in
+    let lens = construct_join_lens dat_fd_set "tbl1" [] in
+    let sort = get_lens_sort lens in
+    let (row,_) = List.nth data 1 in
+    let phrase = can_remove_phrase sort ["E", "E", "table1"] row data in
+    let text = LensQueryHelpers.construct_query (OptionUtils.val_of phrase) in
+    let _ = Debug.print text in
+    ()
+
 let suite =
     "lens_fd_helpers">:::
     [
@@ -300,17 +342,27 @@ let suite =
         "is_update_record">:: test_is_update_record;
         "join_update_filter">:: test_join_update_filter;
 
-        "join_1_insert_new">:: test_join_1_insert_new;
-        "join_1_delete">:: test_join_1_delete;
-        "join_1_delete_l">:: test_join_1_delete_l;
-        "join_1_update_right">:: test_join_1_update_right;
-        "join_1_left_remove_left_add">:: test_join_1_left_remove_left_add;
-        "join_1_left_remove_left_add_2">:: test_join_1_left_remove_left_add_2;
-        "join_1_left_update">:: test_join_1_left_update;
-        "join_1_weird_fd_right_change">::test_join_1_weird_fd_right_change;
-        "join_1_change_right_existing">::test_join_1_change_right_existing;
-        "join_1_change_add_existing">::test_join_1_change_add_existing;
-        "join_1_change_add_right">::test_join_1_change_add_right;
-        "join_1_add_left_neutral">::test_join_1_add_left_neutral;
+        "join">::: [
+            "insert_new">:: test_join_1_insert_new;
+            "delete">:: test_join_1_delete;
+            "delete_l">:: test_join_1_delete_l;
+            "update_right">:: test_join_1_update_right;
+            "left_remove_left_add">:: test_join_1_left_remove_left_add;
+            "left_remove_left_add_2">:: test_join_1_left_remove_left_add_2;
+            "left_update">:: test_join_1_left_update;
+            "weird_fd_right_change">::test_join_1_weird_fd_right_change;
+            "change_right_existing">::test_join_1_change_right_existing;
+            "change_add_existing">::test_join_1_change_add_existing;
+            "change_add_right">::test_join_1_change_add_right;
+            "add_left_neutral">::test_join_1_add_left_neutral;
+        ];
+
+        "changesets">::: [
+            "calculate_fd_changelist">::test_calculate_fd_changelist;
+        ];
+
+        "phrase_gen">::: [
+            "can_remove_phrase">::test_can_remove_phrase;
+        ];
     ];;
 

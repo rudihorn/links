@@ -25,6 +25,20 @@ let get_fd_root (fds : Types.fundepset) =
     ) fds in
     FunDepSet.min_elt res
 
+let get_defining_fd (fds : Types.fundepset) (cols : Types.colset) =
+    let res = FunDepSet.filter (fun fd ->
+        ColSet.subset cols (FunDep.right fd)    
+    ) fds in
+    FunDepSet.min_elt res
+
+module FunDepSet = struct
+    include FunDepSet
+
+    let get_root = get_fd_root
+
+    let get_defining = get_defining_fd
+end
+
 let rec get_fd_subnodes (fd : Types.fundep) (fds : Types.fundepset) : fd_node = 
     let subfds = FunDepSet.filter (fun fd2 ->
         ColSet.subset (FunDep.right fd) (FunDep.left fd2)
