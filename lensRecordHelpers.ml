@@ -188,6 +188,7 @@ let restore_column (drop : string) (key : string) (default : Value.t) (row : Val
 
 module Record = struct
     let equal = records_equal
+    let column = get_record_val
     let match_on = records_match_on
     let project record cols = 
         let d = unbox_record record in

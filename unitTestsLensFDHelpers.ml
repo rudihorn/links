@@ -2,6 +2,7 @@
 
 open Debug
 open LensFDHelpers
+open LensQueryHelpers
 open LensHelpers
 open UnitTestsLensCommon
 open OUnit2
@@ -30,7 +31,7 @@ let dat_update_recs = List.map (LensTestHelpers.delt_constr_int "A B C") [
     [2; 1; 4], +1; 
     [3; 4; 5], 0; 
     [4; 5; 6], 1;
-    [5; 6; 7], -1
+    [5; 6; 7], -1;
 ]
 
 
@@ -308,6 +309,16 @@ let test_join_1_add_left_neutral test_ctx =
     ] false
 
 
+let test_remove_select_phrase test_ctx =
+    let data = dat_update_recs in
+    let fds = dat_fd_set_2 in
+    let l1 = LensTestHelpers.mem_lens_str "A -> B; B -> C" "tbl1" [] in
+    let pred = OptionUtils.val_of (Phrase.combine_and_l [Phrase.greater_than (Phrase.var "B") (Phrase.constant_int 10); Phrase.equal (Phrase.var "C") (Phrase.constant_int 5)]) in
+    let sort = select_lens_sort (get_lens_sort l1) pred in
+    let phrase = remove_select_phrase sort pred data in
+    let _ = Debug.print (LensQueryHelpers.construct_query (OptionUtils.val_of phrase)) in
+    ()
+
 let test_calculate_fd_changelist test_ctx =
     let data = dat_update_recs in
     let fds = dat_fd_set_2 in
@@ -361,6 +372,7 @@ let suite =
 
         "phrase_gen">::: [
             "can_remove_phrase">::test_can_remove_phrase;
+            "remove_select_phrase">::test_remove_select_phrase;
         ];
     ];;
 

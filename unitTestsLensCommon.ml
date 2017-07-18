@@ -35,7 +35,7 @@ module LensTestHelpers = struct
         let fds = List.map fundep_of_string split in
         FunDepSet.of_list fds
 
-    let construct_mem_lens (fd_set : fundepset) (name : string) data =
+    let mem_lens (fd_set : fundepset) (name : string) data =
         let cols = FunDepSet.fold (fun fd fld -> ColSet.union_all [FunDep.left fd; FunDep.right fd; fld]) fd_set ColSet.empty in
         let cols = ColSet.elements cols in
         let colFn tbl name = {
@@ -44,12 +44,16 @@ module LensTestHelpers = struct
         let l1 = `LensMem ((`List data), (fd_set, None, List.map (colFn name) cols)) in
         l1
 
-    let construct_mem_lens_str fds name data =
-        construct_mem_lens (fundepset_of_string fds) name data
+    let mem_lens_str fds name data =
+        mem_lens (fundepset_of_string fds) name data
 
-    let construct_join_lens l1 l2 on =
+    let join_lens l1 l2 on =
         let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
         `LensJoin (l1, l2, on, sort)
+
+    let select_lens l predicate =
+        lens_get_select l predicate
+
 end
 
 let test_fundep_of_string test_ctx = 

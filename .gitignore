@@ -45,8 +45,13 @@ doc/*.toc
 
 # ocamlbuild artefacts
 _build
+links.opt
 links.byte
 links.native
+links_unit
+links_unit.opt
+*.omc
+*.omakedb*
 
 # database configuration
 tests/database/config
