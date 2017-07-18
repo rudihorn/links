@@ -111,6 +111,8 @@ module FunDep : sig
     
     val compare : t -> t -> int
 
+    val make    : colset -> colset -> t
+
     val of_lists : string list * string list -> t
     
     module Show_t : Deriving_Show.Show with type a = t

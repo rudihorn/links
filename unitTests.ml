@@ -2,8 +2,11 @@ open OUnit2
 
 let suites = 
    "All" >::: [
-      UnitTestsLensFDHelpers.suite;
-      UnitTestsJson.suite
+       "Lenses" >::: [
+            UnitTestsLensCommon.suite;
+            UnitTestsLensFDHelpers.suite;
+            UnitTestsJson.suite;
+        ];
    ];;
 
 let () =

@@ -259,7 +259,7 @@ let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
     let sort = select_lens_sort sort phrase in
     lens_get (`LensSelect (lens, phrase, sort)) None
 
-let rec calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list) =
+let rec calculate_fd_changelist_old (fds : FunDepSet.t) (data : (Value.t * int) list) =
     let complements = List.filter (fun (t,m) -> m = -1) data in
     let complements = List.map (fun (t,m) -> t) complements in
     let additions = List.filter (fun (t,m) -> m = +1) data in
@@ -296,6 +296,23 @@ let rec calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list
     let res = loop fds in    
     res
 
+let rec calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list) =
+    let additions = List.filter (fun (t,m) -> m = +1) data in
+    let additions = List.map (fun (t,m) -> t) additions in
+    (* get the key of the row for finding complements *)
+    let rec loop fds =
+        if FunDepSet.is_empty fds then
+            []
+        else
+            let fd = get_fd_root fds in 
+            let fdl, fdr = FunDep.left fd, FunDep.right fd in
+            let changeset = List.map (fun t ->
+                (Record.project t fdl, Record.project t fdr)) additions in
+            let fds = FunDepSet.remove fd fds in
+            (fd, changeset) :: loop fds in
+    let res = loop fds in
+    res
+
 let query_exists (lens : Value.t) phrase =
     let sort = get_lens_sort lens in
     let sort = select_lens_sort sort phrase in
@@ -313,6 +330,7 @@ let query_exists (lens : Value.t) phrase =
         let _ = Debug.print sql in
         let (_,v)::_ = unbox_record (List.hd (unbox_list res)) in
         unbox_bool v
+
 
 let can_remove_phrase (sort : Types.lens_sort) (on : (string * string * string) list) (row : Value.t) (data : (Value.t * int) list) =
     let on_simp = List.map (fun (a,_,_) -> a) on in
@@ -351,6 +369,29 @@ let can_remove_phrase (sort : Types.lens_sort) (on : (string * string * string) 
             ) brokenfds) in
         Phrase.combine_and term phrase
     ) None compls in
+    (* phrase not added changes *)
+    let changelist = calculate_fd_changelist fds data in
+    let rec ignore_change col =
+        let fd = FunDepSet.get_defining fds col in
+        let (_,changes) = List.find (fun (fd', changes) -> fd = fd') changelist in
+        let phrases = List.map (fun (chl, chr) ->
+                Phrase.negate (OptionUtils.val_of (Phrase.matching_cols (FunDep.left fd) chl))
+            ) changes in
+        let phrases = Phrase.combine_and_l phrases in
+        if ColSet.subset key (FunDep.left fd) then
+            phrases
+        else 
+            Phrase.combine_and (ignore_change (FunDep.left fd)) phrases in
+    let phrase_not_changed = ignore_change (ColSet.of_list on_simp) in
+    (* let phrase_not_added = List.fold_left (fun phrase row -> 
+        let rce sth col = 
+            let fd = FunDepSet.get_defining fds col in
+            let subres = 
+                if ColSet.subset key (FunDep.left fd) then
+                    []
+                else
+                    sth (FunDep.left fd) in
+                if Record.match_on row *)
     (* phrase_not_removed finds all records which aren't marked for deletion *)
     let phrase_not_removed = List.fold_left (fun phrase delrow ->
         let term = Phrase.negate (OptionUtils.val_of (Phrase.matching_cols key delrow)) in

@@ -3,6 +3,7 @@
 open Debug
 open LensFDHelpers
 open LensHelpers
+open UnitTestsLensCommon
 open OUnit2
 open Types
 open Value
@@ -12,31 +13,28 @@ let _ = Settings.set_value Debug.debugging_enabled true
 
 (* data *)
 
-let dat_fd_set_l = [
-    (["A"; "B"], ["C"; "D"]); 
-    (["C"; "D"], ["E"]); 
-    (["E"], ["F"; "G"])
-]
-let dat_fd_set = FunDepSet.of_lists dat_fd_set_l
+let dat_fd_set = LensTestHelpers.fundepset_of_string "A B -> C D; C D -> E; E -> F G"
 
-let dat_cols_l = ["C"; "D"; ]
-let dat_cols = ColSet.of_list dat_cols_l
+let dat_cols = LensTestHelpers.colset_of_string "C D"
 
-let dat_closure_l = ["C"; "D"; "E"; "F"; "G"]
-let dat_closure = ColSet.of_list dat_closure_l
+let dat_closure = LensTestHelpers.colset_of_string "C D E F G"
 
-let dat_fd_set_2_l = [
-    (["A"], ["B"]);
-    (["B"], ["C"])
-]
-let dat_fd_set_2 = FunDepSet.of_lists dat_fd_set_2_l
+let dat_fd_set_2 = LensTestHelpers.fundepset_of_string "A -> B; B -> C"
 
 let rec_constr (cols : string list) (vals : int list) = Value.box_record (List.map2 (fun c v -> (c, box_int v)) cols vals)
 let delt_constr (cols : string list) (vals, m : int list * int) = rec_constr cols vals, m
-let dat_update_recs = List.map (delt_constr ["A"; "B"; "C"]) [[1; 2; 3], -1; [1; 3; 2], +1; [2; 1; 3], -1; [2; 1; 4], +1; [3; 4; 5], 0; [4; 5; 6], 1; [5; 6; 7], -1]
+let dat_update_recs = List.map (LensTestHelpers.delt_constr_int "A B C") [
+    [1; 2; 3], -1; 
+    [1; 3; 2], +1; 
+    [2; 1; 3], -1; 
+    [2; 1; 4], +1; 
+    [3; 4; 5], 0; 
+    [4; 5; 6], 1;
+    [5; 6; 7], -1
+]
 
 
-let dat_fd_set_1_recs = List.map (delt_constr ["A"; "B"; "C"; "D"; "E"; "F"; "G"]) [
+let dat_fd_set_1_recs = List.map (LensTestHelpers.delt_constr_int "A B C D E F G") [
     [1; 1; 1; 1; 1; 1; 1], 0;
     [2; 2; 2; 2; 2; 2; 2], -1;
     [3; 2; 2; 2; 2; 2; 2], -1;
@@ -314,13 +312,13 @@ let test_calculate_fd_changelist test_ctx =
     let data = dat_update_recs in
     let fds = dat_fd_set_2 in
     let changeset = calculate_fd_changelist fds data in
-    (* let _ = List.map (fun (fd,changes) ->
+    let _ = List.map (fun (fd,changes) ->
         let _ = Debug.print (FunDep.Show_t.show fd) in
         let _ = List.map (fun (chl, chr) ->
             Debug.print ("  " ^ string_of_value chl ^ " -> " ^ string_of_value chr)
         ) changes in
         ()
-    ) changeset in *)
+    ) changeset in
     ()
 
 let test_can_remove_phrase test_ctx =

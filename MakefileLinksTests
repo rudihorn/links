@@ -3,10 +3,11 @@
 LINKSBASEMAKEFILE = ./MakefileLinksBase
 include $(LINKSBASEMAKEFILE)
 
-SOURCES :=	$(SOURCES)		\
+SOURCES :=	$(SOURCES)					\
+			unitTestsLensCommon.ml		\
 		   	unitTestsLensFDHelpers.ml	\
-				unitTestsJson.ml				\
-				unitTests.ml
+			unitTestsJson.ml			\
+			unitTests.ml
 			
 
 PACKS :=	$(PACKS) oUnit

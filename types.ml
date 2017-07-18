@@ -165,6 +165,7 @@ module FunDep = struct
         let right = ColSet.of_list right in
         (left, right)
 
+    let make left right = (left, right)
     
     module Show_t = Deriving_Show.Defaults(
         struct
