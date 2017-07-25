@@ -7,7 +7,7 @@ open Types
 open Value
 open Utility
 
-let _ = Settings.set_value Debug.debugging_enabled true
+(* let _ = Settings.set_value Debug.debugging_enabled true *)
 
 
 let test_jsonize_value_list_empty test_ctx = 

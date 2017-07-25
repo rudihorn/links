@@ -10,7 +10,7 @@ open Types
 open Value
 open Utility
 
-let _ = Settings.set_value Debug.debugging_enabled true
+(* let _ = Settings.set_value Debug.debugging_enabled true *)
 
 (* data *)
 
@@ -316,7 +316,7 @@ let test_remove_select_phrase test_ctx =
     let pred = OptionUtils.val_of (Phrase.combine_and_l [Phrase.greater_than (Phrase.var "B") (Phrase.constant_int 10); Phrase.equal (Phrase.var "C") (Phrase.constant_int 5)]) in
     let sort = select_lens_sort (get_lens_sort l1) pred in
     let phrase = remove_select_phrase sort pred data in
-    let _ = Debug.print (LensQueryHelpers.construct_query (OptionUtils.val_of phrase)) in
+    let _ = LensTestHelpers.print_verbose test_ctx (LensQueryHelpers.construct_query (OptionUtils.val_of phrase)) in 
     ()
 
 let test_calculate_fd_changelist test_ctx =
@@ -324,9 +324,9 @@ let test_calculate_fd_changelist test_ctx =
     let fds = dat_fd_set_2 in
     let changeset = calculate_fd_changelist fds data in
     let _ = List.map (fun (fd,changes) ->
-        let _ = Debug.print (FunDep.Show_t.show fd) in
+        let _ = LensTestHelpers.print_verbose test_ctx (FunDep.Show_t.show fd) in
         let _ = List.map (fun (chl, chr) ->
-            Debug.print ("  " ^ string_of_value chl ^ " -> " ^ string_of_value chr)
+            LensTestHelpers.print_verbose test_ctx ("  " ^ string_of_value chl ^ " -> " ^ string_of_value chr)
         ) changes in
         ()
     ) changeset in
@@ -339,7 +339,7 @@ let test_can_remove_phrase test_ctx =
     let (row,_) = List.nth data 1 in
     let phrase = can_remove_phrase sort ["E", "E", "table1"] row data in
     let text = LensQueryHelpers.construct_query (OptionUtils.val_of phrase) in
-    let _ = Debug.print text in
+    let _ = LensTestHelpers.print_verbose test_ctx text in 
     ()
 
 let suite =

@@ -194,6 +194,12 @@ module Record = struct
         let d = unbox_record record in
         let d = List.filter (fun (k,v) -> ColSet.mem k cols) d in
         box_record d
+
+    let set_column (record : Value.t) (k : string) (v : Value.t) = 
+        let d = unbox_record record in
+        let d = List.map (fun (k',v') ->  if k' = k then k',v' else k',v) d in
+        box_record d
+
 end
 
 

@@ -144,10 +144,14 @@ let rec construct_query_db (expr : lens_phrase) (db : Value.database) (mapCol : 
             | a -> a ^ " (" ^ construct_query a1 ^ ")"
         end
     | `Case (inp, cases, otherwise) -> 
-            let cases = List.fold_left (fun a (k,v) -> a ^ " WHEN " ^ construct_query k ^ " THEN " ^ construct_query v) "" cases in
             let otherwise = construct_query otherwise in
-            (match inp with None -> "CASE" | Some inp -> "CASE (" ^ construct_query inp ^ ")") ^
-                cases ^ " ELSE " ^ otherwise ^ " END"
+            if cases = [] then
+                (* special case: if there are no cases then just return query for otherwise *)
+                otherwise
+            else
+                let cases = List.fold_left (fun a (k,v) -> a ^ " WHEN " ^ construct_query k ^ " THEN " ^ construct_query v) "" cases in
+                (match inp with None -> "CASE" | Some inp -> "CASE (" ^ construct_query inp ^ ")") ^
+                    cases ^ " ELSE " ^ otherwise ^ " END"
     | _ -> failwith "durr"
 
 let construct_query (expr : lens_phrase) =

@@ -5,6 +5,8 @@ let suites =
        "Lenses" >::: [
             UnitTestsLensCommon.suite;
             UnitTestsLensFDHelpers.suite;
+            UnitTestsLensDatabase.suite;
+            UnitTestsLensPerformance.suite;
             UnitTestsJson.suite;
         ];
    ];;

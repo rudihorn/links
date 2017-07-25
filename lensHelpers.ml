@@ -12,10 +12,9 @@ let query_count = ref 0
 let lens_force_mem_enabled = Settings.add_bool ("lens_force_mem", false, `User)
 
 
-
 (** print a debug message if debugging is enabled *)
 let print message =
-  (if true then print_endline message)
+  (if false then print_endline message)
 
 (* Helper methods *)
 let get_record_type_sort_cols (tableName : string) (typ : Types.typ) = 

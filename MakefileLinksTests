@@ -5,7 +5,9 @@ include $(LINKSBASEMAKEFILE)
 
 SOURCES :=	$(SOURCES)					\
 			unitTestsLensCommon.ml		\
+			unitTestsLensDatabase.ml	\
 		   	unitTestsLensFDHelpers.ml	\
+			unitTestsLensPerformance.ml \
 			unitTestsJson.ml			\
 			unitTests.ml
 			
