@@ -126,11 +126,12 @@ SOURCES = $(OPC)                                \
           frontend.ml                           \
           dumpTypes.ml                          \
           compilePatterns.ml                    \
+		  websocketMessages.ml					\
 			 jsonparsehelpers.ml							\
           jsonparse.mly                         \
           jsonlex.mll                           \
           js.ml                                 \
-          json.ml                               \
+          json.mli json.ml                               \
           proc.mli proc.ml                      \
           resolveJsonState.mli resolveJsonState.ml \
           database.mli database.ml              \

@@ -82,7 +82,7 @@ and special =
   | `Lens of value * Types.lens_sort
   | `LensDrop of value * string * string * value * Types.lens_sort
   | `LensSelect of value * Sugartypes.phrase * Types.lens_sort
-  | `LensJoin of value * value * string list * Types.lens_sort
+  | `LensJoin of value * value * string list * Sugartypes.phrase * Sugartypes.phrase * Types.lens_sort
   | `LensGet of value * Types.datatype
   | `LensPut of value * value * Types.datatype
   | `Table of (value * value * value * (Types.datatype * Types.datatype * Types.datatype))
@@ -439,10 +439,10 @@ module type TRANSFORM =
         | `LensSelect (lens, pred, sort) ->
             let lens, _, o = o#value lens in
               `LensSelect (lens, pred, sort), `Lens (sort), o
-        | `LensJoin (lens1, lens2, on, sort) ->
+        | `LensJoin (lens1, lens2, on, left, right, sort) ->
             let lens1, _, o = o#value lens1 in
             let lens2, _, o = o#value lens2 in
-              `LensJoin (lens1, lens2, on, sort), `Lens (sort), o
+              `LensJoin (lens1, lens2, on, left, right, sort), `Lens (sort), o
         | `LensGet (lens, rtype) ->
             let lens, _, o = o#value lens in
               `LensGet (lens, rtype), Types.make_list_type rtype, o

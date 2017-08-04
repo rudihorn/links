@@ -108,7 +108,7 @@ let construct_join_lens (fd_set : fundepset) (name : string) data =
 
 let construct_join_lens_2 l1 l2 on =
     let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
-    `LensJoin (l1, l2, on, sort)
+    `LensJoin (l1, l2, on, `Constant (`Bool true), `Constant (`Bool false), sort)
 
 let cat_tex cols name delta =
     let cs = List.fold_right (fun a b -> b ^ "c") cols "" in

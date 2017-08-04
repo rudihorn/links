@@ -150,7 +150,7 @@ sig
 
   val lens_select_handle : value sem * Sugartypes.phrase * Types.lens_sort -> tail_computation sem
 
-  val lens_join_handle : value sem * value sem * string list * Types.lens_sort -> tail_computation sem
+  val lens_join_handle : value sem * value sem * string list * Sugartypes.phrase * Sugartypes.phrase * Types.lens_sort -> tail_computation sem
 
   val lens_get : value sem * datatype -> tail_computation sem
 
@@ -480,12 +480,12 @@ struct
         (fun lens ->
            lift (`Special (`LensSelect (lens, pred, sort)), `Lens (sort)))
 
-  let lens_join_handle (lens1, lens2, on, sort) =
+  let lens_join_handle (lens1, lens2, on, left, right, sort) =
       bind lens1 
         (fun lens1 ->
           bind lens2 
           (fun lens2 ->
-            lift (`Special (`LensJoin (lens1, lens2, on, sort)), `Lens (sort))))
+            lift (`Special (`LensJoin (lens1, lens2, on, left, right, sort)), `Lens (sort))))
 
   let lens_get (lens, rtype) =
       bind lens 
@@ -859,11 +859,11 @@ struct
           | `LensSelectLit (lens, pred, Some t) ->
               let lens = ev lens in
                 I.lens_select_handle (lens, pred, t)
-          | `LensJoinLit (lens1, lens2, on, Some t) ->
+          | `LensJoinLit (lens1, lens2, on, left, right, Some t) ->
               let lens1 = ev lens1 in
               let lens2 = ev lens2 in
               let on = LensHelpers.get_phrase_columns on in
-                I.lens_join_handle (lens1, lens2, on, t)
+                I.lens_join_handle (lens1, lens2, on, left, right, t)
           | `LensGetLit (lens, Some t) ->
               let lens = ev lens in
                 I.lens_get (lens, t)

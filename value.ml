@@ -233,7 +233,7 @@ and t = [
 | `LensMem of t * Types.lens_sort
 | `LensDrop of t * string * string * t * Types.lens_sort
 | `LensSelect of t * Types.lens_phrase * Types.lens_sort
-| `LensJoin of t * t * (string * string * string) list * Types.lens_sort
+| `LensJoin of t * t * (string * string * string) list * Types.lens_phrase * Types.lens_phrase * Types.lens_sort
 | `Record of (string * t) list
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
@@ -459,7 +459,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `LensMem (_, _) -> fprintf ppf "(lens)" 
   | `LensDrop (lens, dr, key, def, typ) -> fprintf ppf ("(lensdrop)")
   | `LensSelect (lens, pred, sort) -> fprintf ppf ("(lensselect)")
-  | `LensJoin (lens1, lens2, on, sort) -> fprintf ppf ("(lensjoin)")
+  | `LensJoin (lens1, lens2, on, left, right, sort) -> fprintf ppf ("(lensjoin)")
   | `Table (_, name, _, _) -> fprintf ppf "(table %s)" name
   | `Database (_, params) -> fprintf ppf "(database %s" params
   | `SessionChannel (ep1, ep2) ->

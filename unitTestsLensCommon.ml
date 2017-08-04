@@ -72,7 +72,7 @@ module LensTestHelpers = struct
 
     let join_lens l1 l2 on =
         let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
-        `LensJoin (l1, l2, on, sort)
+        `LensJoin (l1, l2, on, `Constant (`Bool true), `Constant (`Bool false), sort)
 
     let select_lens l phrase =
         let sort = get_lens_sort l in
@@ -211,8 +211,6 @@ module LensTestHelpers = struct
         let res = time_query false fn in
         let _ = time_query true fn in
         res
-
-
 end
 
 let test_fundep_of_string test_ctx = 

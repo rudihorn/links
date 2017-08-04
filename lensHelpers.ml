@@ -14,7 +14,7 @@ let lens_force_mem_enabled = Settings.add_bool ("lens_force_mem", false, `User)
 
 (** print a debug message if debugging is enabled *)
 let print message =
-  (if false then print_endline message)
+  (if true then print_endline message)
 
 (* Helper methods *)
 let get_record_type_sort_cols (tableName : string) (typ : Types.typ) = 
@@ -39,7 +39,7 @@ let get_lens_sort (v : Value.t) =
     | `LensMem (a, sort) -> sort
     | `LensDrop (lens, drop, key, def, sort) -> sort
     | `LensSelect (lens, pred, sort) -> sort
-    | `LensJoin (lens1, lens2, on, sort) -> sort
+    | `LensJoin (lens1, lens2, on, _, _, sort) -> sort
     | e -> failwith "Did not match a lens value (get_lens_sort)."
 
 let rec is_memory_lens (lens : Value.t) =
@@ -48,7 +48,7 @@ let rec is_memory_lens (lens : Value.t) =
     | `LensMem _ -> true
     | `LensDrop (lens, drop, key, def, rtype) -> is_memory_lens lens
     | `LensSelect (lens, pred, sort) -> is_memory_lens lens
-    | `LensJoin (lens1, lens2, on, sort) -> is_memory_lens lens1 || is_memory_lens lens2
+    | `LensJoin (lens1, lens2, on, _, _, sort) -> is_memory_lens lens1 || is_memory_lens lens2
     | _ -> failwith ("Unknown lens (is_memory_lens) :" ^ (string_of_value lens))
 
 (* get / put operations *)
@@ -67,7 +67,7 @@ let rec get_primary_key (lens : Value.t) =
         left
     | `LensDrop (lens, _, _, _, _) -> get_primary_key lens
     | `LensSelect (lens, _, _) -> get_primary_key lens
-    | `LensJoin (lens1, _, _, _) -> (* right table has to be defined by left table *) get_primary_key lens1 
+    | `LensJoin (lens1, _, _, _, _, _) -> (* right table has to be defined by left table *) get_primary_key lens1 
     | _ -> failwith ("Unknown lens (get_primary_key) : " ^ (string_of_value lens))
 
 let rec lens_get_mem (lens : Value.t) callfn =
@@ -82,7 +82,7 @@ let rec lens_get_mem (lens : Value.t) callfn =
         let records = lens_get_mem lens callfn in
         let res = List.filter (fun x -> unbox_bool (calculate_predicate_rec pred x)) (unbox_list records) in 
            box_list res
-    | `LensJoin (lens1, lens2, on, sort) ->
+    | `LensJoin (lens1, lens2, on, left, right, sort) ->
         let records1 = lens_get_mem lens1 callfn in
         let records2 = lens_get_mem lens2 callfn in
         let on = List.map (fun (a, _, _) -> a) on in
@@ -97,7 +97,7 @@ let rec lens_get_db (lens : Value.t) =
     match lens with 
     | `Lens (((db, _), _, _, _), _) -> db
     | `LensSelect (lens, _, _) -> lens_get_db lens
-    | `LensJoin (l1, _, _, _) -> lens_get_db l1
+    | `LensJoin (l1, _, _, _, _, _) -> lens_get_db l1
     | _ -> failwith "Unsupported lens for get db."
 
 let rec lens_get_query (lens : Value.t) =
@@ -114,7 +114,7 @@ let rec lens_get_query (lens : Value.t) =
         let query = lens_get_query lens in
         { query with pred = Some pred }
         (* get_lens_sort_row_type sort *)
-  | `LensJoin (lens1, lens2, on, sort) ->
+  | `LensJoin (lens1, lens2, on, left, right, sort) ->
         let q1 = lens_get_query lens1 in
         let q2 = lens_get_query lens2 in
         (* all table names must be unique, rename them *)
@@ -158,7 +158,7 @@ let rec lens_put_delta  (lens : Value.t) (data : (Value.t * int) list) callfn =
     | `LensMem _ -> data
     | `LensSelect (l, pred, sort) ->
         data
-    | `LensJoin  (l1, l2, on, sort) ->
+    | `LensJoin  (l1, l2, on, left, right, sort) ->
         data
     | _ -> failwith "Unsupported lens."
 
@@ -193,7 +193,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             let filteredData = List.filter (fun (r,m) -> not m) (Array.to_list arrData) in
             let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
             lens_put_mem l (box_list output) callfn 
-    | `LensJoin (l1, l2, on, sort) ->
+    | `LensJoin (l1, l2, on, left, right, sort) ->
             let oldOn = List.map (fun (a, _, _) -> a) on in
             let fds = get_lens_sort_fn_deps sort in
             let _ = debug_print_fd_tree (get_fd_tree fds) in
@@ -624,8 +624,8 @@ let rec lens_delta_put_ex (lens : Value.t) (data : (Value.t * int) list) =
             let remove_rows = lens_get_select l remove_rows_phrase in
             let newdata = List.append data (List.map (fun r -> (r,-1)) (unbox_list remove_rows)) in
             lens_delta_put_ex l newdata
-    | `LensJoin (l1, l2, on, sort) ->
-        let outp1, outp2 = lens_delta_put_join sort l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data in
+    | `LensJoin (l1, l2, on, left, right, sort) ->
+        let outp1, outp2 = lens_delta_put_join sort l1 l2 on left right data in
         let t1 = lens_delta_put_ex l1 outp1 in
         let t2 = lens_delta_put_ex l2 outp2 in
         t2

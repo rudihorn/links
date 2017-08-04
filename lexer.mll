@@ -179,6 +179,7 @@ let keywords = [
  "get"      , GET;
  "if"       , IF;
  "in"       , IN;
+ "left"     , LEFT;
  "lens"     , LENS;
  "lensdrop" , LENSDROP;
  "lensselect", LENSSELECT;
@@ -202,6 +203,7 @@ let keywords = [
 
  "receive"  , RECEIVE;
  "returning", RETURNING;
+ "right"    , RIGHT;
  "select"   , SELECT;
  "server"   , SERVER;
  "set"      , SET;

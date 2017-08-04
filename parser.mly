@@ -185,7 +185,7 @@ let cp_unit p = `Unquote ([], (`TupleLit [], p)), p
 %token COMMA VBAR DOT DOTDOT COLON COLONCOLON
 %token TABLE TABLEHANDLE TABLEKEYS FROM DATABASE QUERY WITH YIELDS ORDERBY
 %token UPDATE DELETE INSERT VALUES SET RETURNING
-%token LENS LENSDROP LENSSELECT LENSJOIN DETERMINED BY ON
+%token LENS LENSDROP LENSSELECT LENSJOIN DETERMINED BY ON LEFT RIGHT
 %token PUT GET
 %token READONLY DEFAULT
 %token ESCAPE
@@ -848,7 +848,8 @@ lens_expression:
 | LENS exp TABLEKEYS exp                                       { `LensKeysLit ($2, $4, None), pos()}
 | LENSDROP VARIABLE DETERMINED BY VARIABLE DEFAULT exp FROM exp  { `LensDropLit ($9, $2, $5, $7, None), pos() } 
 | LENSSELECT FROM exp WHERE exp                                { `LensSelectLit ($3, $5, None), pos() } 
-| LENSJOIN exp WITH exp ON exp                                 { `LensJoinLit ($2, $4, $6, None), pos() }
+| LENSJOIN exp WITH exp ON exp LEFT exp RIGHT exp              { `LensJoinLit ($2, $4, $6, $8, $10, None), pos() }
+| LENSJOIN exp WITH exp ON exp                                 { `LensJoinLit ($2, $4, $6, (`Constant (`Bool true), pos()), (`Constant (`Bool false), pos()), None), pos() }
 | GET exp                                                      { `LensGetLit ($2, None), pos() }
 | PUT exp WITH exp                                             { `LensPutLit ($2, $4, None), pos() }
 

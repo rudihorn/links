@@ -206,7 +206,7 @@ and phrasenode = [
 | `LensKeysLit      of phrase * phrase * Types.lens_sort option
 | `LensDropLit      of phrase * string * string * phrase * Types.lens_sort option
 | `LensSelectLit    of phrase * phrase * Types.lens_sort option 
-| `LensJoinLit      of phrase * phrase * phrase * Types.lens_sort option
+| `LensJoinLit      of phrase * phrase * phrase * phrase * phrase * Types.lens_sort option
 | `LensGetLit       of phrase * Types.datatype option
 | `LensPutLit       of phrase * phrase * Types.datatype option
 | `Xml              of name * (name * (phrase list)) list * phrase option * phrase list
@@ -340,7 +340,7 @@ struct
     | `LensKeysLit (l, _, _) -> phrase l
     | `LensSelectLit (l, _, _) -> phrase l
     | `LensDropLit (l, _, _, _, _) -> phrase l
-    | `LensJoinLit (l1, l2, _, _) -> union_all [phrase l1; phrase l2]
+    | `LensJoinLit (l1, l2, _, _, _, _) -> union_all [phrase l1; phrase l2]
 
     | `LensGetLit (l, _) -> phrase l
     | `LensPutLit (l, data, _) -> union_all [phrase l; phrase data]

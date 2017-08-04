@@ -538,16 +538,18 @@ struct
         let sort = LensHelpers.get_lens_sort lens in
         let sort = LensHelpers.select_lens_sort sort pred in
           apply_cont cont env (`LensSelect (lens, pred, sort))
-    | `LensJoin (lens1, lens2, on, sort) ->
+    | `LensJoin (lens1, lens2, on, left, right, sort) ->
         let lens1 = value env lens1 in
         let lens2 = value env lens2 in
+        let left = LensQueryHelpers.lens_phrase_of_phrase left in
+        let right = LensQueryHelpers.lens_phrase_of_phrase right in
         let get_sort = LensHelpers.get_lens_sort in
         let lens1, lens2 = if LensHelpers.join_lens_should_swap (get_sort lens1) (get_sort lens2) on then
           lens2, lens1
         else
           lens1, lens2 in
         let sort, on = LensHelpers.join_lens_sort (get_sort lens1) (get_sort lens2) on in
-         apply_cont cont env (`LensJoin (lens1, lens2, on, sort))
+         apply_cont cont env (`LensJoin (lens1, lens2, on, left, right, sort))
     | `LensGet (lens, rtype) as le ->
         let lens = value env lens in
         let callfn = fun fnptr ps -> 
