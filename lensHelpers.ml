@@ -16,6 +16,13 @@ let lens_force_mem_enabled = Settings.add_bool ("lens_force_mem", false, `User)
 let print message =
   (if false then print_endline message)
 
+let ensure_lenses_enabled () = 
+  if Settings.get_value Basicsettings.RelationalLenses.relational_lenses then
+    ()
+  else
+    failwith "Code uses relational lenses, but relational lenses are not enabled. Please set the relational lenses flag."
+
+
 (* Helper methods *)
 let get_record_type_sort_cols (tableName : string) (typ : Types.typ) = 
   let cols = get_rowtype_cols typ in

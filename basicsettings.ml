@@ -102,6 +102,11 @@ module Shredding = struct
   let shredding = Settings.add_bool("shredding", false, `User)
 end
 
+module RelationalLenses = 
+struct
+    let relational_lenses = Settings.add_bool("relational_lenses", false, `User)
+end
+
 
 (** Caveat: don't [Open basicsettings] because the above module
    conflicts with the Js module from js.ml*)

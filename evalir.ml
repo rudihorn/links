@@ -528,17 +528,20 @@ struct
             | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, sort))
       end
     | `LensDrop (lens, drop, key, def, sort) as le -> 
+        let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in 
         let sort = LensHelpers.get_lens_sort lens in
         let def = match value env def with #Value.primitive_value_basis as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
     | `LensSelect (lens, pred, sort) ->
+        let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let pred = LensQueryHelpers.lens_phrase_of_phrase pred in
         let sort = LensHelpers.get_lens_sort lens in
         let sort = LensHelpers.select_lens_sort sort pred in
           apply_cont cont env (`LensSelect (lens, pred, sort))
     | `LensJoin (lens1, lens2, on, left, right, sort) ->
+        let _ = LensHelpers.ensure_lenses_enabled () in
         let lens1 = value env lens1 in
         let lens2 = value env lens2 in
         let left = LensQueryHelpers.lens_phrase_of_phrase left in
@@ -551,6 +554,7 @@ struct
         let sort, on = LensHelpers.join_lens_sort (get_sort lens1) (get_sort lens2) on in
          apply_cont cont env (`LensJoin (lens1, lens2, on, left, right, sort))
     | `LensGet (lens, rtype) as le ->
+        let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let callfn = fun fnptr ps -> 
           let p = apply [] env (fnptr, ps) in
@@ -560,6 +564,7 @@ struct
         let res = LensHelpers.lens_get lens callfn in
           apply_cont cont env res
     | `LensPut (lens, data, rtype) as le ->
+        let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let data = value env data in
         let callfn = fun fnptr ps -> 
@@ -567,7 +572,7 @@ struct
           let _, res = Proc.run (fun unit -> p) in
           res in
         let res = LensHelpers.lens_put lens data callfn in
-          apply_cont cont env res
+        apply_cont cont env res
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have
