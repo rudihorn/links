@@ -28,6 +28,7 @@ xmlParser.mli
 ._d
 ._ncdi
 ._bcdi
+.check
 *.links.cache
 
 # Emacs temporary and backup files
