@@ -580,22 +580,14 @@ struct
     | `LensGet (lens, rtype) as le ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
-        let callfn = fun fnptr ps -> 
-          let p = apply [] env (fnptr, ps) in
-          let _, res = Proc.run (fun unit -> p) in
-          res in
         (* let callfn = fun fnptr -> fnptr in *)
-        let res = LensHelpers.lens_get lens callfn in
+        let res = LensHelpers.lens_get lens () in
           apply_cont cont env res
     | `LensPut (lens, data, rtype) as le ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let data = value env data in
-        let callfn = fun fnptr ps -> 
-          let p = apply [] env (fnptr, ps) in
-          let _, res = Proc.run (fun unit -> p) in
-          res in
-        let res = LensHelpers.lens_put lens data callfn in
+        let res = LensHelpers.lens_put lens data () in
         apply_cont cont env res
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin
