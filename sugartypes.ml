@@ -154,7 +154,19 @@ and regex = [
 | `Splice    of phrase
 | `Replace   of regex * replace_rhs
 ]
+and clause = pattern * phrase
 and funlit = pattern list list * phrase
+and handlerlit = [`Deep | `Shallow] * pattern * clause list * pattern list list option (* computation arg, cases, parameters *)
+and handler = {
+    sh_expr: phrase;
+    sh_clauses: clause list;
+    sh_descr: handler_descriptor
+  }
+and handler_descriptor = {
+    shd_depth: [`Deep | `Shallow];
+    shd_types: Types.row * Types.datatype * Types.row * Types.datatype;
+    shd_raw_row: Types.row;
+  }
 and iterpatt = [
 | `List of pattern * phrase
 | `Table of pattern * phrase
@@ -167,6 +179,7 @@ and phrasenode = [
 | `Var              of name
 | `QualifiedVar     of name list
 | `FunLit           of ((Types.datatype * Types.row) list) option * declared_linearity * funlit * location
+| `HandlerLit       of handlerlit
 (* Spawn kind, expression referring to spawn location (client n, server...), spawn block, row opt *)
 | `Spawn            of spawn_kind * given_spawn_location * phrase * Types.row option
 | `Query            of (phrase * phrase) option * phrase * Types.datatype option
@@ -192,6 +205,8 @@ and phrasenode = [
 | `TypeAnnotation   of phrase * datatype'
 | `Upcast           of phrase * datatype' * datatype'
 | `ConstructorLit   of name * phrase option * Types.datatype option
+| `DoOperation      of name * phrase list * Types.datatype option
+| `Handle           of handler
 | `Switch           of phrase * (pattern * phrase) list * Types.datatype option
 | `Receive          of (pattern * phrase) list * Types.datatype option
 | `DatabaseLit      of phrase * (phrase option * phrase option)
@@ -235,12 +250,14 @@ and bindingnode = [
 | `Val     of tyvar list * pattern * phrase * location * datatype' option
 | `Fun     of binder * declared_linearity * (tyvar list * funlit) * location * datatype' option
 | `Funs    of (binder * declared_linearity * ((tyvar list * (Types.datatype * Types.quantifier option list) option) * funlit) * location * datatype' option * position) list
-| `Foreign of binder * name * datatype'
+| `Handler of binder * handlerlit * datatype' option
+| `Foreign of binder * name * name * name * datatype' (* Binder, raw function name, language, external file, type *)
 | `QualifiedImport of name list
 | `Type    of name * (quantifier * tyvar option) list * datatype'
 | `Infix
 | `Exp     of phrase
 | `Module  of name * binding list
+| `AlienBlock of (name * name * ((binder * datatype') list))
 ]
 and binding = bindingnode * position
 and directive = string * string list
@@ -263,6 +280,16 @@ and cp_phrase = cp_phrasenode * position
 type program = binding list * phrase option
   deriving (Show)
 
+
+let make_untyped_handler expr clauses depth =
+  { sh_expr = expr;
+    sh_clauses = clauses;
+    sh_descr = {
+        shd_depth = depth;
+        shd_types = (Types.make_empty_closed_row (), `Not_typed, Types.make_empty_closed_row (), `Not_typed);
+        shd_raw_row = Types.make_empty_closed_row ();
+      };
+  }
 
 (* Why does ConcreteSyntaxError take an
    unresolved position and yet
@@ -378,6 +405,7 @@ struct
     | `Formlet (xml, yields) ->
         let binds = formlet_bound xml in
           union (phrase xml) (diff (phrase yields) binds)
+    | `HandlerLit hnlit -> handlerlit hnlit
     | `FunLit (_, _, fnlit, _) -> funlit fnlit
     | `Iteration (generators, body, where, orderby) ->
         let xs = union_map (function
@@ -397,6 +425,8 @@ struct
 (*                      diff (phrase body) pat_bound; *)
 (*                      diff (option_map phrase where) pat_bound; *)
 (*                      diff (option_map phrase orderby) pat_bound] *)
+    | `Handle { sh_expr = e; sh_clauses = cases; _ } ->
+       union (phrase e) (union_map case cases)
     | `Switch (p, cases, _)
     | `Offer (p, cases, _) -> union (phrase p) (union_map case cases)
     | `CP cp -> cp_phrase cp
@@ -410,11 +440,13 @@ struct
           union_all [phrase from;
                      diff (option_map phrase where) pat_bound;
                      diff (union_map (snd ->- phrase) fields) pat_bound]
+    | `DoOperation (_, ps, _) -> union_map phrase ps
     | `QualifiedVar _ -> empty
   and binding (binding, _: binding) : StringSet.t (* vars bound in the pattern *)
                                     * StringSet.t (* free vars in the rhs *) =
     match binding with
     | `Val (_, pat, rhs, _, _) -> pattern pat, phrase rhs
+    | `Handler ((name,_,_), hnlit, _) -> singleton name, (diff (handlerlit hnlit) (singleton name))
     | `Fun ((name,_,_), _, (_, fn), _, _) -> singleton name, (diff (funlit fn) (singleton name))
     | `Funs funs ->
         let names, rhss =
@@ -424,14 +456,22 @@ struct
             funs
             (empty, []) in
           names, union_map (fun rhs -> diff (funlit rhs) names) rhss
-    | `Foreign ((name, _, _), _, _) -> singleton name, empty
+    | `Foreign ((name, _, _), _, _, _, _) -> singleton name, empty
     | `QualifiedImport _
     | `Type _
     | `Infix -> empty, empty
     | `Exp p -> empty, phrase p
+    | `AlienBlock (_, _, decls) ->
+        let bound_foreigns =
+          List.fold_left (fun acc ((name, _, _), _) -> StringSet.add name acc)
+            (StringSet.empty) decls in
+        bound_foreigns, empty
+        (* TODO: this needs to be implemented *)
     | `Module _ -> failwith "Freevars for modules not implemented yet"
   and funlit (args, body : funlit) : StringSet.t =
     diff (phrase body) (union_map (union_map pattern) args)
+  and handlerlit (_, m, cases, params : handlerlit) : StringSet.t =
+    union_all [diff (union_map case cases) (option_map (union_map (union_map pattern)) params); pattern m]
   and block (binds, expr : binding list * phrase) : StringSet.t =
     ListLabels.fold_right binds ~init:(phrase expr)
       ~f:(fun bind bodyfree ->

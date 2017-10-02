@@ -56,7 +56,7 @@ sig
   (** construct a map from an association list *)
 
   val to_list : (key -> 'a -> 'b) -> 'a t -> 'b list
-  (** contruct a list from a map *)
+  (** construct a list from a map *)
 
   val megamap : (key * 'a -> key * 'b) -> 'a t -> 'b t
 
@@ -420,6 +420,9 @@ struct
       wxyzs
       ([],[],[],[])
 
+  let drop_nth xs n =
+    (take n xs) @ (drop (n+1) xs)
+
   let rec filter_map pred f = function
     | [] -> []
     | x::xs ->
@@ -432,7 +435,6 @@ struct
         | e::[] -> e
         | e::xs -> e ^ ", " ^ (print_list_inner xs) in
     "[" ^ print_list_inner xs ^ "]"
-
 end
 include ListUtils
 
@@ -932,3 +934,17 @@ let string_of_float' : float -> string =
 
 let time_seconds() = int_of_float (Unix.time())
 let time_milliseconds() = int_of_float (Unix.gettimeofday() *. 1000.0)
+
+let strip_leading_slash s =
+  if s = "" then s else
+  if s = "/" then "" else
+  if s.[0] = '/' then String.sub s 1 ((String.length s) - 1) else s
+
+let strip_trailing_slash s =
+  if s = "" then s else
+  if s = "/" then "" else
+  if s.[(String.length s) - 1] = '/' then
+    String.sub s 0 ((String.length s) - 1) else
+    s
+
+let strip_slashes = (strip_leading_slash -<- strip_trailing_slash)

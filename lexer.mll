@@ -168,6 +168,7 @@ let keywords = [
  "default"  , DEFAULT;
  "delete"   , DELETE;
  "determined", DETERMINED;
+ "do"       , DOOP;
  "else"     , ELSE;
  "escape"   , ESCAPE;
  "false"    , FALSE;
@@ -177,6 +178,8 @@ let keywords = [
  "fun"      , FUN;
  "formlet"  , FORMLET;
  "get"      , GET;
+ "handle"   , HANDLE; "linearhandle", LINEARHANDLE;
+ "handler"  , HANDLER; "linearhandler", LINEARHANDLER;
  "if"       , IF;
  "in"       , IN;
  "left"     , LEFT;
@@ -196,6 +199,7 @@ let keywords = [
  "on"       , ON;
  "orderby"  , ORDERBY;
  "op"       , OP;
+ "open"     , OPEN;
  "page"     , PAGE;
  "put"      , PUT;
  "query"    , QUERY;
@@ -207,6 +211,8 @@ let keywords = [
  "select"   , SELECT;
  "server"   , SERVER;
  "set"      , SET;
+ "shallowhandle", SHALLOWHANDLE;
+ "shallowhandler"  , SHALLOWHANDLER;
  "sig"      , SIG;
  "spawn"    , SPAWN;
  "spawnClient" , SPAWNCLIENT;
@@ -238,7 +244,7 @@ let hex_code   = (['0'-'9''a'-'f''A'-'F']['0'-'9''a'-'f''A'-'F'])
 let def_qname = ('#' | def_id (':' def_id)*)
 let def_integer = (['1'-'9'] ['0'-'9']* | '0')
 let def_float = (def_integer '.' ['0'-'9']+ ('e' ('-')? def_integer)?)
-let def_blank = [' ' '\t' '\n']
+let def_blank = [' ' '\t' '\r' '\n']
 let char_contents = ([^ '\"' '\\']|"\\\"" |"\\\\" | "\\n" | "\\r" | "\\t" | ('\\' octal_code) | ('\\' ['x' 'X'] hex_code))
 let string_contents = char_contents*
 let regexrepl_fsa =  [^ '{' '/']* (* this regex is too restrictive. But can't seem to get a more precise one to work  :( *)
@@ -249,8 +255,8 @@ let directive_prefix = ['' '@' '$']
 let xml_opening = ('<' def_id)
 let xml_closing_tag = ('<' '/' def_id '>')
 
-let initopchar = [ '!' '$' '&' '*' '+' '/' '<' '=' '>' '@' '\\' '^' '-' ]
-let opchar = [ '.' '!' '$' '&' '*' '+' '/' '<' '=' '>' '@' '\\' '^' '-' ]
+let initopchar = [ '!' '$' '&' '*' '+' '/' '<' '=' '>' '@' '\\' '^' '-' '|' ]
+let opchar = [ '.' '!' '$' '&' '*' '+' '/' '<' '=' '>' '@' '\\' '^' '-' '|' ]
 
 (* Each lexer when called must return exactly one token and possibly
    modify the stack of remaining lexers.  The lexer on top of the stack

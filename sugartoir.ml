@@ -44,7 +44,7 @@ open Ir
    frontend and call/cc in the IR) is silly.
 *)
 
-let show_compiled_ir = Settings.add_bool ("show_compiled_ir", false, `User)
+let show_compiled_ir = Basicsettings.Sugartoir.show_compiled_ir
 
 let dp = Sugartypes.dummy_position
 
@@ -129,6 +129,10 @@ sig
   val db_update : env -> (CompilePatterns.pattern * value sem * tail_computation sem option * tail_computation sem) -> tail_computation sem
   val db_delete : env -> (CompilePatterns.pattern * value sem * tail_computation sem option) -> tail_computation sem
 
+  val do_operation : name * (value sem) list * Types.datatype -> tail_computation sem
+
+  val handle : env -> (tail_computation sem * (CompilePatterns.pattern * (env -> tail_computation sem)) list * Sugartypes.handler_descriptor) -> tail_computation sem
+
   val switch : env -> (value sem * (CompilePatterns.pattern * (env -> tail_computation sem)) list * Types.datatype) -> tail_computation sem
 
   val inject : name * value sem * datatype -> value sem
@@ -170,7 +174,7 @@ sig
     (var list -> tail_computation sem) ->
     tail_computation sem
 
-  val alien : var_info * language * (var -> tail_computation sem) -> tail_computation sem
+  val alien : var_info * name * language * (var -> tail_computation sem) -> tail_computation sem
 
   val select : name * value sem -> tail_computation sem
 
@@ -260,7 +264,7 @@ struct
        * location) list ->
       (Var.var list) M.sem
 
-    val alien_binding : var_info * language -> var M.sem
+    val alien_binding : var_info * name * language -> var M.sem
 
     val value_of_untyped_var : var M.sem * datatype -> value sem
   end =
@@ -308,9 +312,9 @@ struct
                 defs))
           fs
 
-    let alien_binding (x_info, language) =
+    let alien_binding (x_info, raw_name, language) =
       let xb, x = Var.fresh_var x_info in
-        lift_binding (`Alien (xb, language)) x
+        lift_binding (`Alien (xb, raw_name, language)) x
 
     let value_of_untyped_var (s, t) =
       M.bind s (fun x -> lift (`Variable x, t))
@@ -501,8 +505,8 @@ struct
 
   let wrong t = lift (`Special (`Wrong t), t)
 
-  let alien (x_info, language, rest) =
-    M.bind (alien_binding (x_info, language)) rest
+  let alien (x_info, raw_name, language, rest) =
+    M.bind (alien_binding (x_info, raw_name, language)) rest
 
   let select (l, e) =
     let t = TypeUtils.select_type l (sem_type e) in
@@ -656,6 +660,30 @@ struct
         defs
     in
       M.bind (rec_binding defs) rest
+
+  let do_operation (name, vs, t) =
+    let vs = lift_list vs in
+    M.bind vs (fun vs -> lift (`Special (`DoOperation (name, vs, t)), t))
+
+  let handle env (m, cases, desc) =
+    let cases =
+      List.map
+        (fun (p, body) -> ([p], fun env -> reify (body env))) cases
+    in
+    let comp = reify m in
+    let (bs, tc) = CompilePatterns.compile_handle_cases env (cases, desc) comp in
+    let (_,_,_,t) = desc.Sugartypes.shd_types in
+    reflect (bs, (tc, t))
+    (* bind m *)
+    (*   (fun v -> *)
+    (*     M.bind *)
+    (*       (comp_binding (Var.info_of_type (sem_type m), `Return v)) *)
+    (*       (fun var -> *)
+    (*         let nenv, tenv, eff = env in *)
+    (*         let tenv = TEnv.bind tenv (var, sem_type m) in *)
+    (*         let (bs, tc) = CompilePatterns.compile_handle_cases (nenv, tenv, eff) (var, cases, desc) in *)
+    (*         let (_,_,_,t) = desc.shd_types in *)
+    (*         reflect (bs, (tc, t)))) *)
 
   let switch env (v, cases, t) =
     let cases =
@@ -828,7 +856,18 @@ struct
               cofv (I.inject (name, I.record ([], None), t))
           | `ConstructorLit (name, Some e, Some t) ->
               cofv (I.inject (name, ev e, t))
-
+	  | `DoOperation (name, ps, Some t) ->
+	     let vs = evs ps in
+	     I.do_operation (name, vs, t)
+          | `Handle { Sugartypes.sh_expr; Sugartypes.sh_clauses; Sugartypes.sh_descr } ->
+              let cases =
+                List.map
+                  (fun (p, body) ->
+                     let p, penv = CompilePatterns.desugar_pattern `Local p in
+                       (p, fun env -> eval (env ++ penv) body))
+                  sh_clauses
+              in
+              I.handle env (ec sh_expr, cases, sh_descr)
           | `Switch (e, cases, Some t) ->
               let cases =
                 List.map
@@ -977,6 +1016,8 @@ struct
           | `TableLit _
           | `Offer _
           | `QualifiedVar _
+          | `HandlerLit _
+          | `DoOperation _
           | `CP _ ->
               Debug.print ("oops: " ^ Sugartypes.Show_phrasenode.show e);
               assert false
@@ -1044,14 +1085,14 @@ struct
                         defs
                     in
                       I.letrec env defs (fun vs -> eval_bindings scope (extend fs (List.combine vs outer_fts) env) bs e)
-                | `Foreign ((x, Some xt, _), language, _) ->
-                    I.alien ((xt, x, scope), language, fun v -> eval_bindings scope (extend [x] [(v, xt)] env) bs e)
+                | `Foreign ((x, Some xt, _), raw_name, language, _file, _) ->
+                    I.alien ((xt, x, scope), raw_name, language, fun v -> eval_bindings scope (extend [x] [(v, xt)] env) bs e)
                 | `Type _
                 | `Infix ->
                     (* Ignore type alias and infix declarations - they
                        shouldn't be needed in the IR *)
                     eval_bindings scope env bs e
-                | `QualifiedImport _ | `Fun _ | `Foreign _ | `Module _-> assert false
+                | `Handler _ | `QualifiedImport _ | `Fun _ | `Foreign _ | `AlienBlock _ | `Module _ -> assert false
             end
 
   and evalv env e =
@@ -1100,7 +1141,7 @@ struct
                           | `Local ->
                               partition (globals, b::locals, nenv) bs
                       end
-                | `Alien ((f, (_ft, f_name, `Global)), _) ->
+                | `Alien ((f, (_ft, f_name, `Global)), _, _) ->
                     partition (b::locals @ globals, [], Env.String.bind nenv (f_name, f)) bs
                 | _ -> partition (globals, b::locals, nenv) bs
             end in

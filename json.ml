@@ -5,7 +5,7 @@ open Types
 open Value
 
 (* Setting *)
-let show_json = Settings.add_bool("show_json", false, `User)
+let show_json = Basicsettings.Json.show_json
 
 (* Type synonyms *)
 type handler_id = int
@@ -152,9 +152,10 @@ let jsonize_location : Ir.location -> string = function
   | `Native  -> "native"
   | `Unknown -> "unknown"
 
-let rec jsonize_value : Value.t -> json_string =
+let rec jsonize_value' : Value.t -> json_string =
   function
   | `PrimitiveFunction _
+  | `ReifiedContinuation _
   | `Continuation _
   | `Socket _
       as r ->
@@ -166,14 +167,15 @@ let rec jsonize_value : Value.t -> json_string =
       match fvs with
       | None     -> ""
       | Some fvs ->
-        let s = jsonize_value fvs in
+        let s = jsonize_value' fvs in
         ", \"environment\":" ^ s in
     "{\"func\":\"" ^ Js.var_name_var f ^ "\"," ^
     " \"location\":\"" ^ location ^ "\"" ^ env_string ^ "}"
+  | `ClientDomRef i -> "{\"_domRefKey\":" ^ (string_of_int i) ^ "}"
   | `ClientFunction name -> "{\"func\":\"" ^ name ^ "\"}"
   | #Value.primitive_value as p -> jsonize_primitive p
   | `Variant (label, value) ->
-    let s = jsonize_value value in
+    let s = jsonize_value' value in
     "{\"_label\":\"" ^ label ^ "\",\"_value\":" ^ s ^ "}"
   | `Record fields ->
     let ls, vs = List.split fields in
@@ -217,28 +219,36 @@ and jsonize_primitive : Value.primitive_value -> string  = function
   | `String s -> "\"" ^ js_dq_escape_string s ^ "\""
 and json_of_xmlitem = function
   | Value.Text s ->
-      "[\"TEXT\",\"" ^ js_dq_escape_string (s) ^ "\"]"
+      "{ \"type\": \"TEXT\", \"text\": \"" ^ js_dq_escape_string (s) ^ "\"}"
   (* TODO: check that we don't run into problems when HTML containing
      an event handler is copied *)
-  | Value.Node (tag, xml) ->
+  | Value.NsNode (ns, tag, xml) ->
       let attrs, body =
         List.fold_right (fun xmlitem (attrs, body) ->
             match xmlitem with
             | Value.Attr (label, value) ->
                 ("\"" ^label ^ "\" : " ^ "\"" ^ js_dq_escape_string value ^ "\"") :: attrs, body
+            | Value.NsAttr (ns, label, value) ->
+                ("\"" ^ ns ^ ":" ^ label ^ "\" : " ^ "\"" ^ js_dq_escape_string value ^ "\"") :: attrs, body
             | _ ->
               let s = json_of_xmlitem xmlitem in
               attrs, s :: body) xml ([], [])
       in
-        "[\"ELEMENT\",\"" ^ tag ^
-            "\",{" ^ String.concat "," attrs ^"},[" ^ String.concat "," body ^ "]]"
-  | Value.Attr _ -> assert false
+        "{ \"type\": \"ELEMENT\"," ^
+          "\"tagName\": \"" ^ tag ^ "\"," ^
+          (if (String.length(ns) > 0) then "\"namespace\": \"" ^ ns ^ "\"," else "") ^
+          "\"attrs\": {" ^ String.concat "," attrs ^ "}," ^
+          "\"children\": [" ^ String.concat "," body ^ "]" ^
+        "}"
+  | Value.Node (name, children) -> json_of_xmlitem (Value.NsNode ("", name, children))
+  | _ -> failwith "Cannot jsonize a detached attribute."
+
 and jsonize_values : Value.t list -> string list  =
   fun vs ->
     let ss =
       List.fold_left
         (fun ss v ->
-           let s = jsonize_value v in
+           let s = jsonize_value' v in
            s::ss) [] vs in
     List.rev ss
 
@@ -250,8 +260,8 @@ let value_with_state v s =
 let show_processes procs =
   (* Show the JSON for a prcess, including the PID, process to be run, and mailbox *)
   let show_process (pid, (proc, msgs)) =
-    let ps = jsonize_value proc in
-    let ms = jsonize_value (`List msgs) in
+    let ps = jsonize_value' proc in
+    let ms = jsonize_value' (`List msgs) in
     "{\"pid\":" ^ (ProcessID.to_json pid) ^ "," ^
     " \"process\":" ^ ps ^ "," ^
     " \"messages\":" ^ ms ^ "}" in
@@ -261,7 +271,7 @@ let show_processes procs =
 let show_handlers evt_handlers =
   (* Show the JSON for an event handler: the evt handler key, and the associated process *)
   let show_evt_handler (key, proc) =
-    let h_proc_json = jsonize_value proc in
+    let h_proc_json = jsonize_value' proc in
     "{\"key\": " ^ string_of_int key ^ "," ^
     " \"eventHandlers\":" ^ h_proc_json ^ "}" in
   let bnds = IntMap.bindings evt_handlers in
@@ -324,10 +334,18 @@ type json_state = JsonState.t
 let jsonize_value_with_state value state =
   Debug.if_set show_json
       (fun () -> "jsonize_value_with_state => " ^ Value.string_of_value value);
-  let jv = jsonize_value value in
+  let jv = jsonize_value' value in
   let jv_s = value_with_state jv (JsonState.to_string state) in
   Debug.if_set show_json (fun () -> "jsonize_value_with_state <= " ^ jv_s);
   jv_s
+
+let jsonize_value v =
+  Debug.if_set show_json
+      (fun () -> "jsonize_value => " ^ Value.string_of_value v);
+  let jv = jsonize_value' v in
+  Debug.if_set show_json (fun () -> "jsonize_value <= " ^ jv);
+  jv
+
 
 let encode_continuation (cont : Value.continuation) : string =
   Value.marshal_continuation cont

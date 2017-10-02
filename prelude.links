@@ -157,6 +157,7 @@ fun replicate(n, item) {
   else item :: replicate(n-1, item)
 }
 
+
 fun flip(f) {
   fun(x,y) { f(y,x) }
 }
@@ -168,6 +169,10 @@ fun curry(f) {
 fun uncurry(f) {
   fun (x, y) { f(x)(y) }
 }
+
+# Curried flip
+sig cflip : ((a::Any) -e-> (b::Any) -e-> c::Any) -> (b::Any) -> (a::Any) -e-> c::Any
+fun cflip(h) { curry(flip(uncurry(h))) }
 
 fun compose(f, g) {
   fun (x) { f(g(x)) }
@@ -456,25 +461,106 @@ fun asList(t) server {
   for (x <-- t) [x]
 }
 
-# Create an arbitrary XML element
-# Inputs are not esacped. Sanitizing is the responsibility of the caller.
-#
-# @param {String} name Name of the element ([a-z]+)
-# @param {[(String, String)]} attributes List of attribute-value-pairs
-# @param {Xml} children Child XML nodes
-# @returns {Xml}
-sig makeXml : (String, [(String, String)], Xml) ~> Xml
-fun makeXml (name, attributes, children) {
-  var attributes = fold_left(fun (prev, curr) {
-    var (attr, value) = curr;
-    prev ^^ " " ^^ attr ^^ "=\"" ^^ value ^^ "\""
-  }, "", attributes);
-
-  var startTag = "<" ^^ name ^^ attributes ^^ ">";
-  var endTag = "</" ^^ name ^^ ">";
-
-  parseXml(startTag ^^ show(children) ^^ endTag)
+# Appends a XML forest to an XmlItems children
+# @param {XmlItem} item
+# @param {Xml} child
+# @returns {XmlItem}
+sig appendChild : (XmlItem, Xml) ~> XmlItem
+fun appendChild(item, child) {
+  switch (xmlItemToVariant(item)) {
+    case Node(n, c) -> variantToXmlItem(Node(n, c ++ xmlToVariant(child)))
+    case NsNode(ns, n, c) -> variantToXmlItem(NsNode(ns, n, c ++ xmlToVariant(child)))
+    case _ -> error("Cannot append to " ^^ show(item))
+  }
 }
+
+# Sets or overrides an attribute of a XmlItem
+# @param {XmlItem} item
+# @param {String} name Name of the attribute
+# @param {String} value Value the attribute is set to
+# @returns {XmlItem} Updated item
+sig setAttribute : (XmlItem, String, String) ~> XmlItem
+fun setAttribute (item, name, value) {
+  fun helper (i, o) {
+    switch (i) {
+      case [ ] -> reverse(Attr(name, value) :: o)
+      case Attr(n, v)::t -> if (n == name) {
+        reverse(Attr(n, value) :: o)
+      } else {
+        helper(t, Attr(n, v) :: o)
+      }
+      case other::t -> helper(t, other :: o)
+    }
+  }
+  if (strContains(name, ':')) {
+    error("Attribute names cannot contain colons. Use setAttributeNS instead.")
+  } else {
+    switch (xmlItemToVariant(item)) {
+      case Node(n, c) -> variantToXmlItem(Node(n, helper(c, [ ])))
+      case NsNode(ns, n, c) -> variantToXmlItem(NsNode(ns, n, helper(c, [ ])))
+      case _ -> error("Cannot set attribute of " ^^ show(item))
+    }
+  }
+}
+
+# Sets or overrides a namespaced attribute of a XmlItem
+# @param {XmlItem} item
+# @param {String} namespace
+# @param {String} name Name of the attribute
+# @param {String} value Value the attribute is set to
+# @returns {XmlItem} Updated item
+sig setAttributeNS : (XmlItem, String, String, String) ~> XmlItem
+fun setAttributeNS (item, namespace, name, value) {
+  fun helper (i, o) {
+    switch (i) {
+      case [ ] -> reverse(NsAttr(namespace, name, value) :: o)
+      case NsAttr(ns, n, v)::t -> if (ns == namespace && n == name) {
+        reverse(NsAttr(ns, n, value) :: o)
+      } else {
+        helper(t, NsAttr(ns, n, v) :: o)
+      }
+      case other::t -> helper(t, other :: o)
+    }
+  }
+
+  if (strContains(name, ':')) {
+    error("Attribute names cannot contain colons.")
+  } else {
+    switch (xmlItemToVariant(item)) {
+      case Node(n, c) -> variantToXmlItem(Node(n, helper(c, [ ])))
+      case NsNode(ns, n, c) -> variantToXmlItem(NsNode(ns, n, helper(c, [ ])))
+      case _ -> error("Cannot set attribute of " ^^ show(item))
+    }
+  }
+}
+
+# Adds child to the front of an XmlItems children
+# Note: It is possible to add multiple children by passing an XML forest
+# @param {XmlItem} item
+# @param {Xml} child or children
+# @returns {XmlItem}
+sig prependChild : (XmlItem, Xml) ~> XmlItem
+fun prependChild (item, child) {
+  switch (xmlItemToVariant(item)) {
+    case Node(n, c) -> variantToXmlItem(Node(n, xmlToVariant(child) ++ c ))
+    case NsNode(ns, n, c) -> variantToXmlItem(NsNode(ns, n, xmlToVariant(child) ++ c ))
+    case _ -> error("Cannot prepend child in " ^^ show(item))
+  }
+}
+
+# Replaces all children of an XmlItem
+# @param {XmlItem} item
+# @param {Xml} newChildren
+# @returns {XmlItem} item with new children
+sig replaceChildren : (XmlItem, Xml) ~> XmlItem
+fun replaceChildren (item, newChildren) {
+  switch (xmlItemToVariant(item)) {
+    case Node(n, c) -> variantToXmlItem(Node(n, xmlToVariant(newChildren)))
+    case NsNode(ns, n, c) -> variantToXmlItem(NsNode(ns, n, xmlToVariant(newChildren)))
+    case _ -> error("Cannot replace children of " ^^ show(item))
+  }
+}
+
 
 #### FORMLETS ####
 ####   A library of functions supporting the 'formlet ... yields ...' syntax
@@ -1036,7 +1122,7 @@ var inputFloat = fun (gen) {transform(input, isFloat, fun (s) {s ^^ " is not a f
 sig freshResource : () ~> ()
 fun freshResource() {
   escape esc in {
-    redirect("?_k=" ^^ unsafePickleCont(fun () {esc(())})); exit(0)
+    redirect("?_k=" ^^ unsafePickleCont(fun () {esc(())})); exit([])
   }
 }
 
@@ -1172,6 +1258,68 @@ fun lf(f) {
   }
 }
 
+### Handler stuff
+typename Comp(e::Row, a) = () ~e~> a;
+typename Zero = [||];
+
+# Composition operators
+# Data flows from right to left (or inside-out)
+#sig -<- : ((a) -e-> b, (c) -e-> a) -> (c) -e-> b
+infixr 9 -<-;
+op f -<- g {
+  fun(x) { f(g(x)) }
+}
+
+# Data flow from left to right (or outside-in)
+infixr 9 ->-;
+op f ->- g {
+  g -<- f
+}
+
+# Explicit application
+#sig @ : ((a) -e-> b, a) -e-> b
+infixr 1 @;
+op f @ m {
+  f(m)
+}
+
+# Effect row generalisation
+sig gen0 : (Comp({ }, a)) -> Comp({ |%}, a)
+fun gen0(f) {
+  (f : (Comp({ |%}, a)) <- (Comp({ }, a)))
+}
+
+sig gen1 : ((a) {}~> b) -> ((a) { |%}~> b)
+fun gen1(f) {
+  (f : ((a) { |%}~> b) <- ((a) {}~> b))
+}
+
+sig gen2 : ((a,b) {}~> c) -> ((a,b) { |%}~> c)
+fun gen2(f) {
+  (f : ((a,b) { |%}~> c) <- ((a,b) {}~> c))
+}
+
+
+## Utility functions
+# Returns Just the index of x in xs if x is an element in xs, otherwise Nothing.
+sig elemIndex : (a, [a]) ~> Maybe(Int)
+fun elemIndex(x, xs) {
+  var n = fold_left(fun(acc, y) {
+    switch (acc) {
+       case (n,Just(i)) -> (n,Just(i))
+       case (n,Nothing) -> if (x == y) { (n, Just(n)) } else { (n+1,Nothing) }
+    }
+  }, (0,Nothing), xs);
+
+  second(n)
+}
+
+# Returns the maximum of a and b.
+fun maximum(a,b) {
+  if (a > b) { a }
+  else { b }
+}
+
 ####
 sig groupByFlat : ((a) -b-> c, [a]) -b-> [(c, [a])]
 fun groupByFlat(project, ts) {
@@ -1195,17 +1343,38 @@ fun assertEq (actual, expected) server {
 }
 
 #### APP SERVER ####
-sig addRoute : (String, (String, Location) ~> Page) ~> ()
-fun addRoute(path,f) { unsafeAddRoute(path, fun(p, loc){f(p, loc)}) }
+
+sig addSimpleRouteHandler : (String, (String) ~> Page) ~> ()
+fun addSimpleRouteHandler(path,f) { addRoute(path,f) }
+
+sig addRoute : (String, (String) ~> Page) ~> ()
+fun addRoute(path, f) { addLocatedRouteHandler(path, fun(p, _){f(p)}) }
+
+sig defaultErrorPage : (String, String, Location) ~> Page
+fun defaultErrorPage(_, error_string, _) {
+  bodyP(<html>
+        <body>
+        <h1>Wrong</h1>
+        <p>Links has encountered an internal error; the error message is <em>{stringToXml(error_string)}</em></p>
+        </body>
+        </html>)
+}
+
+sig addLocatedRouteHandler : (String, (String, Location) ~> Page) ~> ()
+fun addLocatedRouteHandler(path,f) { addLocatedRouteWithErrors(path, fun(p, l){f(p, l)}, defaultErrorPage) }
+
+sig addLocatedRouteWithErrors : (String, (String, Location) ~> Page, (String, String, Location) ~> Page) ~> ()
+fun addLocatedRouteWithErrors(path, f, error_handler) { unsafeAddRoute(path, f, error_handler) }
 
 sig serveThis : (() ~> Page) ~> ()
 fun serveThis(p) {
-  addRoute("/",fun (_,_) {p()});
+  addRoute("/",fun (_) {p()});
   servePages()
 }
 
 sig serveThese : ([(String,() ~> Page)]) ~> ()
 fun serveThese(routes) {
-  var _ = map(fun ((s,p)) {addRoute(s,fun (_,_) {p()})}, routes);
+  var _ = map(fun ((s,p)) {addRoute(s,fun (_) {p()})}, routes);
   servePages()
 }
+

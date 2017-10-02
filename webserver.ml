@@ -4,10 +4,11 @@ open Lwt
 open ProcessTypes
 open Utility
 open Webserver_types
+open Pervasives
 
-let jslibdir : string Settings.setting = Settings.add_string("jslibdir", "", `User)
-let host_name = Settings.add_string ("host", "0.0.0.0", `User)
-let port = Settings.add_int ("port", 8080, `User)
+let jslibdir : string Settings.setting = Basicsettings.Js.lib_dir
+let host_name = Basicsettings.Appserver.hostname
+let port = Basicsettings.Appserver.port
 
 
 module Trie =
@@ -66,7 +67,7 @@ struct
   type path = string
   type mime_type = (string * string)
   type static_resource = path * mime_type list
-  type request_handler_fn = Value.env * Value.t
+  type request_handler_fn = { request_handler: Value.env * Value.t; error_handler: Value.env * Value.t }
 
   type provider = (static_resource, request_handler_fn) either option
   type providers = { as_directory: provider; as_page: provider }  (* Really, at least one should be Some *)
@@ -75,7 +76,7 @@ struct
   let rt : routing_table ref = ref Trie.empty
 
   let env : (Value.env * Ir.var Env.String.t * Types.typing_environment) ref =
-    ref (Value.empty_env, Env.String.empty, Types.empty_typing_environment)
+    ref (Value.Env.empty, Env.String.empty, Types.empty_typing_environment)
   let prelude : Ir.binding list ref = ref []
   let globals : Ir.binding list ref = ref []
 
@@ -90,10 +91,15 @@ struct
 
   let set_prelude bs =
     prelude := bs
-  let init some_env some_globals =
+
+  let external_files : (string list) ref = ref []
+
+  let init some_env some_globals some_external_files =
     env := some_env;
     globals := some_globals;
+    external_files := some_external_files;
     ()
+
 
   let add_route is_directory path thread_starter =
     rt := Trie.transform
@@ -166,12 +172,12 @@ struct
       let path = Uri.path (Request.uri req) in
 
       (* Precondition: valenv has been initialised with the correct request data *)
-      let run_page (valenv, v) () =
-        let cid = RequestData.get_client_id (Value.request_data valenv) in
+      let run_page (valenv, v) (error_valenv, error_v) () =
+        let cid = RequestData.get_client_id (Value.Env.request_data valenv) in
         let ws_conn_url =
           if !accepting_websocket_requests then Some (ws_url) else None in
-        Eval.apply (render_cont ()) valenv
-        (v, [`String path; `SpawnLocation (`ClientSpawnLoc cid)]) >>= fun (valenv, v) ->
+        let applier env vp =
+          Eval.apply (render_cont ()) env vp >>= fun (valenv, v) ->
           let page = Irtojs.generate_real_client_page
                        ~cgi_env:cgi_args
                        (Lib.nenv, Lib.typing_env)
@@ -180,8 +186,15 @@ struct
                        (!prelude @ !globals)
                        (valenv, v)
                        ws_conn_url
-          in
-        Lwt.return ("text/html", page) in
+                       !external_files in
+          Lwt.return ("text/html", page) in
+        try
+          applier valenv (v, [`String path; `SpawnLocation (`ClientSpawnLoc cid)])
+        with
+        | Evalir.Exceptions.Wrong ->
+           applier error_valenv (error_v, [`String path; `String "Error in string matching (perhaps you have an over-specific route function)."; `SpawnLocation (`ClientSpawnLoc cid)])
+        | Evalir.Exceptions.EvaluationError s ->
+           applier error_valenv (error_v, [`String path; `String s; `SpawnLocation (`ClientSpawnLoc cid)]) in
 
       let render_servercont_cont valenv v =
         let ws_conn_url =
@@ -191,7 +204,8 @@ struct
           (Lib.nenv, Lib.typing_env)
           (!prelude @ !globals)
           (valenv, v)
-          ws_conn_url in
+          ws_conn_url
+          !external_files in
 
       let serve_static base uri_path mime_types =
           let fname =
@@ -225,24 +239,35 @@ struct
              serve_static file_path (String.concat "/" remaining) mime_types
           | (remaining, { as_directory = Some (Left (file_path, mime_types)); _ }) :: _, false ->
              serve_static file_path (String.concat "/" remaining / "index.html") mime_types
-          | ([], { as_page = Some (Right (valenv, v)); _ }) :: _, true
-          | (_, { as_directory = Some (Right (valenv, v)); _ }) :: _, _ ->
+          | ([], { as_page = Some (Right { request_handler = (valenv, v); error_handler = (error_valenv, error_v) }); _}) :: _, true
+          | (_, { as_directory = Some (Right { request_handler = (valenv, v); error_handler = (error_valenv, error_v) }); _}) :: _, _ ->
              let (_, nenv, tyenv) = !env in
              let cid = get_or_make_client_id cgi_args in
              let req_data = RequestData.new_request_data cgi_args cookies cid in
-             let req_env = Value.set_request_data (Value.shadow tl_valenv ~by:valenv) req_data in
+             let req_env = Value.Env.set_request_data (Value.Env.shadow tl_valenv ~by:valenv) req_data in
+             let req_error_env = Value.Env.set_request_data (Value.Env.shadow tl_valenv ~by:error_valenv) req_data in
              Webif.do_request
                (req_env, nenv, tyenv)
                cgi_args
-               (run_page (req_env, v))
+               (run_page (req_env, v) (req_error_env, error_v))
                (render_cont ())
                (render_servercont_cont req_env)
                (fun hdrs bdy -> Lib.cohttp_server_response hdrs bdy req_data)
           | _ :: t, path_is_file -> up (t, path_is_file) in
         up (Trie.longest_match (Str.split (Str.regexp "/") path) !rt, String.length path == 1 ||path.[String.length path - 1] <> '/') in
 
-      if is_prefix_of (Settings.get_value Basicsettings.Js.lib_url) path then
-        let liburl_length = String.length (Settings.get_value Basicsettings.Js.lib_url) in
+        let prefixed_lib_url =
+          let base_url = Settings.get_value Basicsettings.Appserver.internal_base_url in
+          let js_url = Settings.get_value Basicsettings.Js.lib_url in
+          if base_url = "" then js_url else
+          "/" ^
+          (base_url |> Utility.strip_slashes) ^ "/" ^
+          (js_url |> Utility.strip_slashes) ^ "/" in
+        Debug.print ("Prefixed_lib_url: " ^ prefixed_lib_url) ;
+        Debug.print ("Path: " ^ path) ;
+
+        if is_prefix_of prefixed_lib_url path then
+        let liburl_length = String.length prefixed_lib_url in
         let uri_path = (String.sub path liburl_length (String.length path - liburl_length)) in
         let linkslib = match Settings.get_value jslibdir with
           | "" ->
@@ -277,8 +302,9 @@ struct
         Hashtbl.add Tables.scopes x `Global;
         Hashtbl.add Tables.cont_defs x ([], tail);
         Hashtbl.add Tables.cont_vars x IntSet.empty;
-        [(`Global, x, Value.empty_env, ([], tail))] in
-
+        let frame = Value.Continuation.Frame.make `Global x Value.Env.empty ([], tail) in
+        Value.Continuation.(frame &> empty)
+      in
       Conduit_lwt_unix.init ~src:host () >>= fun ctx ->
       let ctx = Cohttp_lwt_unix_net.init ~ctx () in
       Debug.print ("Starting server (2)?\n");

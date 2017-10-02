@@ -9,12 +9,14 @@ let empty_state = IntSet.empty
 let rec event_handlers_from_value : Value.t -> handler_id_set =
   function
   (* Can't-dos *)
-  | `PrimitiveFunction _ | `Socket _ | `Continuation _ as r ->
+  | `PrimitiveFunction _ | `Socket _
+  | `ReifiedContinuation _ | `Continuation _ as r ->
       failwith ("Can't create json state for " ^ Value.string_of_value r);
 
   (* Empties *)
   | `List [] | `SpawnLocation _ | `Pid _
-  | `AccessPointID _ | `ClientFunction _ | `SessionChannel _ -> empty_state
+  | `AccessPointID _ | `ClientDomRef _
+  | `ClientFunction _ | `SessionChannel _ -> empty_state
 
   (* Homomorphisms *)
   | `FunctionPtr (_f, fvs) ->
@@ -48,6 +50,10 @@ and event_handlers_from_xml = function
             let state' = event_handlers_from_xml xmlitem in
             IntSet.union state state') xml empty_state
   | Value.Attr _ -> assert false
+  | Value.NsAttr _ -> assert false
+  (* Namespace of a tag is not relevant for event handlers, so we can just drop that here *)
+  | Value.NsNode (_, name, children) -> event_handlers_from_xml (Value.Node (name, children))
+
 and event_handlers_from_values (vs : Value.t list) : handler_id_set =
     List.fold_left
         (fun set_acc v ->

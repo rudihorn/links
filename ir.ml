@@ -74,7 +74,7 @@ and binding =
   [ `Let of binder * (tyvar list * tail_computation)
   | `Fun of fun_def
   | `Rec of fun_def list
-  | `Alien of (binder * language)
+  | `Alien of (binder * name * language)
   | `Module of (string * binding list option) ]
 and special =
   [ `Wrong of Types.datatype
@@ -91,8 +91,17 @@ and special =
   | `Delete of (binder * value) * computation option
   | `CallCC of (value)
   | `Select of (name * value)
-  | `Choice of (value * (binder * computation) name_map) ]
+  | `Choice of (value * (binder * computation) name_map)
+  | `Handle of handler
+  | `DoOperation of (name * value list * Types.datatype) ]
 and computation = binding list * tail_computation
+and clause = [`ResumptionBinder of binder | `NoResumption] * binder * computation
+and handler = {
+    ih_comp: computation;
+    ih_clauses: clause name_map;
+    ih_depth: handler_depth;
+}
+and handler_depth = [`Deep | `Shallow]
   deriving (Show)
 
 let binding_scope : binding -> scope =
@@ -100,7 +109,7 @@ let binding_scope : binding -> scope =
   | `Let (b, _)
   | `Fun (b, _, _, _)
   | `Rec ((b, _, _, _)::_)
-  | `Alien (b, _) -> Var.scope_of_binder b
+  | `Alien (b, _, _) -> Var.scope_of_binder b
   | `Rec []
   | `Module _ -> assert false
 
@@ -124,11 +133,12 @@ let rec is_atom =
         | `Variable _ -> true
         (*
   This can only be an atom if
-      Erase is just an upcast, and our language
-  is properly parameteric.
-  *)
-        (*    | `Erase (_, v) *)
-        | `Coerce (v, _) -> is_atom v
+
+  Erase is just an upcast, and our language
+  is properly parametric.
+*)
+(*    | `Erase (_, v) *)
+    | `Coerce (v, _) -> is_atom v
     | _ -> false
 
 let with_bindings bs' (bs, tc) = (bs' @ bs, tc)
@@ -491,6 +501,30 @@ module type TRANSFORM =
                          (b, c), t, o) bs in
            let t = (StringMap.to_alist ->- List.hd ->- snd) branch_types in
            `Choice (v, bs), t, o
+	| `Handle ({ ih_comp; ih_clauses; _ } as hndlr) ->
+	   let (comp, _, o) = o#computation ih_comp in
+	   let (clauses, branch_types, o) =
+	     o#name_map
+               (fun o (cc, b, c) ->
+                 let (cc, o) =
+                   match cc with
+                   | `ResumptionBinder b ->
+                      let (b, o) = o#binder b in
+                      `ResumptionBinder b, o
+                   | _ -> (cc, o)
+                 in
+		 let (b, o) = o#binder b in
+		 let (c, t, o) = o#computation c in
+		 (cc, b, c), t, o)
+	       ih_clauses
+	   in
+    	   let t = (StringMap.to_alist ->- List.hd ->- snd) branch_types in
+	   `Handle { hndlr with ih_comp = comp; ih_clauses = clauses }, t, o
+	| `DoOperation (name, vs, t) ->
+	   (* FIXME: the typing isn't right here for non-zero argument
+	   operations *)
+	   let (vs, _, o) = o#list (fun o -> o#value) vs in
+	   (`DoOperation (name, vs, t), t, o)
 
     method bindings : binding list -> (binding list * 'self_type) =
       fun bs ->
@@ -560,9 +594,9 @@ module type TRANSFORM =
                 defs in
             let defs = List.rev defs in
               `Rec defs, o
-        | `Alien (x, language) ->
+        | `Alien (x, name, language) ->
             let x, o = o#binder x in
-              `Alien (x, language), o
+              `Alien (x, name, language), o
         | `Module (name, defs) ->
             let defs, o =
               match defs with
@@ -684,7 +718,7 @@ end
 *)
 module ElimDeadDefs =
 struct
-  let show_rec_uses = Settings.add_bool("show_rec_uses", false, `User)
+  let show_rec_uses = Basicsettings.Ir.show_rec_uses
 
   let counter tyenv =
   object (o : 'self_type)
