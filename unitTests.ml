@@ -7,7 +7,7 @@ let suites =
             UnitTestsLensFDHelpers.suite;
             UnitTestsLensDatabase.suite;
             UnitTestsLensPerformance.suite;
-            UnitTestsJson.suite;
+            (* UnitTestsJson.suite; *)
         ];
    ];;
 

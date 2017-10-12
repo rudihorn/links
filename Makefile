@@ -40,6 +40,14 @@ TRASH=*.tmp *.output *.cache
 OPC = unionfind.ml unionfind.mli \
       getopt.ml getopt.mli PP.ml
 
+UNIT_TEST_SOURCES = \
+			unitTestsLensCommon.ml		\
+			unitTestsLensDatabase.ml	\
+		   	unitTestsLensFDHelpers.ml	\
+			unitTestsLensPerformance.ml \
+			unitTests.ml
+
+
 SOURCES = $(OPC)                                \
           multipart.ml                          \
           notfound.ml                           \
