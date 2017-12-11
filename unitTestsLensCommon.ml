@@ -211,6 +211,9 @@ module LensTestHelpers = struct
         let res = time_query false fn in
         let _ = time_query true fn in
         res
+
+    let col_list_to_string (cols : string list) (sep : string) =
+        List.fold_left (fun a b -> a ^ sep ^ b) (List.hd cols) (List.tl cols)
 end
 
 let test_fundep_of_string test_ctx = 

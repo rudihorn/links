@@ -4,9 +4,13 @@ UT_MAKEFILE="Makefile.unittests"
 
 cp Makefile "$UT_MAKEFILE"
 sed -i 's/links.ml/$(UNIT_TEST_SOURCES)/g' "$UT_MAKEFILE"
+sed -i 's/parseSettings.ml//g' "$UT_MAKEFILE"
 sed -i 's/PACKS=/PACKS=oUnit /g' "$UT_MAKEFILE"
  
 sed -i -e 's/RESULT\s*=\s*links/RESULT = links_tests/g' "$UT_MAKEFILE"
 
 make -f "$UT_MAKEFILE" $@
+RESULT="$?"
+
 rm "$UT_MAKEFILE" 
+exit $RESULT

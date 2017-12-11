@@ -6,6 +6,7 @@ let suites =
             UnitTestsLensCommon.suite;
             UnitTestsLensFDHelpers.suite;
             UnitTestsLensDatabase.suite;
+            UnitTestsLensSetOperations.suite;
             UnitTestsLensPerformance.suite;
             (* UnitTestsJson.suite; *)
         ];

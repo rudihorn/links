@@ -1,11 +1,12 @@
 #!/bin/bash
 
-make -f MakefileLinksTests
+./make-unit-tests
 
 if [ $? -eq 0 ]; then
 	clear
 	echo "Compilation was successful, running tests."
-	./linksTests -runner sequential $@
+	# ./links_tests -runner sequential $@
+	./links_tests $@
 else
 	echo "Build failed, not running tests."
 fi

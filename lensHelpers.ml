@@ -3,6 +3,7 @@ open Utility
 open Value
 open LensFDHelpers
 open LensQueryHelpers
+open LensSetOperations
 open LensRecordHelpers
 
 let query_timer = ref 0
@@ -158,6 +159,7 @@ let rec lens_get (lens : Value.t) callfn =
             (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
         let _ = Debug.print sql in
         res
+
 
 let rec lens_put_delta  (lens : Value.t) (data : (Value.t * int) list) callfn = 
     match lens with

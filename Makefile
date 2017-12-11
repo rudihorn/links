@@ -41,10 +41,11 @@ OPC = unionfind.ml unionfind.mli \
       getopt.ml getopt.mli PP.ml
 
 UNIT_TEST_SOURCES = \
-			unitTestsLensCommon.ml		\
-			unitTestsLensDatabase.ml	\
-		   	unitTestsLensFDHelpers.ml	\
-			unitTestsLensPerformance.ml \
+			unitTestsLensCommon.ml			\
+			unitTestsLensSetOperations.ml	\
+			unitTestsLensDatabase.ml		\
+		   	unitTestsLensFDHelpers.ml		\
+			unitTestsLensPerformance.ml 	\
 			unitTests.ml
 
 
@@ -92,7 +93,9 @@ SOURCES = $(OPC)                                \
           lensRecordHelpers.ml                  \
           lensFDHelpers.ml                      \
           lensQueryHelpers.ml                   \
+		  lensSetOperations.ml					\
           lensHelpers.ml                        \
+          lensHelpersCorrect.ml                 \
           eventHandlers.mli eventHandlers.ml    \
           xmlParser.mly xmlLexer.mll            \
           parseXml.mli parseXml.ml              \
