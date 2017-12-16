@@ -15,12 +15,14 @@ install:
   - opam install -y postgresql
   - opam pin add links-core . -y
   - opam pin add links-postgresql . -y
+  - opam pin add links-unit-tests . -y
   - opam pin add links . -y
   - opam pin remove links -y
+  - opam pin remove links-unit-tests -y
   - opam pin remove links-postgresql -y
   - opam pin remove links-core -y
 script:
   - make nc
   - make tests
   - ./run-tests db-only shredding
-  - jbuilder runtest
+  - make unit-tests
