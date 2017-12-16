@@ -1,6 +1,6 @@
 To run the unit tests, simply call `jbuilder runtest`.
 
-Some tests can contain verbose output, which can be useful for understanding why a test fails. To enable the verbose output, you can run the unit tests using the verbose flag 'v' set to 'true', e.g.:
+Some tests can contain verbose output, which can be useful for understanding why a test fails. To enable the verbose output, you can run the unit tests using the verbose flag `v` set to `true`, e.g.:
 
 `_build/default/unit-tests/unitTests.exe -v true`
 
