@@ -21,6 +21,6 @@ install:
   - opam pin remove links-core -y
 script:
   - make nc
+  - make unit-tests
   - make tests
   - ./run-tests db-only shredding
-  - make unit-tests

@@ -9,7 +9,7 @@ module Eval = Evalir.Eval(Webserver)
 module Webif = Webif.WebIf(Webserver)
 
 
-let _ = ParseSettings.parse_cmdline_options
+let _ = ParseSettings.parse_cmdline_options ()
 
 (** The prompt used for interactive mode *)
 let ps1 = "links> "
