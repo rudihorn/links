@@ -44,7 +44,7 @@ let options : opt list =
     ]
 
 
-let _ =
+let parse_cmdline_options () =
   try
     parse_cmdline options (fun i -> push_back i file_list);
     (match !config_file with

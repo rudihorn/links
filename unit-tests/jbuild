@@ -1,0 +1,16 @@
+(jbuild_version 1)
+
+(executable
+ ((name unitTests)
+  (package links-unit-tests)
+  (public_name links-unit-tests)
+  (modes (native))
+  (flags (:standard -safe-string -dtypes -w Ae-44-45-60 -g -cclib -lunix -thread))
+  (link_flags -linkall)
+  (libraries (oUnit links-core))))
+
+
+(alias
+ ((name runtest)
+  (deps (unitTests.exe))
+  (action (run ${<}))))
