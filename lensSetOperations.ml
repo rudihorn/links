@@ -29,15 +29,20 @@ module SortedRecords = struct
                     this allows us to perform partial matching *)
 
 
+    let construct_cols (cols: string list) (records : Value.t) =
+        let l = unbox_list records in
+        let recs = List.map unbox_record l in
+        let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else failwith "not consistent") cols r in
+        let recs = Array.of_list (List.map simpl_rec recs) in
+        Array.sort compare recs;
+        { columns = cols; plus_rows = recs; neg_rows = Array.of_list []; }
+
     (* records: List of records *)
     let construct (records : Value.t) =
         let l = unbox_list records in
         let recs = List.map unbox_record l in
         let keys = List.map (fun (k,v) -> k) (List.hd recs) in
-        let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else failwith "List columns not consistent") keys r in
-        let recs = Array.of_list (List.map simpl_rec recs) in
-        Array.sort compare recs;
-        { columns = keys; plus_rows = recs; neg_rows = Array.of_list []; }
+        construct_cols keys records 
         
     let to_string (rs : recs) =
         let cols = rs.columns in
@@ -69,7 +74,14 @@ module SortedRecords = struct
             let str = row_to_string row in
             if a = "" then str else
                 a ^ "\n" ^ str) (cols_string ^ "\n" ^ sep) rs.plus_rows in
-        pos 
+        let posn = Array.fold_left (fun a row ->
+            let str = row_to_string row in
+            if a = "" then str else
+                a ^ "\n" ^ str) (pos ^ "\n" ^ sep) rs.neg_rows in
+        if Array.length rs.neg_rows > 0 then
+            posn
+        else
+            pos 
 
     let find_mul (rs : simp_rec array) (r : simp_rec) : bool =
         let rec pivot s e =
@@ -88,8 +100,7 @@ module SortedRecords = struct
     let find (rs : recs) (r : simp_rec) : bool =
         find_mul rs.plus_rows r
 
-    let get_col_map (rs : recs) (col : string) =
-        let cols = rs.columns in
+    let get_col_map_list (cols : string list) (col : string) =
         let rec fn cols = 
             match cols with 
             | x::xs -> 
@@ -105,11 +116,20 @@ module SortedRecords = struct
             | _ -> None in
         fn cols
 
+    let get_col_map (rs : recs) (col : string) =
+        let cols = rs.columns in
+        get_col_map_list cols col
+
+        
     let get_cols_map (rs : recs) (cols : string list) =
         let maps = List.map (fun col -> get_col_map rs col) cols in
         let maps = List.flatten (List.map (fun mp -> match mp with None -> [] | Some a -> [a]) maps) in
         (fun r -> List.map (fun mp -> mp r) maps)
 
+    let sort (rs : recs) =
+        Array.sort compare rs.plus_rows;
+        Array.sort compare rs.neg_rows
+        
     let project_onto (rs : recs) (cols : string list) =
         let maps = get_cols_map rs cols in
         let maps2 = get_cols_map rs cols in
@@ -125,6 +145,9 @@ module SortedRecords = struct
 
     let not_neg_empty (rs : recs) = 
         (rs.neg_rows <> Array.of_list [])
+
+    let negate (rs : recs) =
+        { columns = rs.columns; plus_rows = rs.neg_rows; neg_rows = rs.plus_rows }
 
     let minus (rs1 : recs) (rs2 : recs) =
         if not_neg_empty rs2 then
@@ -169,5 +192,19 @@ module SortedRecords = struct
             { columns = rs1.columns; plus_rows = rows; neg_rows = rows_n }
 
     let box_simp_rec (cols : string list) (vals : Value.t list) =
-        box_value (List.combine cols vals)
+        box_record (List.combine cols vals)
+
+    let filter (rs : recs) (pred : Types.lens_phrase) = 
+        let getv = 
+            get_col_map rs in
+        let get_col_val row col = match (getv col) with 
+            | Some a -> a row
+            | None -> failwith ("Column " ^ col ^ " not in record set.") in
+        let filter rows = Array.of_list (List.filter (fun r -> LensQueryHelpers.calculate_predicate pred (get_col_val r) = box_bool true) (Array.to_list rows)) in
+        { 
+            columns = rs.columns; 
+            plus_rows = filter rs.plus_rows; 
+            neg_rows = filter rs.neg_rows;
+        }
 end
+

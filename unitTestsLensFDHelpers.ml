@@ -331,6 +331,9 @@ let test_calculate_fd_changelist test_ctx =
         ) changes in
         ()
     ) changeset in
+    let phrase = LensHelpersCorrect.matches_change changeset in
+    let str = match phrase with None -> "None" | Some phrase -> LensQueryHelpers.construct_query phrase in
+    LensTestHelpers.print_verbose test_ctx str;
     ()
 
 let test_can_remove_phrase test_ctx =

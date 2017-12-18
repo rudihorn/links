@@ -216,7 +216,6 @@ let rec traverse_lens_phrase (expr : lens_phrase) dosth =
     | _ -> failwith "Unknown operation" in
     dosth expr
 
-
 let rec replace_var (expr : lens_phrase) (repl : (string * Value.t) list) : lens_phrase =
     traverse_lens_phrase expr (fun expr -> 
         match expr with
@@ -264,11 +263,24 @@ let create_phrase_tuple (arg : lens_phrase) =
 
 module Phrase = struct
     let combine_and phrase1 phrase2 = 
+        let tup_or x = match x with 
+            | `InfixAppl (`Or, _, _) -> create_phrase_tuple x
+            | _ -> x in
         match phrase1 with 
         | Some x -> 
             begin
                 match phrase2 with
-                | Some x' -> Some (create_phrase_and x x')
+                | Some x' -> Some (create_phrase_and (tup_or x) (tup_or x'))
+                | None -> phrase1 
+            end
+        | None -> phrase2
+
+    let combine_or phrase1 phrase2 =
+        match phrase1 with 
+        | Some x -> 
+            begin
+                match phrase2 with
+                | Some x' -> Some (create_phrase_or x x')
                 | None -> phrase1 
             end
         | None -> phrase2
@@ -293,6 +305,13 @@ module Phrase = struct
         `InfixAppl (`Name ">", left, right)
 
     let constant_from_col = create_phrase_constant_of_record_col
+
+    let matching_cols_simp (on : string list) (row : Value.t list) =
+        let phrase = List.fold_left (fun phrase (on,v) ->
+            let term = Some (equal (var on) (constant (constant_of_value v))) in
+            combine_and phrase term
+        ) None (List.combine on row) in
+        phrase
 
     let matching_cols (on : ColSet.t) row = 
         let phrase = List.fold_left (fun phrase on -> 
@@ -386,12 +405,12 @@ let result_signature field_types result =
 
 (* builds record given a row field accessor function *)
  let build_record (rs: (string * (Types.datatype * int)) list) (row:int -> string) =
-    let rec build rs l =
+    let rec build rs =
       match rs with
-      | [] -> l
+      | [] -> []
       | (name,(t,i))::rs' ->
-	  build rs' ((name,value_of_db_string (row i) t)::l)
-    in build rs []
+	  (name,value_of_db_string (row i) t)::build rs'
+    in build rs
 
 let execute_select_result
     (field_types:(string * Types.datatype) list) (query:string) (db: database)  =

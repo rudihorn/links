@@ -141,6 +141,13 @@ let rec lens_get_query (lens : Value.t) =
             {tables = tables; cols = cols; pred = get_lens_sort_pred sort; db = q1.db}
   | _ -> failwith "Unsupported lens for query"
 
+
+let lens_get_cols (lens : Value.t) =
+    let sort = get_lens_sort lens in
+    let cols = get_lens_sort_cols sort in
+    let cols = List.filter (fun a -> a.present) cols in
+    List.map get_lens_col_alias cols
+
 (* BUG: Lists can be too big for List.map; need to be careful about recursion *)
 let rec lens_get (lens : Value.t) callfn =
     if is_memory_lens lens then
@@ -151,6 +158,7 @@ let rec lens_get (lens : Value.t) callfn =
         let db = lens_get_db lens in
         let cols = (get_lens_sort_cols sort) in
         let sql = construct_select_query_sort db sort in
+        let _ = print_endline sql in
         (* let query = lens_get_query lens in
         let sql = construct_select_query query  in *)
         let mappings = List.map (fun c -> get_lens_col_alias c, get_lens_col_type c) cols in
@@ -262,10 +270,13 @@ let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_
     let pred = Phrase.combine_and oldPred (Some pred) in
     (LensSort.fundeps sort, pred, LensSort.cols sort)
 
-let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
+let lens_select (lens : Value.t) (phrase : Types.lens_phrase) =
     let sort = get_lens_sort lens in
     let sort = select_lens_sort sort phrase in
-    lens_get (`LensSelect (lens, phrase, sort)) None
+    `LensSelect (lens, phrase, sort) 
+
+let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
+    lens_get (lens_select lens phrase) None
 
 
 let rec calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list) =

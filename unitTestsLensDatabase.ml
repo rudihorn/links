@@ -32,7 +32,8 @@ let test_drop_create_and_populate test_ctx =
 let suite = 
     "lens_database">:::
         [
+            (* disable these tests due to adventure works dependency *)
             "create_table">:: test_create_table;
             "create_table_rand">:: test_create_table_rand;
-            "drop_create_and_populate">:: test_drop_create_and_populate;
+            "drop_create_and_populate">:: test_drop_create_and_populate; 
         ];;

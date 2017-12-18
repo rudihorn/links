@@ -18,7 +18,7 @@ module LensTestHelpers = struct
 
     let get_db test_ctx = 
         (* host port dbname user pw *) 
-        new pg_database (db_host_opt test_ctx) "5432" "adventureworks" "links" "links"
+        new pg_database (db_host_opt test_ctx) "5432" "links" "links" "links"
 
 
     let print_verbose test_ctx message = 
@@ -159,7 +159,7 @@ module LensTestHelpers = struct
             List.map (function
                 | `Seq -> i
                 | `Constant n -> n
-                | `RandTo n -> 1 + Random.int n 
+                | `RandTo n -> 1 + Random.int (if n < 5 then 5 else n) 
                 | `Rand -> Random.bits ()
             ) cols 
         ) (range 1 cnt) in
@@ -188,8 +188,11 @@ module LensTestHelpers = struct
         let _ = drop_if_exists test_ctx db table in
         let _ = create_table test_ctx db table (ColSet.elements left) cols in
         let data = gen_data colGen cnt in
-        let data = box_int_record_list cols data in
-        let _ = insert_rows db table data in
+        if List.length data > 0 then
+            let data = box_int_record_list cols data in
+            insert_rows db table data; ()
+        else
+            ();
         let lens = create_lens_db db table fd (ColSet.elements left) cols in
         lens
 

@@ -46,6 +46,7 @@ UNIT_TEST_SOURCES = \
 			unitTestsLensDatabase.ml		\
 		   	unitTestsLensFDHelpers.ml		\
 			unitTestsLensPerformance.ml 	\
+			unitTestsLensPrimitives.ml 	\
 			unitTests.ml
 
 

@@ -9,7 +9,8 @@ let test_data_1 = { SortedRecords.columns = ["a"; "b"; "str";]; plus_rows = Arra
     ]; neg_rows = Array.of_list [
         [box_bool false; box_int 10; box_string "0123"];
         [box_bool false; box_int 11; box_string "0123"];
-    ]}
+    ]};;
+
 
 let test_data_2 = { SortedRecords.columns = ["a"; "b"; "str";]; plus_rows = Array.of_list [
         [box_bool true; box_int 5; box_string "abc"];
@@ -17,6 +18,7 @@ let test_data_2 = { SortedRecords.columns = ["a"; "b"; "str";]; plus_rows = Arra
     ]; neg_rows = Array.of_list [
         [box_bool false; box_int 9; box_string "0123"];
     ]}
+
 
 let test_data_3 = { SortedRecords.columns = ["C"; "B"; "A";]; plus_rows = Array.of_list [
         [box_bool true; box_int 5; box_string "abc"];
@@ -26,7 +28,11 @@ let test_data_3 = { SortedRecords.columns = ["C"; "B"; "A";]; plus_rows = Array.
     ]; neg_rows = Array.of_list [
         [box_bool false; box_int 10; box_string "0123"];
         [box_bool false; box_int 11; box_string "0123"];
-    ]}
+    ]};;
+
+SortedRecords.sort test_data_1;;
+SortedRecords.sort test_data_2;;
+SortedRecords.sort test_data_3
 
 let test_construct_set test_ctx =
     let recs = test_data_1 in
