@@ -7,6 +7,8 @@ open LensFDHelpers
 open LensSetOperations
 open LensRecordHelpers
 
+
+
 let rec calculate_fd_changelist (fds : FunDepSet.t) (data : SortedRecords.recs) =
     let additions = data.plus_rows in
     (* get the key of the row for finding complements *)
@@ -22,6 +24,8 @@ let rec calculate_fd_changelist (fds : FunDepSet.t) (data : SortedRecords.recs) 
             let fdr_map = SortedRecords.get_cols_map data cols_r in
             let map = fun r -> fdl_map r, fdr_map r in
             let changeset = Array.to_list (Array.map map data.plus_rows) in
+            (* remove duplicates and sort *)
+            let changeset = List.sort_uniq (fun (a,_) (a',_) -> SortedRecords.compare a a') changeset in
             let fds = FunDepSet.remove fd fds in
             ((cols_l, cols_r), changeset) :: loop fds in
     let res = loop fds in
@@ -42,9 +46,7 @@ let get_changes (lens : Value.t) (data : SortedRecords.recs) =
     let fds = get_lens_sort_fn_deps sort in
     let changelist = calculate_fd_changelist fds data in
     let phrase = matches_change changelist in
-    let res = match phrase with
-    | None -> lens_get lens ()
-    | Some phrase -> lens_get_select lens phrase in
+    let res = lens_get_select_opt lens phrase in
     let res = SortedRecords.construct_cols (lens_get_cols lens) res in
     let changes = List.map (fun ((cols_l,cols_r),l) -> 
         (* get a map from simp rec to col value *)
@@ -90,28 +92,84 @@ let get_changes (lens : Value.t) (data : SortedRecords.recs) =
     let res2 = List.flatten (List.map (fun (r, r') -> if r = r' then [] else [r, r']) (Array.to_list res2)) in
     { SortedRecords.columns = res.columns; neg_rows = Array.of_list (List.map (fun (a,b) -> b) res2); plus_rows = Array.of_list (List.map (fun (a,b) -> a) res2); }
 
+let query_joined (lens : Value.t) (cols : string list) (data : SortedRecords.recs) =
+    (* project data onto columns *)
+    let proj = SortedRecords.project_onto data cols in
+    (* for each record generate a phrase which matches join key *)
+    let query_record row = Phrase.matching_cols_simp cols row in
+    (* generate phrase as disjunction *)
+    let query = List.fold_left Phrase.combine_or None (List.map (Phrase.matching_cols_simp cols) (Array.to_list proj.plus_rows)) in
+    let to_join = lens_get_select_opt lens query in
+    (* join to_join with data *)
+    ()
 
-let rec lens_put_set (lens : Value.t) (set : SortedRecords.recs) =
-    (* first step is calculate the delta *)
-    let res = LensHelpers.lens_get lens () in
-    let delt = SortedRecords.merge set (SortedRecords.negate (SortedRecords.construct_cols set.columns res)) in
-    (* now perform lens step *)
+let query_join_records (lens : Value.t) (set : SortedRecords.recs) (on : string list) =
+    let proj = SortedRecords.project_onto set on in
+    let recs = List.append (Array.to_list proj.plus_rows) (Array.to_list proj.neg_rows) in
+    let recs = List.sort_uniq SortedRecords.compare recs in
+    let query = List.fold_left Phrase.combine_or None (List.map (Phrase.matching_cols_simp on) recs) in
+    let recs = lens_get_select_opt lens query in
+    SortedRecords.construct_cols (lens_get_cols lens) recs
+
+let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Value.t -> SortedRecords.recs -> unit) =
     match lens with
-    | `Lens _ -> set 
-    | `LensSelect (l, pred, sort) -> 
-            let m_hash = set in
-            let delta_m1 = get_changes (lens_select l (Phrase.negate pred)) delt in
+    | `Lens _ -> fn lens delt
+    | `LensJoin (l1, l2, cols, pd, qd, sort)  -> 
+            let cols_simp = List.map (fun (a,_,_) -> a) cols in
+            let sort1 = get_lens_sort l1 in 
+            let proj1 = SortedRecords.project_onto delt (get_lens_sort_cols_list sort1) in 
+            let sort2 = get_lens_sort l2 in
+            let proj2 = SortedRecords.project_onto delt (get_lens_sort_cols_list sort2) in
+            let delta_m0 = get_changes l1 proj1 in
+            let delta_n0 = get_changes l2 proj2 in
+            let delta_l =
+                SortedRecords.merge 
+                    (SortedRecords.merge    
+                        (SortedRecords.join delta_m0 delta_n0 cols_simp)
+                        (SortedRecords.merge 
+                            (SortedRecords.join delta_m0 (query_join_records l2 delta_m0 cols_simp) cols_simp)
+                            (SortedRecords.join delta_n0 (query_join_records l1 delta_n0 cols_simp) cols_simp)
+                        )
+                    ) 
+                    (SortedRecords.negate delt) in
+            let j = SortedRecords.project_onto (SortedRecords.merge (query_join_records lens delta_l cols_simp) (delt)) cols_simp in
+            let delta_l_l = SortedRecords.join delta_l j cols_simp in
+            let delta_l_a = SortedRecords.merge (delta_l) (SortedRecords.negate delta_l_l) in
+            let delta_m = SortedRecords.merge 
+                (SortedRecords.merge delta_m0 (SortedRecords.negate (SortedRecords.project_onto_set (SortedRecords.filter delta_l_a pd) delta_m0)))
+                (SortedRecords.negate (SortedRecords.project_onto_set delta_l_l delta_m0)) in
+            let delta_n = SortedRecords.merge 
+                delta_n0
+                (SortedRecords.negate (SortedRecords.project_onto_set (SortedRecords.filter delta_l_a qd) delta_n0)) in
+            fn l1 delta_m;
+            fn l2 delta_n
             
+    | `LensSelect (l, pred, sort) -> 
+            let m_hash = delt in
+            let delta_m1 = get_changes (lens_select l (Phrase.negate pred)) delt in
             let m1_cap_P = SortedRecords.filter delta_m1 pred in
-            let delta_nhash = SortedRecords.merge (m1_cap_P) (SortedRecords.negate set) in
-            SortedRecords.merge delta_m1 (SortedRecords.negate delta_nhash)
+            let delta_nhash = SortedRecords.merge (m1_cap_P) (SortedRecords.negate delt) in
+            let new_delta = SortedRecords.merge delta_m1 (SortedRecords.negate delta_nhash) in
+            fn l new_delta
     | _ -> failwith "Unsupport lens."
 
-let rec lens_put (lens : Value.t) (data : Value.t) =
+let lens_get_delta (lens : Value.t) (data : Value.t) =
     let cols = lens_get_cols lens in
-            print_endline (string_of_value (box_list (List.map box_string cols)));
     let orig = SortedRecords.construct_cols cols (lens_get lens ()) in
     let data = SortedRecords.merge (SortedRecords.construct_cols cols data) (SortedRecords.negate orig) in
-    lens_put_set lens data
+    data
+
+
+let lens_put_step (lens : Value.t) (data : Value.t) (fn : Value.t -> SortedRecords.recs -> unit) =
+    let data = lens_get_delta lens data in
+    lens_put_set_step lens data fn
+
+
+let rec lens_put (lens : Value.t) (data : Value.t) =
+    let rec do_step_rec lens delt =
+        match lens with
+        | `Lens _ -> ()
+        | _ -> lens_put_set_step lens delt do_step_rec in
+    do_step_rec lens (lens_get_delta lens data)
 
 

@@ -19,20 +19,23 @@ module SortedRecords = struct
         | `String i1 , `String i2 -> compare i1 i2
         | _, _ -> failwith "Unsupported comparison types."
 
-    let compare (a : simp_rec) (b : simp_rec) : int =
+    let rec compare (a : simp_rec) (b : simp_rec) : int =
         match a, b with
         | x::xs, y::ys -> 
-            match compare_val x y with
-            | 0 -> compare xs ys 
-            | a -> a
-        | _ -> 0 (* if either of the lists are empty, return match
+            let res = compare_val x y in
+            if res = 0 then compare xs ys else res
+        | _,_ -> 0 (* if either of the lists are empty, return match
                     this allows us to perform partial matching *)
 
+    let str_list_to_string lst = 
+        List.fold_left (fun a c -> if a = "" then c else a ^ ", " ^ c) "" lst
 
     let construct_cols (cols: string list) (records : Value.t) =
         let l = unbox_list records in
         let recs = List.map unbox_record l in
-        let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else failwith "not consistent") cols r in
+        let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else
+            failwith ("lens set columns not consistent, " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,v) -> k) r))
+            ) cols r in
         let recs = Array.of_list (List.map simpl_rec recs) in
         Array.sort compare recs;
         { columns = cols; plus_rows = recs; neg_rows = Array.of_list []; }
@@ -83,22 +86,42 @@ module SortedRecords = struct
         else
             pos 
 
-    let find_mul (rs : simp_rec array) (r : simp_rec) : bool =
+    let find_mul (rs : simp_rec array) (r : simp_rec) =
         let rec pivot s e =
             if s > e then
-                false
+                None
             else
                 let m = (s + e) / 2 in
                 let r = compare (Array.get rs m) r in
                 match r with
-                | 0 -> true
+                | 0 -> Some r
                 | a when a > 0 -> pivot s (m-1)
                 | a when a < 0 -> pivot (m+1) e in
         let r = pivot 0 ((Array.length rs) - 1) in
         r
 
+    let find_all_ind (rs : simp_rec array) (r : simp_rec) : int * int =
+        let rec pivot s e b =
+            if s > e then
+                if b then e else s
+            else
+                let m = (s + e) / 2 in
+                let res = compare (Array.get rs m) r in
+                match res with
+                | 0 -> if b then pivot (m+1) e b else pivot s (m-1) b 
+                | a when a > 0 -> pivot s (m-1) b
+                | a when a < 0 -> pivot (m+1) e b in
+        let b = pivot 0 ((Array.length rs) - 1) false in
+        let e = pivot 0 ((Array.length rs) - 1) true in
+        (b,e)
+
+    let find_all (rs : simp_rec array) (r : simp_rec) : simp_rec array =
+        let b,e = find_all_ind rs r in
+        Array.sub rs b (e + 1 - b)
+
+
     let find (rs : recs) (r : simp_rec) : bool =
-        find_mul rs.plus_rows r
+        find_mul rs.plus_rows r <> None
 
     let get_col_map_list (cols : string list) (col : string) =
         let rec fn cols = 
@@ -136,9 +159,8 @@ module SortedRecords = struct
         let plus_rows = Array.map maps rs.plus_rows in
         let neg_rows = Array.map maps rs.neg_rows in
         let cols = maps2 rs.columns in
-        Array.sort compare plus_rows;
-        Array.sort compare neg_rows;
-        { columns = cols; plus_rows = plus_rows; neg_rows = neg_rows }
+        let sort_uniq arr = Array.of_list (List.sort_uniq compare (Array.to_list arr)) in
+        { columns = cols; plus_rows = sort_uniq plus_rows; neg_rows = sort_uniq neg_rows }
 
     let project_onto_set (rs : recs) (rs2 : recs) = 
         project_onto rs (rs2.columns) 
@@ -149,6 +171,7 @@ module SortedRecords = struct
     let negate (rs : recs) =
         { columns = rs.columns; plus_rows = rs.neg_rows; neg_rows = rs.plus_rows }
 
+    (* perform regular subtraction, not defined on sets with negative multiplicities *)
     let minus (rs1 : recs) (rs2 : recs) =
         if not_neg_empty rs2 then
             failwith "Cannot subtract from negative multiplicities"
@@ -169,31 +192,15 @@ module SortedRecords = struct
             let proj = project_onto_set rs2 rs1 in
             let maps = List.map (fun c -> match get_map c rs1.columns with None -> [] | Some a -> [a]) proj.columns in
             let maps = List.flatten maps in
-            print_endline (to_string_tabular proj);
             let rows = List.filter (fun r -> not (find proj (List.map (fun mp -> mp r) maps))) (Array.to_list rs1.plus_rows) in
             { rs1 with plus_rows = Array.of_list rows }
 
-    let merge (rs1 : recs) (rs2 : recs) =
-        let proj = project_onto_set rs2 rs1 in
-        if rs1.columns <> proj.columns then
-            failwith "cannot merge two different sets"
-        else
-            let rows_rs1 = List.filter (fun r -> not (find_mul proj.neg_rows r)) (Array.to_list rs1.plus_rows) in
-            let rows_rs1_n = List.filter (fun r -> not (find_mul rs1.plus_rows r)) (Array.to_list proj.neg_rows) in
-            let rows_rs2 = List.filter (fun r -> not (find_mul rs1.neg_rows r)) (Array.to_list proj.plus_rows) in
-            let rows_rs2_n = List.filter (fun r -> not (find_mul proj.plus_rows r)) (Array.to_list rs1.neg_rows) in
-            let rows_rs1 = Array.of_list rows_rs1 in
-            let rows_rs1_n = Array.of_list rows_rs1_n in
-            (* remove duplicate rows *)
-            let rows_rs2 = List.filter (fun r -> not (find_mul rows_rs1 r)) rows_rs2 in
-            let rows_rs2_n = List.filter (fun r -> not (find_mul rows_rs1_n r)) rows_rs2_n in
-            let rows = Array.append rows_rs1 (Array.of_list rows_rs2) in
-            let rows_n = Array.append rows_rs1_n (Array.of_list rows_rs2_n) in
-            { columns = rs1.columns; plus_rows = rows; neg_rows = rows_n }
+
 
     let box_simp_rec (cols : string list) (vals : Value.t list) =
         box_record (List.combine cols vals)
 
+    (* filter out the records which don't satisfy pred *)
     let filter (rs : recs) (pred : Types.lens_phrase) = 
         let getv = 
             get_col_map rs in
@@ -206,5 +213,95 @@ module SortedRecords = struct
             plus_rows = filter rs.plus_rows; 
             neg_rows = filter rs.neg_rows;
         }
+
+    (* ensures that all columns in contains are in cols *)
+    let cols_contain (cols : string list) (contains : string list) =
+        List.for_all (fun a -> List.mem a cols) contains
+
+    (* reorder cols, so first appears first *)
+    (* this requires first to be a subset of cols *)
+    let reorder_cols (cols : string list) (first : string list) =
+        if not (cols_contain cols first) then
+            failwith "Columns do not contain all reorder keys.";
+        let rest = List.filter (fun a -> not (List.mem a first)) cols in
+        List.append first rest
+
+    let subtract_cols (cols : string list) (remove : string list) =
+        List.filter (fun a -> not (List.mem a remove)) cols
+
+    let zip_delta_merge (left : simp_rec list) (right : simp_rec list) =
+        let rec do_next left right =
+            match left, right with 
+            | x :: xs, y :: ys -> 
+                    begin 
+                        match compare x y with
+                        | 0 -> (* x = y, so skip both *) do_next xs ys
+                        | -1 -> (* x < y, so take x and see if can find y *) 
+                                let (left,right) = do_next xs right in
+                                (x :: left, right)
+                        | +1 -> (* x > y, so take y and try find x *)
+                                let (left, right) = do_next left ys in
+                                (left, y :: right)
+                    end
+            | _ -> (left, right) (* one of them is empty so return rest *)
+        in
+        let (left, right) = do_next left right in
+        (List.sort_uniq compare left, List.sort_uniq compare right)
+
+    (* perform the delta set merge operation between two sets *)
+    let merge (rs1 : recs) (rs2 : recs) =
+        let proj = project_onto_set rs2 rs1 in
+        let plus = List.append (Array.to_list rs1.plus_rows) (Array.to_list proj.plus_rows) in
+        let plus = List.sort compare plus in
+        let neg = List.append (Array.to_list rs1.neg_rows) (Array.to_list proj.neg_rows) in
+        let neg = List.sort compare neg in
+        let (plus, neg) = zip_delta_merge plus neg in
+        { columns = rs1.columns; plus_rows = Array.of_list plus; neg_rows = Array.of_list neg }
+        
+        (* 
+        if rs1.columns <> proj.columns then
+            failwith "cannot merge two different sets"
+        else
+            let rows_rs1 = List.filter (fun r -> None = find_mul proj.neg_rows r) (Array.to_list rs1.plus_rows) in
+            let rows_rs1_n = List.filter (fun r -> None = find_mul rs1.plus_rows r) (Array.to_list proj.neg_rows) in
+            let rows_rs2 = List.filter (fun r -> None = find_mul rs1.neg_rows r) (Array.to_list proj.plus_rows) in
+            let rows_rs2_n = List.filter (fun r -> None = find_mul proj.plus_rows r) (Array.to_list rs1.neg_rows) in
+            let rows_rs1 = Array.of_list rows_rs1 in
+            let rows_rs1_n = Array.of_list rows_rs1_n in
+            (* remove duplicate rows *)
+            let rows_rs2 = List.filter (fun r ->  None = find_mul rows_rs1 r) rows_rs2 in
+            let rows_rs2_n = List.filter (fun r -> None = find_mul rows_rs1_n r) rows_rs2_n in
+            let rows = Array.append rows_rs1 (Array.of_list rows_rs2) in
+            let rows_n = Array.append rows_rs1_n (Array.of_list rows_rs2_n) in
+            { columns = rs1.columns; plus_rows = rows; neg_rows = rows_n } *)
+
+    (* perform the join on left and right using on as the join key *)
+    (* currently not specified what happens if this isn't the natural join *)
+    let join (left : recs) (right : recs) (on : string list) =
+        let right_cols = reorder_cols right.columns on in
+        let right = project_onto right right_cols in
+        let lmap = get_cols_map left on in
+        let rjoinmap = get_cols_map right (subtract_cols right_cols on) in
+        let rjoinmap2 = get_cols_map right (subtract_cols right_cols on) in
+        let join_list l1 l2 = 
+            let joined = List.map (fun r1 ->
+                let proj = lmap r1 in
+                let matching = find_all l2 proj in
+                let joined = List.map (fun r2 ->
+                    List.append r1 (rjoinmap r2)) (Array.to_list matching) in 
+                joined
+            ) (Array.to_list l1) in
+            List.flatten joined in
+        let pos = List.append (join_list left.plus_rows right.plus_rows)
+            (join_list left.neg_rows right.neg_rows) in
+        let pos = List.sort compare pos in
+        let neg = List.append (join_list left.plus_rows right.neg_rows) 
+            (join_list left.neg_rows right.plus_rows) in
+        let neg = List.sort compare neg in
+        let (pos, neg) = zip_delta_merge pos neg in
+        { columns = List.append left.columns (rjoinmap2 right.columns);
+          plus_rows = Array.of_list pos;
+          neg_rows = Array.of_list neg; }
+    
 end
 

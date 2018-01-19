@@ -158,7 +158,7 @@ let rec lens_get (lens : Value.t) callfn =
         let db = lens_get_db lens in
         let cols = (get_lens_sort_cols sort) in
         let sql = construct_select_query_sort db sort in
-        let _ = print_endline sql in
+        (* let _ = print_endline sql in *)
         (* let query = lens_get_query lens in
         let sql = construct_select_query query  in *)
         let mappings = List.map (fun c -> get_lens_col_alias c, get_lens_col_type c) cols in
@@ -278,6 +278,10 @@ let lens_select (lens : Value.t) (phrase : Types.lens_phrase) =
 let lens_get_select (lens : Value.t) (phrase : Types.lens_phrase) =
     lens_get (lens_select lens phrase) None
 
+let lens_get_select_opt (lens : Value.t) (phrase : Types.lens_phrase option) =
+    match phrase with
+    | None -> lens_get lens ()
+    | Some phrase  -> lens_get_select lens phrase
 
 let rec calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list) =
     let additions = List.filter (fun (t,m) -> m = +1) data in
