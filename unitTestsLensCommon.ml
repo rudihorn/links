@@ -70,9 +70,13 @@ module LensTestHelpers = struct
     let mem_lens_str fds name data =
         mem_lens (fundepset_of_string fds) name data
 
-    let join_lens l1 l2 on =
+    let join_lens_dl l1 l2 on =
         let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
         `LensJoin (l1, l2, on, `Constant (`Bool true), `Constant (`Bool false), sort)
+
+    let join_lens_dr l1 l2 on =
+        let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
+        `LensJoin (l1, l2, on, `Constant (`Bool false), `Constant (`Bool true), sort)
 
     let select_lens l phrase =
         let sort = get_lens_sort l in

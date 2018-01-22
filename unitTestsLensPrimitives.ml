@@ -69,7 +69,7 @@ let test_select_lens_2 n test_ctx =
     let db = LensTestHelpers.get_db test_ctx in
     let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (200); `RandTo (30)] n in
     let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d" "b d" [`Seq; `RandTo (40)] 50 in 
-    let l3 = LensTestHelpers.join_lens l1 l2 ["b"] in
+    let l3 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
     let l4 = LensTestHelpers.select_lens l3 (
         Phrase.equal (Phrase.var "c") (Phrase.constant_int 20)) in
     let res = Query.map_records (Query.set "d" (Query.ifcol "b" (Query.band (Query.gt 40) (Query.lt 80)) (box_int 5))) (lens_get l4 ()) in
@@ -84,7 +84,7 @@ let test_join_lens_1 n test_ctx =
     let db = LensTestHelpers.get_db test_ctx in
     let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (200); `RandTo (30)] n in
     let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d" "b d" [`Seq; `RandTo (40)] 50 in 
-    let l3 = LensTestHelpers.join_lens l1 l2 ["b"] in
+    let l3 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
     let res = Query.map_records (Query.set "d" (Query.ifcol "b" (Query.band (Query.gt 40) (Query.lt 80)) (box_int 5))) (lens_get l3 ()) in
     LensTestHelpers.print_verbose test_ctx (string_of_value (lens_get l3 ())); 
     LensHelpersCorrect.lens_put_step l3 res (fun _ res ->
@@ -106,13 +106,29 @@ let test_join_lens_2 n test_ctx =
     let db = LensTestHelpers.get_db test_ctx in
     let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (200); `RandTo (30)] n in
     let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d" "b d" [`Seq; `RandTo (40)] 50 in 
-    let l3 = LensTestHelpers.join_lens l1 l2 ["b"] in
+    let l3 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
     let res = Query.filter (Query.lt 40 << Query.col "b") (lens_get l3 ()) in
     LensTestHelpers.print_verbose test_ctx (string_of_value (lens_get l3 ())); 
     LensTestHelpers.print_verbose test_ctx (string_of_value res);
     LensHelpersCorrect.lens_put_step l3 res (fun _ res ->
         LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
     );
+    LensTestHelpers.drop_if_cleanup test_ctx db "t1";
+    LensTestHelpers.drop_if_cleanup test_ctx db "t2";
+    () 
+
+let test_join_lens_dr_2 n test_ctx =
+    let db = LensTestHelpers.get_db test_ctx in
+    let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (200); `RandTo (30)] n in
+    let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d" "b d" [`Seq; `RandTo (40)] 50 in 
+    let l3 = LensTestHelpers.join_lens_dr l1 l2 ["b"] in
+    let res = Query.filter (Query.lt 20 << Query.col "c") (lens_get l3 ()) in
+    LensTestHelpers.print_verbose test_ctx (string_of_value (lens_get l3 ())); 
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensHelpersCorrect.lens_put_step l3 res (fun _ res ->
+        LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
+    );
+    LensHelpersCorrect.lens_put l3 res; 
     LensTestHelpers.drop_if_cleanup test_ctx db "t1";
     LensTestHelpers.drop_if_cleanup test_ctx db "t2";
     () 
@@ -125,6 +141,7 @@ let suite =
             "select_2_500">:: test_select_lens_2 500;
             "join_1_100">:: test_join_lens_1 100;
             "join_2_100">:: test_join_lens_2 100;
+            "join_2_dr_100">:: test_join_lens_dr_2 100;
         ];;
 
 

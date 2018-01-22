@@ -164,11 +164,70 @@ let lens_put_step (lens : Value.t) (data : Value.t) (fn : Value.t -> SortedRecor
     let data = lens_get_delta lens data in
     lens_put_set_step lens data fn
 
+let db_string_of_value (db : Value.database) (v : Value.t) =
+    match v with
+    | `Int i -> string_of_int i
+    | `String s -> db#escape_string s
+    | `Float f -> string_of_float f
+    | _ -> failwith ("db_string_of_value does not support " ^ string_of_value v)
+
+let rec take (l : 'a list) (n : int) = 
+    match n with 
+    | 0 -> []
+    | _ -> List.hd l :: take (List.tl l) (n - 1)
+
+let rec skip (l : 'a list) (n : int) =
+    match n with 
+    | 0 -> l
+    | _ -> skip (List.tl l) (n - 1)
+
+let apply_delta (t : Value.table) (data : SortedRecords.recs) =
+    let (db, _), table, keys, _ = t in
+    (* get the first key, otherwise return an empty key *)
+    let key = match keys with [] -> data.columns | _ -> List.hd keys in
+    let key_len = List.length key in
+    let cols = data.columns in
+    let cols = SortedRecords.reorder_cols cols key in
+    let data = (SortedRecords.project_onto data cols) in
+    let (insert_vals, update_vals) = List.partition (fun row ->
+        let key_vals = take row key_len in
+        let row = SortedRecords.find_mul data.neg_rows key_vals in
+        match row with None -> true | Some _ -> false) (Array.to_list data.plus_rows) in
+    let delete_vals = List.map (fun row ->
+        let key_vals = take row key_len in
+        let row = SortedRecords.find_mul data.plus_rows key_vals in
+        match row with None -> [key_vals] | Some _ -> []) (Array.to_list data.neg_rows) in
+    let delete_vals = List.flatten delete_vals in
+    let delete_commands = List.map (fun del_key ->
+        let cond (key, v) = db#quote_field (key ^ " = " ^ db_string_of_value db v) in
+        let zipped = List.combine key del_key in
+        let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
+        let cmd = "delete from " ^ table ^ " where " ^ cond in
+        print_endline cmd;
+        db#exec cmd;
+        cmd) delete_vals in
+    let update_commands = List.map (fun row ->
+        let key_vals = take row key_len in
+        let cond (key, v) = db#quote_field (key ^ " = " ^ db_string_of_value db v) in
+        let zipped = List.combine key del_key in
+        let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
+        let upd = skip (List.combine cols row) key_len in
+        let upd = List.fold_left (fun a b -> a ^ ", " cond b) (cond (List.hd upd)) (List.tl upd) in
+
+    let insert_vals = List.map (fun row -> 
+        List.map (db_string_of_value db) row) insert_vals in
+    if insert_vals <> [] then
+        let insert_cmd = db#make_insert_query (table, cols, insert_vals) in
+        print_endline insert_cmd;
+        db#exec insert_cmd;
+        ()
+    else
+        ()
 
 let rec lens_put (lens : Value.t) (data : Value.t) =
     let rec do_step_rec lens delt =
         match lens with
-        | `Lens _ -> ()
+        | `Lens (t,_) -> apply_delta t delt 
         | _ -> lens_put_set_step lens delt do_step_rec in
     do_step_rec lens (lens_get_delta lens data)
 

@@ -27,9 +27,9 @@ let test_join_five test_ctx n =
     let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d e" "b d e" [`Seq; `RandTo (n / 15 / 15); `Rand] (n / 15) in
     let l3 = LensTestHelpers.drop_create_populate_table test_ctx db "t3" "d -> f g" "d f g" [`Seq; `RandTo (n / 15 / 15 / 15); `Rand] (n / 15 / 15) in
     let l4 = LensTestHelpers.drop_create_populate_table test_ctx db "t4" "f -> h" "f h" [`Seq; `Rand] (n / 15 / 15 / 15) in
-    let l5 = LensTestHelpers.join_lens l1 l2 ["b"] in
-    let l6 = LensTestHelpers.join_lens l3 l4 ["f"] in
-    let l7 = LensTestHelpers.join_lens l5 l6 ["d"] in
+    let l5 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
+    let l6 = LensTestHelpers.join_lens_dl l3 l4 ["f"] in
+    let l7 = LensTestHelpers.join_lens_dl l5 l6 ["d"] in
     let l8 = LensTestHelpers.select_lens l7 (Phrase.equal (Phrase.var "b") (Phrase.constant_int 10)) in
     (* run tests *)
     let res = lens_get l8 None in
@@ -59,7 +59,7 @@ let create_join_n_lens test_ctx db n rows =
         let colsA = [`Seq; `RandTo (rows / 15); `Rand] in
         LensTestHelpers.drop_create_populate_table test_ctx db name fds cols colsA rows
     ) r in
-    let (_,l) = List.fold_left (fun (i,l) r -> (i+1, LensTestHelpers.join_lens l r ["p_" ^ string_of_int i])) (2, List.hd ls) (List.tl ls) in
+    let (_,l) = List.fold_left (fun (i,l) r -> (i+1, LensTestHelpers.join_lens_dl l r ["p_" ^ string_of_int i])) (2, List.hd ls) (List.tl ls) in
     let l = LensTestHelpers.select_lens l (Phrase.equal (Phrase.var "p_2") (Phrase.constant_int 10)) in
     l
 
@@ -110,9 +110,9 @@ let create_join_five_lens test_ctx db n =
     let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d e" "b d e" [`Seq; `RandTo (n / 15 / 15); `Rand] (n / 15) in
     let l3 = LensTestHelpers.drop_create_populate_table test_ctx db "t3" "d -> f g" "d f g" [`Seq; `RandTo (n / 15 / 15 / 15); `Rand] (n / 15 / 15) in
     let l4 = LensTestHelpers.drop_create_populate_table test_ctx db "t4" "f -> h" "f h" [`Seq; `Rand] (n / 15 / 15 / 15) in
-    let l5 = LensTestHelpers.join_lens l1 l2 ["b"] in
-    let l6 = LensTestHelpers.join_lens l3 l4 ["f"] in
-    let l7 = LensTestHelpers.join_lens l5 l6 ["d"] in
+    let l5 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
+    let l6 = LensTestHelpers.join_lens_dl l3 l4 ["f"] in
+    let l7 = LensTestHelpers.join_lens_dl l5 l6 ["d"] in
     let l8 = LensTestHelpers.select_lens l7 (Phrase.equal (Phrase.var "b") (Phrase.constant_int 10)) in
     l8
 
