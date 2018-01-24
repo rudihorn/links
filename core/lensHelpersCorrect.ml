@@ -182,7 +182,7 @@ let rec skip (l : 'a list) (n : int) =
     | _ -> skip (List.tl l) (n - 1)
 
 let apply_delta (t : Value.table) (data : SortedRecords.recs) =
-    let show_query = true in
+    let show_query = false in
     let (db, _), table, keys, _ = t in
     (* get the first key, otherwise return an empty key *)
     let key = match keys with [] -> data.columns | _ -> List.hd keys in
