@@ -219,6 +219,7 @@ and phrasenode = [
 (* the lens keys lit is a literal that takes an expression and is converted into a LensLit
    with the corresponding table keys marked in the lens_sort *)
 | `LensKeysLit      of phrase * phrase * Types.lens_sort option
+| `LensFunDepsLit   of phrase * (string list * string list) list * Types.lens_sort option
 | `LensDropLit      of phrase * string * string * phrase * Types.lens_sort option
 | `LensSelectLit    of phrase * phrase * Types.lens_sort option 
 | `LensJoinLit      of phrase * phrase * phrase * phrase * phrase * Types.lens_sort option

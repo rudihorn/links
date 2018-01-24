@@ -459,7 +459,7 @@ module type TRANSFORM =
         | `LensPut (lens, data, rtype) ->
             let lens, _, o = o#value lens in
             let data, _, o = o#value data in
-              `LensPut (lens, data, rtype), Types.make_list_type rtype, o
+            `LensPut (lens, data, rtype), Types.make_tuple_type [], o
         | `Table (db, table_name, keys, tt) ->
             let db, _, o = o#value db in
             let keys, _, o = o#value keys in

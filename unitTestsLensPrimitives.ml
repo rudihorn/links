@@ -63,19 +63,29 @@ let test_select_lens_1 n test_ctx =
     LensHelpersCorrect.lens_put_step l2 res (fun _ res ->
         LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
     );
+    LensHelpersCorrect.lens_put l2 res; 
+    let upd = lens_get l2 None in
+    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensTestHelpers.assert_rec_list_eq upd res; 
     LensTestHelpers.drop_if_cleanup test_ctx db "t1"
 
 let test_select_lens_2 n test_ctx =
     let db = LensTestHelpers.get_db test_ctx in
-    let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (200); `RandTo (30)] n in
+    let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (200); `RandTo (10)] n in
     let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d" "b d" [`Seq; `RandTo (40)] 50 in 
     let l3 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
     let l4 = LensTestHelpers.select_lens l3 (
-        Phrase.equal (Phrase.var "c") (Phrase.constant_int 20)) in
+        Phrase.equal (Phrase.var "c") (Phrase.constant_int 3)) in
     let res = Query.map_records (Query.set "d" (Query.ifcol "b" (Query.band (Query.gt 40) (Query.lt 80)) (box_int 5))) (lens_get l4 ()) in
     LensHelpersCorrect.lens_put_step l4 res (fun _ res -> 
         LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
     );
+    LensHelpersCorrect.lens_put l4 res; 
+    let upd = lens_get l4 None in
+    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensTestHelpers.assert_rec_list_eq upd res; 
     LensTestHelpers.drop_if_cleanup test_ctx db "t1";
     LensTestHelpers.drop_if_cleanup test_ctx db "t2";
     ()
@@ -90,6 +100,11 @@ let test_join_lens_1 n test_ctx =
     LensHelpersCorrect.lens_put_step l3 res (fun _ res ->
         LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
     );
+    LensHelpersCorrect.lens_put l3 res; 
+    let upd = lens_get l3 None in
+    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensTestHelpers.assert_rec_list_eq upd res; 
     LensTestHelpers.drop_if_cleanup test_ctx db "t1";
     LensTestHelpers.drop_if_cleanup test_ctx db "t2";
     () (*
@@ -113,6 +128,11 @@ let test_join_lens_2 n test_ctx =
     LensHelpersCorrect.lens_put_step l3 res (fun _ res ->
         LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
     );
+    LensHelpersCorrect.lens_put l3 res; 
+    let upd = lens_get l3 None in
+    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensTestHelpers.assert_rec_list_eq upd res; 
     LensTestHelpers.drop_if_cleanup test_ctx db "t1";
     LensTestHelpers.drop_if_cleanup test_ctx db "t2";
     () 
@@ -129,6 +149,10 @@ let test_join_lens_dr_2 n test_ctx =
         LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
     );
     LensHelpersCorrect.lens_put l3 res; 
+    let upd = lens_get l3 None in
+    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensTestHelpers.assert_rec_list_eq upd res; 
     LensTestHelpers.drop_if_cleanup test_ctx db "t1";
     LensTestHelpers.drop_if_cleanup test_ctx db "t2";
     () 

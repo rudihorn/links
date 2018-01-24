@@ -75,7 +75,9 @@ let rec calculate_predicate (expr : lens_phrase) (get_val : string -> Value.t) =
             | "+" -> box_int ((unbox_int a1) + (unbox_int a2))
             | "*" -> box_int (unbox_int a1 * unbox_int a2)
             | "-" -> box_int (unbox_int a1 - unbox_int a2)
-            | _ -> failwith "Unknown binary operation."
+            | ">" -> box_bool (unbox_int a1 > unbox_int a2)
+            | "<" -> box_bool (unbox_int a1 < unbox_int a2)
+            | _ -> failwith ("Unknown binary operation " ^ string_of_binop op ^ ".")
         end
     | `TupleLit l -> calculate_predicate (List.hd l) get_val
     | `UnaryAppl (op, arg) -> 

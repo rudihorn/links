@@ -587,8 +587,8 @@ struct
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let data = value env data in
-        let res = LensHelpers.lens_put lens data () in
-        apply_cont cont env res
+        let res = LensHelpersCorrect.lens_put lens data in
+        apply_cont cont env (Value.box_unit ()) 
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin
         (* OPTIMISATION: we could arrange for concrete_type to have

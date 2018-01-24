@@ -896,11 +896,24 @@ database_expression:
                                                                  pos() }
 | DATABASE atomic_expression perhaps_db_driver                 { `DatabaseLit ($2, $3), pos() }
 
+fn_dep_cols: 
+| VARIABLE                                                     { [$1] }
+| VARIABLE fn_dep_cols                                         { $1 :: $2 }
+
+fn_dep:
+| fn_dep_cols RARROW fn_dep_cols                               { ($1, $3) }
+
+fn_deps:
+| fn_dep                                                       { [ $1 ] }
+| fn_dep COMMA fn_deps                                         { $1 :: $3 }
+
 lens_expression:
 | database_expression                                          { $1 }
 | LENS exp                                                     { `LensLit ($2, None), pos()}
 | LENS exp TABLEKEYS exp                                       { `LensKeysLit ($2, $4, None), pos()}
-| LENSDROP VARIABLE DETERMINED BY VARIABLE DEFAULT exp FROM exp  { `LensDropLit ($9, $2, $5, $7, None), pos() } 
+| LENS exp WITH fn_deps                                        { `LensFunDepsLit ($2, $4, None), pos()}
+| LENSDROP VARIABLE DETERMINED BY VARIABLE
+    DEFAULT exp FROM exp                                       { `LensDropLit ($9, $2, $5, $7, None), pos() } 
 | LENSSELECT FROM exp WHERE exp                                { `LensSelectLit ($3, $5, None), pos() } 
 | LENSJOIN exp WITH exp ON exp LEFT exp RIGHT exp              { `LensJoinLit ($2, $4, $6, $8, $10, None), pos() }
 | LENSJOIN exp WITH exp ON exp                                 { `LensJoinLit ($2, $4, $6, (`Constant (`Bool true), pos()), (`Constant (`Bool false), pos()), None), pos() }

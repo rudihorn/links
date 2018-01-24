@@ -1,6 +1,7 @@
 open Debug
 open LensFDHelpers
 open LensHelpers
+open LensSetOperations
 open OUnit2
 open Pg_database
 open Types
@@ -221,6 +222,15 @@ module LensTestHelpers = struct
 
     let col_list_to_string (cols : string list) (sep : string) =
         List.fold_left (fun a b -> a ^ sep ^ b) (List.hd cols) (List.tl cols)
+
+    let assert_rec_list_eq (actual : Value.t) (expected : Value.t) =
+        if actual = box_list [] || expected = box_list [] then
+            (* cannot construct sorted records without columns, but if one is empty so should the other *)
+            assert (actual = expected)
+        else
+            let actual = SortedRecords.construct actual in
+            let expected = SortedRecords.construct expected in
+            assert (actual = expected)
 end
 
 let test_fundep_of_string test_ctx = 

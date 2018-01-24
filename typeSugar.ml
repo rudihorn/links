@@ -95,6 +95,7 @@ struct
     (* | `Fork _ *)
     | `LensLit _
     | `LensKeysLit _
+    | `LensFunDepsLit _
     | `LensDropLit _
     | `LensSelectLit _
     | `LensJoinLit _
@@ -2287,6 +2288,18 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let fds = LensHelpers.get_fds keys trowtype in
            let lens_sort = (fds, None, tcols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
+        | `LensFunDepsLit (table, fds, _) ->
+           let table = tc table in
+           let trowtype = 
+               begin
+                 match typ table with
+                 | `Table (r,_,_) -> r
+                 | `Application (_, [`Type (`Record r)]) -> `Record r
+               end in
+           let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
+           let fds = LensHelpersCorrect.get_fds fds in
+           let lens_sort = (fds, None, tcols) in
+           `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
            let _ = LensHelpers.ensure_lenses_enabled () in
            let lens = tc lens
@@ -2322,7 +2335,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let sort = LensHelpers.get_lens_type_sort (typ lens) in
            let trowtype = LensRecordHelpers.get_lens_sort_row_type sort in
            let data = tc data in
-           `LensPutLit (erase lens, erase data, Some trowtype), Types.make_list_type trowtype, merge_usages [usages lens; usages data]
+           `LensPutLit (erase lens, erase data, Some trowtype), Types.make_tuple_type [], merge_usages [usages lens; usages data]
         | `DBDelete (pat, from, where) ->
             let pat  = tpc pat in
             let from = tc from in

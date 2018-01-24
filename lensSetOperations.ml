@@ -34,7 +34,11 @@ module SortedRecords = struct
         let l = unbox_list records in
         let recs = List.map unbox_record l in
         let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else
-            failwith ("lens set columns not consistent, " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,v) -> k) r))
+            begin
+                match List.find_opt (fun (k,v) -> k = a) r with
+                | Some (k,v) -> v
+                | None -> failwith ("lens set columns not consistent: " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,v) -> k) r))
+            end
             ) cols r in
         let recs = Array.of_list (List.map simpl_rec recs) in
         Array.sort compare recs;

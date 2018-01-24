@@ -167,7 +167,7 @@ let lens_put_step (lens : Value.t) (data : Value.t) (fn : Value.t -> SortedRecor
 let db_string_of_value (db : Value.database) (v : Value.t) =
     match v with
     | `Int i -> string_of_int i
-    | `String s -> db#escape_string s
+    | `String s -> "'" ^ db#escape_string s ^ "'"
     | `Float f -> string_of_float f
     | _ -> failwith ("db_string_of_value does not support " ^ string_of_value v)
 
@@ -182,6 +182,7 @@ let rec skip (l : 'a list) (n : int) =
     | _ -> skip (List.tl l) (n - 1)
 
 let apply_delta (t : Value.table) (data : SortedRecords.recs) =
+    let show_query = true in
     let (db, _), table, keys, _ = t in
     (* get the first key, otherwise return an empty key *)
     let key = match keys with [] -> data.columns | _ -> List.hd keys in
@@ -199,30 +200,38 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         match row with None -> [key_vals] | Some _ -> []) (Array.to_list data.neg_rows) in
     let delete_vals = List.flatten delete_vals in
     let delete_commands = List.map (fun del_key ->
-        let cond (key, v) = db#quote_field (key ^ " = " ^ db_string_of_value db v) in
+        let cond (key, v) = (db#quote_field key) ^ " = " ^ db_string_of_value db v in
         let zipped = List.combine key del_key in
         let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
         let cmd = "delete from " ^ table ^ " where " ^ cond in
-        print_endline cmd;
-        db#exec cmd;
+        if show_query then print_endline cmd else (); 
+        db#exec cmd; 
         cmd) delete_vals in
     let update_commands = List.map (fun row ->
         let key_vals = take row key_len in
-        let cond (key, v) = db#quote_field (key ^ " = " ^ db_string_of_value db v) in
-        let zipped = List.combine key del_key in
-        let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
+        let cond (key, v) = (db#quote_field key) ^ " = " ^ db_string_of_value db v in
+        let zipped = List.combine key key_vals in
+        let where = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
         let upd = skip (List.combine cols row) key_len in
-        let upd = List.fold_left (fun a b -> a ^ ", " cond b) (cond (List.hd upd)) (List.tl upd) in
-
+        let upd = List.fold_left (fun a b -> a ^ ", " ^ cond b) (cond (List.hd upd)) (List.tl upd) in
+        let cmd = "update " ^ table ^ " set " ^ upd ^ " where " ^ where in
+        if show_query then print_endline cmd else (); 
+        db#exec cmd;
+        cmd
+    ) update_vals in
     let insert_vals = List.map (fun row -> 
         List.map (db_string_of_value db) row) insert_vals in
     if insert_vals <> [] then
         let insert_cmd = db#make_insert_query (table, cols, insert_vals) in
-        print_endline insert_cmd;
+        if show_query then print_endline insert_cmd else (); 
         db#exec insert_cmd;
         ()
     else
         ()
+
+let get_fds (fds : (string list * string list) list) : Types.fundepset =
+    let fd_of (left, right) = ColSet.of_list left, ColSet.of_list right in
+    FunDepSet.of_list (List.map fd_of fds)
 
 let rec lens_put (lens : Value.t) (data : Value.t) =
     let rec do_step_rec lens delt =

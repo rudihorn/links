@@ -1,0 +1,33 @@
+
+
+var db = database "links" "postgresql" "localhost:5432:links:links";
+
+var albumsTable =
+	table "albums"
+	with (album: String, quantity: Int)
+	tablekeys [["album"]]
+	from db;
+
+var tracksTable = 
+	table "tracks"
+	with (track: String, date: Int, rating: Int, album: String)
+	tablekeys [["track", "album"]]
+	from db;
+
+var albumsLens = lens albumsTable with album -> quantity;
+var tracksLens = lens tracksTable with track -> date rating;
+
+var joinedLens = lensjoin albumsLens with tracksLens on album;
+var filteredLens = lensselect from joinedLens where quantity > 2;
+
+var tracks = get filteredLens;
+
+var newTracks = drop(1, tracks);
+var newTracks = 
+	for (t <- tracks)
+	where (t.track <> "Trust")
+		if (t.track == "Lullaby") [(t with rating = 4)] else [t];
+
+var r = put filteredLens with newTracks;
+newTracks
+
