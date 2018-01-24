@@ -22,7 +22,7 @@ var filteredLens = lensselect from joinedLens where quantity > 2;
 
 var tracks = get filteredLens;
 
-var newTracks = drop(1, tracks);
+# filter out all tracks named "Trust" and change Lullaby's rating to 4.
 var newTracks = 
 	for (t <- tracks)
 	where (t.track <> "Trust")
