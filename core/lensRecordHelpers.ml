@@ -3,9 +3,6 @@ open Utility
 open Value
 
 
-let get_lens_sort_fn_deps (fn_dep, _, _ : Types.lens_sort) : Types.fundepset =
-    fn_dep
-
 let get_lens_sort_pred (_, pred, _ : Types.lens_sort) = pred
 
 let get_lens_sort_cols (_, _, rowType : Types.lens_sort) = 
@@ -23,7 +20,9 @@ module LensCol = struct
 end
 
 module LensSort = struct
-    let fundeps = get_lens_sort_fn_deps
+    type t = Types.lens_sort
+
+    let fundeps (fds, _, _ : t) = fds
     let predicate = get_lens_sort_pred
     let cols = get_lens_sort_cols
     let colset = get_lens_sort_colset

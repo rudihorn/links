@@ -64,12 +64,12 @@ let rec is_memory_lens (lens : Value.t) =
 let rec get_primary_key (lens : Value.t) =
     match lens with 
     | `Lens (a, sort) -> 
-        let fds = get_lens_sort_fn_deps sort in
+        let fds = LensSort.fundeps sort in
         let fd = FunDepSet.min_elt fds in
         let left = FunDep.left fd in
         left
     | `LensMem (a, sort) ->  
-        let fds = get_lens_sort_fn_deps sort in
+        let fds = LensSort.fundeps sort in
         let fd = FunDepSet.min_elt fds in
         let left = FunDep.left fd in
         left
@@ -197,7 +197,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
                 (* if the record matches P remove it *)
                 if not (unbox_bool (calculate_predicate_rec pred r)) then
                     begin
-                        let upd, r = apply_fd_record_revision r data (get_lens_sort_fn_deps sort) in
+                        let upd, r = apply_fd_record_revision r data (LensSort.fundeps sort) in
                         if upd then
                             begin
                                 if not (unbox_bool (calculate_predicate_rec pred r)) then
@@ -214,7 +214,7 @@ let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
             lens_put_mem l (box_list output) callfn 
     | `LensJoin (l1, l2, on, left, right, sort) ->
             let oldOn = List.map (fun (a, _, _) -> a) on in
-            let fds = get_lens_sort_fn_deps sort in
+            let fds = LensSort.fundeps sort in
             let _ = debug_print_fd_tree (get_fd_tree fds) in
             let sort_cols = get_lens_sort_cols_list sort in
             let l1_sort = get_lens_sort l1 in
@@ -420,12 +420,12 @@ let lens_delta_put_join sort (l1 : Value.t) (l2 : Value.t) (on : (string * strin
     (left_pred : lens_phrase) (right_pred : lens_phrase)
     (data : (Value.t * int) list) : (Value.t * int) list * (Value.t * int) list = 
     let sort_left = get_lens_sort l1 in
-    let fds_left = get_lens_sort_fn_deps sort_left in
+    let fds_left = LensSort.fundeps sort_left in
     let prim_left = get_primary_key l1 in
     let prim_left_l = ColSet.elements prim_left in 
     let cols_left = List.map (fun l -> l.alias) (get_lens_sort_cols sort_left) in
     let sort_right = get_lens_sort l2 in
-    let fds_right = get_lens_sort_fn_deps sort_right in
+    let fds_right = LensSort.fundeps sort_right in
     let cols_right = List.map (fun l -> l.alias) (get_lens_sort_cols sort_right) in
     let on_simp = List.map (fun (a,_,_) -> a) on in
     (* other *)
@@ -524,12 +524,12 @@ let lens_delta_put_join_old (l1 : Value.t) (l2 : Value.t) (on : (string * string
     (left_pred : lens_phrase) (right_pred : lens_phrase)
     (data : (Value.t * int) list) : (Value.t * int) list * (Value.t * int) list = 
     let sort_left = get_lens_sort l1 in
-    let fds_left = get_lens_sort_fn_deps sort_left in
+    let fds_left = LensSort.fundeps sort_left in
     let prim_left = get_primary_key l1 in
     let prim_left_l = ColSet.elements prim_left in 
     let cols_left = List.map (fun l -> l.alias) (get_lens_sort_cols sort_left) in
     let sort_right = get_lens_sort l2 in
-    let fds_right = get_lens_sort_fn_deps sort_right in
+    let fds_right = LensSort.fundeps sort_right in
     let cols_right = List.map (fun l -> l.alias) (get_lens_sort_cols sort_right) in
     let on_simp = List.map (fun (a,_,_) -> a) on in
     (* other *)
@@ -713,8 +713,8 @@ let get_fds (key : Sugartypes.phrase) (rowType : Types.typ) : Types.fundepset =
 
 
 let join_lens_should_swap (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_columns : string list) =
-    let fds1 = get_lens_sort_fn_deps sort1 in
-    let fds2 = get_lens_sort_fn_deps sort2 in
+    let fds1 = LensSort.fundeps sort1 in
+    let fds2 = LensSort.fundeps sort2 in
     let on_cols = ColSet.of_list on_columns in
     let covers fds sort =
         let fdcl = get_fd_transitive_closure on_cols fds in
@@ -765,7 +765,7 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_colum
             let jn = create_phrase_equal (create_phrase_var alias) (create_phrase_var newalias) in
             match pred with Some p -> Some (create_phrase_and p jn) | None -> Some jn
         ) pred join_renames in
-        let fn_deps = FunDepSet.union (get_lens_sort_fn_deps sort1) (get_lens_sort_fn_deps sort2) in
+        let fn_deps = FunDepSet.union (LensSort.fundeps sort1) (LensSort.fundeps sort2) in
         (* determine the on column renames as a tuple (join, left, right) *)
         let jrs = List.map (fun on -> 
             let left = on in

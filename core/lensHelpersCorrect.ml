@@ -43,7 +43,7 @@ let matches_change changes =
 
 let get_changes (lens : Value.t) (data : SortedRecords.recs) =
     let sort = get_lens_sort lens in
-    let fds = get_lens_sort_fn_deps sort in
+    let fds = LensSort.fundeps sort in
     let changelist = calculate_fd_changelist fds data in
     let phrase = matches_change changelist in
     let res = lens_get_select_opt lens phrase in
