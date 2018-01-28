@@ -28,7 +28,10 @@ var newTracks =
 	for (t <- tracks)
 	where (t.track <> "Trust")
 		if (t.track == "Lullaby") [(t with rating = 4)] else [t];
+var newTracks = 
+	for (t <- newTracks)
+		if (t.track == "Lovesong") [(t with album = "Disintegration", quantity = 7)] else [t];
 
 var r = put filteredLens with newTracks;
-tracks
+newTracks
 

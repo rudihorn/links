@@ -41,16 +41,13 @@ let matches_change changes =
         let term = is_changed change in
         Phrase.combine_or phrase term) None changes
 
-let get_changes (lens : Value.t) (data : SortedRecords.recs) =
-    let sort = get_lens_sort lens in
-    let fds = LensSort.fundeps sort in
-    let changelist = calculate_fd_changelist fds data in
-    let phrase = matches_change changelist in
-    let res = lens_get_select_opt lens phrase in
-    let res = SortedRecords.construct_cols (lens_get_cols lens) res in
+
+let relational_update (fds : Types.fundepset) (changedata : SortedRecords.recs) (updatedata : SortedRecords.recs) =
+    let fds = fds in
+    let changelist = calculate_fd_changelist fds changedata in
     let changes = List.map (fun ((cols_l,cols_r),l) -> 
         (* get a map from simp rec to col value *)
-        let col_maps = List.map (SortedRecords.get_col_map res) cols_l in
+        let col_maps = List.map (SortedRecords.get_col_map updatedata) cols_l in
         let col_maps = List.flatten (List.map (fun mp -> match mp with None -> [] | Some a -> [a]) col_maps) in
         (* get a map from col name to change value *)
         let (val_maps,_) = List.fold_left (fun (maps,fn) _ -> 
@@ -61,12 +58,19 @@ let get_changes (lens : Value.t) (data : SortedRecords.recs) =
             fun record change_key -> mp1 record = mp2 change_key && a record change_key) (fun a b -> true) maps in
         comp
     ) changelist in
+    (* each entry in changelist is a functional dependency, and then the corresponding records *)
+    (* generate a function for every change list entry, which can replace the columns in the
+     * right side of the functional dependency of a record in res *)
     let apply_changes = List.map (fun ((cols_l, cols_r),l) ->
+        (* upd cols returns a function which, given a record another record containing cols_r,
+         * replaces every column value in the first record from that in the second record if it 
+         * matches *)
         let rec upd cols =
             match cols with 
             | [] -> fun r target -> []
             | x :: xs -> 
                 let fn = upd xs in
+                (* get a function which maps a row to the x's value *)
                 let map = SortedRecords.get_col_map_list cols_r x in
                 match map with 
                 | None -> (* the column does not have to be replaced *)
@@ -75,7 +79,7 @@ let get_changes (lens : Value.t) (data : SortedRecords.recs) =
                         fun (y :: ys) target -> 
                             mp target :: fn ys target
                 in 
-        upd res.columns 
+        upd updatedata.columns 
     ) changelist in
     let update arr = Array.map (fun r ->
         let r' = List.fold_left (fun r ((check, update),(_, changes)) -> 
@@ -88,9 +92,22 @@ let get_changes (lens : Value.t) (data : SortedRecords.recs) =
         (* print_endline (string_of_value (box_list r) ^ " to " ^ string_of_value (box_list r'));
         r' *)
     ) arr in
-    let res2 = update res.plus_rows in
+    let res2 = update updatedata.plus_rows in
     let res2 = List.flatten (List.map (fun (r, r') -> if r = r' then [] else [r, r']) (Array.to_list res2)) in
-    { SortedRecords.columns = res.columns; neg_rows = Array.of_list (List.map (fun (a,b) -> b) res2); plus_rows = Array.of_list (List.map (fun (a,b) -> a) res2); }
+    let res = { SortedRecords.columns = updatedata.columns; neg_rows = Array.of_list (List.map (fun (a,b) -> b) res2); plus_rows = Array.of_list (List.map (fun (a,b) -> a) res2); } in
+    SortedRecords.sort_uniq res
+    
+
+let get_changes (lens : Value.t) (data : SortedRecords.recs) =
+    let sort = get_lens_sort lens in
+    let fds = LensSort.fundeps sort in
+    let changelist = calculate_fd_changelist fds data in
+    (* query relevant rows in database *)
+    let phrase = matches_change changelist in
+    let res = lens_get_select_opt lens phrase in
+    let res = SortedRecords.construct_cols (lens_get_cols lens) res in
+    (* perform relational update *)
+    relational_update fds data res
 
 let query_joined (lens : Value.t) (cols : string list) (data : SortedRecords.recs) =
     (* project data onto columns *)

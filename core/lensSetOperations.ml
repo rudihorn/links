@@ -162,6 +162,10 @@ module SortedRecords = struct
     let sort (rs : recs) =
         Array.sort compare rs.plus_rows;
         Array.sort compare rs.neg_rows
+
+    let sort_uniq (rs : recs) =
+        let fn r = Array.of_list (List.sort_uniq compare (Array.to_list r)) in
+        { columns = rs.columns; plus_rows = fn rs.plus_rows; neg_rows = fn rs.neg_rows }
         
     let project_onto (rs : recs) (cols : string list) =
         let maps = get_cols_map rs cols in

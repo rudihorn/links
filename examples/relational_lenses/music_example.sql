@@ -30,3 +30,4 @@ INSERT INTO Tracks (Track, Date, Rating, Album) VALUES
 	('Lovesong', 1989, 5, 'Galore'),
 	('Lovesong', 1989, 5, 'Paris'),
 	('Trust', 1992, 4, 'Wish');
+
