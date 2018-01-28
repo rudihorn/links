@@ -742,6 +742,7 @@ type t = [
 | `List of t list
 | `Lens of table * Types.lens_sort
 | `LensMem of t * Types.lens_sort
+(* lens drop: lens, drop, key (defined by), default, sort *)
 | `LensDrop of t * string * string * t * Types.lens_sort
 | `LensSelect of t * Types.lens_phrase * Types.lens_sort
 | `LensJoin of t * t * (string * string * string) list * Types.lens_phrase * Types.lens_phrase * Types.lens_sort

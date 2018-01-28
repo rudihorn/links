@@ -2322,7 +2322,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                  | `Application (_, [`Type (`Record r)]) -> `Record r
                end in
            let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
-           let fds = LensHelpersCorrect.get_fds fds in
+           let fds = LensHelpersCorrect.get_fds fds tcols in
            let lens_sort = (fds, None, tcols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
@@ -2330,7 +2330,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let lens = tc lens
            and default = tc default in
            let lens_sort = match typ lens with `Lens (fds, cond, r) -> 
-               try (fds, cond, LensRecordHelpers.remove_record_type_column drop r)
+               try (LensFDHelpers.FunDepSet.remove_def_by fds (Types.ColSet.singleton drop), cond, LensRecordHelpers.remove_record_type_column drop r)
                  with NotFound _ -> Gripers.die pos ("There is no column with name " ^ drop ^ " in the underlying lens.") in
              `LensDropLit (erase lens, drop, key, erase default, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages lens; usages default]
         | `LensSelectLit (lens, predicate, _) ->

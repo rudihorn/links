@@ -104,6 +104,7 @@ let rec lens_get_mem (lens : Value.t) callfn =
 let rec lens_get_db (lens : Value.t) =
     match lens with 
     | `Lens (((db, _), _, _, _), _) -> db
+    | `LensDrop (l, _, _, _, _) -> lens_get_db l
     | `LensSelect (lens, _, _) -> lens_get_db lens
     | `LensJoin (l1, _, _, _, _, _) -> lens_get_db l1
     | _ -> failwith "Unsupported lens for get db."
@@ -157,6 +158,7 @@ let rec lens_get (lens : Value.t) callfn =
         let sort = get_lens_sort lens in
         let db = lens_get_db lens in
         let cols = (get_lens_sort_cols sort) in
+        (* print_endline (ListUtils.print_list (get_lens_sort_cols_list sort)); *)
         let sql = construct_select_query_sort db sort in
         (* let _ = print_endline sql in *)
         (* let query = lens_get_query lens in

@@ -598,7 +598,8 @@ struct
     | `LensDrop (lens, drop, key, def, sort) as le -> 
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in 
-        let sort = LensHelpers.get_lens_sort lens in
+        let (fds, cond, cols) = LensHelpers.get_lens_sort lens in
+        let sort = (LensFDHelpers.FunDepSet.remove_def_by fds (Types.ColSet.singleton drop), cond, LensRecordHelpers.remove_record_type_column drop cols) in
         let def = match value env def with #Value.primitive_value_basis as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
     | `LensSelect (lens, pred, sort) ->

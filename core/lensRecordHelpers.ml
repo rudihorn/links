@@ -15,6 +15,13 @@ let get_lens_sort_colset (_, _, rowType : Types.lens_sort) =
   let cols = List.map (fun (col) -> col.alias) rowType in
   ColSet.of_list cols
 
+module LensCol = struct 
+    type t = Types.lens_col
+
+    let alias (col : t) = col.alias
+    let exists (cols : t list) (colalias : string) = List.exists (fun c -> alias c = colalias) cols
+end
+
 module LensSort = struct
     let fundeps = get_lens_sort_fn_deps
     let predicate = get_lens_sort_pred
@@ -149,7 +156,7 @@ let compare_delta_entry (t,m) (t',m') =
 
 (* Drop related methods *)
 let remove_record_type_column (a : string) (r : Types.lens_col list) =
-    let fields = List.filter (fun col -> get_lens_col_alias col = a) r in
+    let fields = List.filter (fun col -> get_lens_col_alias col <> a) r in
     fields
 
 let project_record_columns (a : colset) (record : Value.t) =

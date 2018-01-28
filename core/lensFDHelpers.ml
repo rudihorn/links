@@ -37,6 +37,18 @@ module FunDepSet = struct
     let get_root = get_fd_root
 
     let get_defining = get_defining_fd
+
+    let remove_def_by (fds : t) (cols : Types.colset) =
+        let remove fd = 
+            let left = FunDep.left fd in
+            if ColSet.subset cols left then
+                failwith "Cannot remove a column defining other columns.";
+            let newRight = ColSet.diff (FunDep.right fd) cols in
+            FunDep.make left newRight in
+        let fds = map remove fds in
+        let keep fd = not (ColSet.is_empty (FunDep.right fd)) in
+        let fds = filter keep fds in
+        fds
 end
 
 let rec get_fd_subnodes (fd : Types.fundep) (fds : Types.fundepset) : fd_node = 

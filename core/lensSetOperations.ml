@@ -104,6 +104,12 @@ module SortedRecords = struct
         let r = pivot 0 ((Array.length rs) - 1) in
         r
 
+    let find_rec (rs : simp_rec array) (r : simp_rec) =
+        let ind = find_mul rs r in
+        match ind with 
+        | None -> None
+        | Some r -> Some (Array.get rs r)
+
     let find_all_ind (rs : simp_rec array) (r : simp_rec) : int * int =
         let rec pivot s e b =
             if s > e then

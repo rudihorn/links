@@ -18,7 +18,8 @@ var albumsLens = lens albumsTable with album -> quantity;
 var tracksLens = lens tracksTable with track -> date rating;
 
 var joinedLens = lensjoin albumsLens with tracksLens on album;
-var filteredLens = lensselect from joinedLens where quantity > 2;
+var droppedLens = lensdrop date determined by track default 2018 from joinedLens;
+var filteredLens = lensselect from droppedLens where quantity > 2;
 
 var tracks = get filteredLens;
 
@@ -29,5 +30,5 @@ var newTracks =
 		if (t.track == "Lullaby") [(t with rating = 4)] else [t];
 
 var r = put filteredLens with newTracks;
-newTracks
+tracks
 

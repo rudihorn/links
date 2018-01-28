@@ -472,12 +472,12 @@ struct
         (fun table -> 
             lift (`Special (`Lens (table, sort)), `Lens (sort))) 
 
-  let lens_drop_handle (lens, drop, key, default, rtype) =
+  let lens_drop_handle (lens, drop, key, default, sort) =
       bind lens
         (fun lens ->
             bind default
             (fun default ->
-               lift (`Special (`LensDrop (lens, drop, key, default, rtype)), `Lens (rtype))))
+               lift (`Special (`LensDrop (lens, drop, key, default, sort)), `Lens (sort))))
 
   let lens_select_handle (lens, pred, sort) = 
       bind lens

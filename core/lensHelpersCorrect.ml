@@ -111,9 +111,33 @@ let query_join_records (lens : Value.t) (set : SortedRecords.recs) (on : string 
     let recs = lens_get_select_opt lens query in
     SortedRecords.construct_cols (lens_get_cols lens) recs
 
+let query_project_records (lens : Value.t) (set : SortedRecords.recs) (key : string list) (drop : string list) =
+    let proj = SortedRecords.project_onto set key in
+    let recs = List.append (Array.to_list proj.plus_rows) (Array.to_list proj.neg_rows) in
+    let recs = List.sort_uniq SortedRecords.compare recs in
+    let query = List.fold_left Phrase.combine_or None (List.map (Phrase.matching_cols_simp key) recs) in
+    let recs = lens_get_select_opt lens query in
+    let recs = SortedRecords.construct_cols (lens_get_cols lens) recs in
+    SortedRecords.project_onto recs (List.append key drop)
+
 let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Value.t -> SortedRecords.recs -> unit) =
     match lens with
     | `Lens _ -> fn lens delt
+    | `LensDrop (l, drop, key, default, sort) -> 
+            let relevant = query_project_records l delt [key] [drop] in
+            let colmap = SortedRecords.get_cols_map delt [key] in
+            let relevant_value_map = OptionUtils.val_of (SortedRecords.get_col_map relevant drop) in
+            let extend (row : SortedRecords.simp_rec) = 
+                let find = colmap row in
+                let rel = SortedRecords.find_rec relevant.plus_rows find in
+                let v = match rel with
+                | None -> default
+                | Some r -> relevant_value_map r in
+                List.append row [v] in
+            let plus = Array.map extend delt.plus_rows in
+            let neg = Array.map extend delt.neg_rows in
+            let delt = { SortedRecords.columns = List.append delt.columns [drop]; plus_rows = plus; neg_rows = neg } in
+            fn l delt 
     | `LensJoin (l1, l2, cols, pd, qd, sort)  -> 
             let cols_simp = List.map (fun (a,_,_) -> a) cols in
             let sort1 = get_lens_sort l1 in 
@@ -130,7 +154,7 @@ let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Val
                             (SortedRecords.join delta_m0 (query_join_records l2 delta_m0 cols_simp) cols_simp)
                             (SortedRecords.join delta_n0 (query_join_records l1 delta_n0 cols_simp) cols_simp)
                         )
-                    ) 
+                    )
                     (SortedRecords.negate delt) in
             let j = SortedRecords.project_onto (SortedRecords.merge (query_join_records lens delta_l cols_simp) (delt)) cols_simp in
             let delta_l_l = SortedRecords.join delta_l j cols_simp in
@@ -229,7 +253,9 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
     else
         ()
 
-let get_fds (fds : (string list * string list) list) : Types.fundepset =
+let get_fds (fds : (string list * string list) list) (cols : Types.lens_col list) : Types.fundepset =
+    let check_col xs = List.iter (fun x -> if not (LensCol.exists cols x) then failwith ("The column " ^ x ^ " does not exist.")) xs in
+    List.iter (fun (left, right) -> check_col left; check_col right) fds;
     let fd_of (left, right) = ColSet.of_list left, ColSet.of_list right in
     FunDepSet.of_list (List.map fd_of fds)
 
