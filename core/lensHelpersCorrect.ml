@@ -244,7 +244,7 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let cond (key, v) = (db#quote_field key) ^ " = " ^ db_string_of_value db v in
         let zipped = List.combine key del_key in
         let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
-        let cmd = "delete from " ^ table ^ " where " ^ cond in
+        let cmd = "delete from " ^ db#quote_field table ^ " where " ^ cond in
         if show_query then print_endline cmd else (); 
         db#exec cmd; 
         cmd) delete_vals in
@@ -255,7 +255,7 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let where = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
         let upd = skip (List.combine cols row) key_len in
         let upd = List.fold_left (fun a b -> a ^ ", " ^ cond b) (cond (List.hd upd)) (List.tl upd) in
-        let cmd = "update " ^ table ^ " set " ^ upd ^ " where " ^ where in
+        let cmd = "update " ^ db#quote_field table ^ " set " ^ upd ^ " where " ^ where in
         if show_query then print_endline cmd else (); 
         db#exec cmd;
         cmd

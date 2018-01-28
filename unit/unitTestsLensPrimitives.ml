@@ -53,21 +53,34 @@ module Query = struct
 
 end
 
+let test_put test_ctx lens res =
+    if UnitTestsLensCommon.classic_opt test_ctx then
+        begin
+            LensHelpersClassic.lens_put_step lens res (fun _ res ->
+                LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
+            );
+            LensHelpersClassic.lens_put lens res
+        end
+    else
+        begin
+            LensHelpersCorrect.lens_put_step lens res (fun _ res ->
+                LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
+            );
+            LensHelpersCorrect.lens_put lens res
+        end;
+    let upd = lens_get lens None in
+    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
+    LensTestHelpers.print_verbose test_ctx (string_of_value res);
+    LensTestHelpers.assert_rec_list_eq upd res;
+    ()
+
 let test_select_lens_1 n test_ctx = 
     let db = LensTestHelpers.get_db test_ctx in
     let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (n / 15); `Rand] n in
     let l2 = LensTestHelpers.select_lens l1 (Phrase.equal (Phrase.var "b") (Phrase.constant_int 5)) in
     let res = lens_get l2 None in
     let res = Query.map_records (Query.set "c" (Query.ifcol "a" (Query.band (Query.gt 60) (Query.lt 80)) (box_int 5))) (lens_get l2 None) in
-    LensTestHelpers.print_verbose test_ctx (string_of_value res);
-    LensHelpersCorrect.lens_put_step l2 res (fun _ res ->
-        LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
-    );
-    LensHelpersCorrect.lens_put l2 res; 
-    let upd = lens_get l2 None in
-    LensTestHelpers.print_verbose test_ctx (string_of_value upd);
-    LensTestHelpers.print_verbose test_ctx (string_of_value res);
-    LensTestHelpers.assert_rec_list_eq upd res; 
+    test_put test_ctx l2 res;
     LensTestHelpers.drop_if_cleanup test_ctx db "t1"
 
 let test_select_lens_2 n test_ctx =

@@ -50,4 +50,5 @@ let _ =
     (match !config_file with
     | None -> ()
     | Some file -> Settings.load_file false file);
-  with Error msg -> Printf.fprintf stderr "error: %s\n" msg; flush stderr; exit 1
+  (* NOTE: The error here was removed because it causes unit test errors to be unusable, this should not go into the main branch *)
+  with Error msg -> (* Printf.fprintf stderr "error: %s\n" msg; flush stderr; exit 1 *) ()

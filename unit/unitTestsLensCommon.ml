@@ -13,6 +13,7 @@ let display_table_query_opt = Conf.make_bool "display_table_query" false "Show q
 let leave_tables_opt = Conf.make_bool "leave_tables" false "Do not delete tables after run." 
 let db_host_opt = Conf.make_string "db_host" "localhost" "Database server hostname." 
 let verbose_opt = Conf.make_bool "v" false "Print verbose information."
+let classic_opt = Conf.make_bool "classic_lenses" false "Use non incremental relational lenses."
 
 
 module LensTestHelpers = struct

@@ -1,4 +1,4 @@
-.PHONY: nc native clean tests install uninstall clean
+.PHONY: nc native clean tests unit install uninstall clean
 .DEFAULT_GOAL: nc
 
 nc:
@@ -18,6 +18,9 @@ uninstall:
 
 tests: links
 	@OCAMLRUNPARAM="" ./run-tests
+
+unit: 
+	jbuilder runtest
 
 clean:
 	jbuilder clean
