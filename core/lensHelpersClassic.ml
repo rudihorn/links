@@ -71,8 +71,13 @@ let rec lens_put_set_step (lens : Value.t) (data : SortedRecords.recs) (fn : Val
     match lens with
     | `Lens _ -> fn lens data
     | `LensDrop (l, drop, key, default, sort) -> 
-            let old = LensHelpers.lens_get l () in
-            fn lens data
+            let r = get l in
+            let cols = lens_get_cols lens in
+            let nplus = SortedRecords.minus data (SortedRecords.project_onto r cols) in
+            let a = SortedRecords.construct (box_list [box_record [drop, default]]) in
+            let m = SortedRecords.merge (SortedRecords.join r data cols) (SortedRecords.join nplus a []) in
+            let res = relational_update (FunDepSet.of_lists [[key], [drop]]) r m in
+            fn l res 
     | `LensJoin (l1, l2, cols, pd, qd, sort)  -> 
             let old = LensHelpers.lens_get l1 () in
             let old = LensHelpers.lens_get l2 () in
