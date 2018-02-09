@@ -34,9 +34,11 @@ let rec calculate_fd_changelist (fds : FunDepSet.t) (data : SortedRecords.recs) 
 
 let matches_change changes = 
     let is_changed ((cols_l, cols_r),(vals)) =
+        let vals_l = List.map (fun (left,_) -> left) vals in
+        Phrase.in_expr cols_l vals_l in (* 
         List.fold_left (fun phrase (on,_) ->
             let term = Phrase.matching_cols_simp cols_l on in
-            Phrase.combine_or phrase term) None vals in
+            Phrase.combine_or phrase term) None vals in *)
     List.fold_left (fun phrase change ->
         let term = is_changed change in
         Phrase.combine_or phrase term) None changes
@@ -115,7 +117,7 @@ let query_joined (lens : Value.t) (cols : string list) (data : SortedRecords.rec
     (* for each record generate a phrase which matches join key *)
     let query_record row = Phrase.matching_cols_simp cols row in
     (* generate phrase as disjunction *)
-    let query = List.fold_left Phrase.combine_or None (List.map (Phrase.matching_cols_simp cols) (Array.to_list proj.plus_rows)) in
+    let query = Phrase.in_expr cols (Array.to_list proj.plus_rows) in
     let to_join = lens_get_select_opt lens query in
     (* join to_join with data *)
     ()
@@ -124,7 +126,7 @@ let query_join_records (lens : Value.t) (set : SortedRecords.recs) (on : string 
     let proj = SortedRecords.project_onto set on in
     let recs = List.append (Array.to_list proj.plus_rows) (Array.to_list proj.neg_rows) in
     let recs = List.sort_uniq SortedRecords.compare recs in
-    let query = List.fold_left Phrase.combine_or None (List.map (Phrase.matching_cols_simp on) recs) in
+    let query = Phrase.in_expr on recs in
     let recs = lens_get_select_opt lens query in
     SortedRecords.construct_cols (lens_get_cols lens) recs
 
@@ -132,7 +134,7 @@ let query_project_records (lens : Value.t) (set : SortedRecords.recs) (key : str
     let proj = SortedRecords.project_onto set key in
     let recs = List.append (Array.to_list proj.plus_rows) (Array.to_list proj.neg_rows) in
     let recs = List.sort_uniq SortedRecords.compare recs in
-    let query = List.fold_left Phrase.combine_or None (List.map (Phrase.matching_cols_simp key) recs) in
+    let query = Phrase.in_expr key recs in
     let recs = lens_get_select_opt lens query in
     let recs = SortedRecords.construct_cols (lens_get_cols lens) recs in
     SortedRecords.project_onto recs (List.append key drop)
@@ -223,8 +225,12 @@ let rec skip (l : 'a list) (n : int) =
     | _ -> skip (List.tl l) (n - 1)
 
 let apply_delta (t : Value.table) (data : SortedRecords.recs) =
-    let show_query = false in
+    let show_query = true in
     let (db, _), table, keys, _ = t in
+    let exec cmd = 
+            Debug.debug_time_out 
+            (fun () -> db#exec cmd) 
+            (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
     (* get the first key, otherwise return an empty key *)
     let key = match keys with [] -> data.columns | _ -> List.hd keys in
     let key_len = List.length key in
@@ -246,7 +252,7 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
         let cmd = "delete from " ^ db#quote_field table ^ " where " ^ cond in
         if show_query then print_endline cmd else (); 
-        db#exec cmd; 
+        exec cmd; 
         cmd) delete_vals in
     let update_commands = List.map (fun row ->
         let key_vals = take row key_len in
@@ -257,7 +263,7 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let upd = List.fold_left (fun a b -> a ^ ", " ^ cond b) (cond (List.hd upd)) (List.tl upd) in
         let cmd = "update " ^ db#quote_field table ^ " set " ^ upd ^ " where " ^ where in
         if show_query then print_endline cmd else (); 
-        db#exec cmd;
+        exec cmd;
         cmd
     ) update_vals in
     let insert_vals = List.map (fun row -> 
@@ -265,7 +271,7 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
     if insert_vals <> [] then
         let insert_cmd = db#make_insert_query (table, cols, insert_vals) in
         if show_query then print_endline insert_cmd else (); 
-        db#exec insert_cmd;
+        exec insert_cmd;
         ()
     else
         ()

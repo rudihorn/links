@@ -78,10 +78,23 @@ let rec lens_put_set_step (lens : Value.t) (data : SortedRecords.recs) (fn : Val
             let m = SortedRecords.merge (SortedRecords.join r data cols) (SortedRecords.join nplus a []) in
             let res = relational_update (FunDepSet.of_lists [[key], [drop]]) r m in
             fn l res 
-    | `LensJoin (l1, l2, cols, pd, qd, sort)  -> 
-            let old = LensHelpers.lens_get l1 () in
-            let old = LensHelpers.lens_get l2 () in
-            fn lens data
+    | `LensJoin (l1, l2, join, pd, qd, sort)  -> 
+            let join_simp = List.map (fun (a,_,_) -> a) join in
+            let getfds l = LensSort.fundeps (get_lens_sort l) in
+            let cols l = lens_get_cols l in
+            let r = get l1 in
+            let s = get l2 in
+            let m0 = relational_update (getfds l1) (SortedRecords.project_onto data (cols l1)) r in
+            let n0 = relational_update (getfds l2) (SortedRecords.project_onto data (cols l2)) s in
+            let l = SortedRecords.minus (SortedRecords.join m0 n0 join_simp) data in
+            let ll = SortedRecords.join l data (cols lens) in
+            let la = SortedRecords.minus l ll in 
+            let m = SortedRecords.minus (
+                    SortedRecords.minus m0 (SortedRecords.project_onto (SortedRecords.filter la pd) (cols l1))
+                ) (SortedRecords.project_onto ll (cols l1)) in
+            let n = SortedRecords.minus n0 (SortedRecords.project_onto (SortedRecords.filter la qd) (lens_get_cols l2)) in
+            fn l1 m;
+            fn l2 n
     | `LensSelect (l, pred, sort) ->
             let sort = get_lens_sort l in
             let r = get l in
@@ -96,8 +109,12 @@ let rec lens_put_set_step (lens : Value.t) (data : SortedRecords.recs) (fn : Val
 let apply_table_data (t : Value.table) (data : SortedRecords.recs) =
     let show_query = false in
     let (db, _), table, keys, _ = t in
+    let exec cmd = 
+            Debug.debug_time_out 
+            (fun () -> db#exec cmd) 
+            (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
     let cmd = "delete from " ^ db#quote_field table ^ " where TRUE" in
-    db#exec cmd;
+    exec cmd;
     if show_query then print_endline cmd else ();
     let cols = data.columns in
     let insert_vals = List.map (fun row -> 
@@ -106,7 +123,7 @@ let apply_table_data (t : Value.table) (data : SortedRecords.recs) =
         begin
             let insert_cmd = db#make_insert_query (table, cols, insert_vals) in
             if show_query then print_endline insert_cmd else (); 
-            db#exec insert_cmd;
+            exec insert_cmd;
             ()
         end;
     ()
