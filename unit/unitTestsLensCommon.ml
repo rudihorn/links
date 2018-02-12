@@ -209,7 +209,7 @@ module LensTestHelpers = struct
         let lens = create_lens_db db table fd (ColSet.elements left) cols in
         lens
 
-    let reset_query_timer () = query_timer := 0
+    let reset_query_timer () = query_timer := 0; query_count := 0
 
     let get_query_time () = !query_timer
 

@@ -263,9 +263,12 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let upd = List.fold_left (fun a b -> a ^ ", " ^ cond b) (cond (List.hd upd)) (List.tl upd) in
         let cmd = "update " ^ db#quote_field table ^ " set " ^ upd ^ " where " ^ where in
         if show_query then print_endline cmd else (); 
-        exec cmd;
+        (* exec cmd; *)
         cmd
     ) update_vals in
+    let b = Buffer.create 255 in
+    List.iteri (fun i v -> if i > 0 then Buffer.add_string b "; "; Buffer.add_string b v) update_commands;
+    exec (Buffer.contents b);
     let insert_vals = List.map (fun row -> 
         List.map (db_string_of_value db) row) insert_vals in
     if insert_vals <> [] then

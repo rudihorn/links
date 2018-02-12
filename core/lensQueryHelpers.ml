@@ -98,7 +98,6 @@ let rec calculate_predicate (expr : lens_phrase) (get_val : string -> Value.t) =
             | op -> failwith ("Unsupported unary operation " ^ op)
         end
     | `In (names, vals) -> 
-            print_endline "bla";
             let find = List.map get_val names in
             let vals = List.map (List.map value_of_constant) vals in
             let res = List.mem find vals in 
@@ -157,7 +156,7 @@ let rec construct_query_db (expr : lens_phrase) (db : Value.database) (mapCol : 
     | `In (names, vals) -> 
         let b = Buffer.create 255 in
         let cc = Buffer.add_string b in
-        cc "("; List.iteri (fun i v -> if i > 0 then cc ", "; cc v) names; cc ") IN (";
+        cc "("; List.iteri (fun i v -> if i > 0 then cc ", "; cc (mapCol v)) names; cc ") IN (";
         List.iteri (fun i v -> if i > 0 then cc ", "; cc "(";
             List.iteri (fun i2 v2 -> if i2 > 0 then cc ", "; cc (Constant.string_of_constant v2)) v; cc ")") vals;
             cc ")";
@@ -327,8 +326,10 @@ module Phrase = struct
     let constant_from_col = create_phrase_constant_of_record_col
 
     let in_expr names vals =
-        if names = [] || vals = [] then
+        if names = [] then
             None
+        else if vals = [] then
+            Some (`Constant (`Bool false))
         else
             let val_of_rec r = List.map constant_of_value r in
             let vals = List.map val_of_rec vals in
