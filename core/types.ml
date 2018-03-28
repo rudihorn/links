@@ -520,8 +520,7 @@ let rec make_type_unl : var_set * var_set -> typ -> unit =
   fun ((rec_vars, quant_vars) as vars) ->
     function
     | `Not_typed -> assert false
-    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Effect | `Lens _ -> ()
-    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Effect _ -> ()
+    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Effect _ | `Lens _ -> ()
     | `Record r | `Variant r -> make_row_unl vars r
     | `Alias (_, t) -> make_type_unl vars t
     | `ForAll (qs, t) -> make_type_unl (rec_vars, add_quantified_vars !qs quant_vars) t
