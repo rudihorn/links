@@ -1,4 +1,5 @@
 open Value
+open Utility
 
 
 module SortedRecords = struct 
@@ -38,9 +39,10 @@ module SortedRecords = struct
         let recs = List.map unbox_record l in
         let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else
             begin
-                match List.find_opt (fun (k,v) -> k = a) r with
-                | Some (k,v) -> v
-                | None -> failwith ("lens set columns not consistent: " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,v) -> k) r))
+                try 
+                    let (_,v) = List.find (fun (k,v) -> k = a) r in
+                    v
+                with NotFound _ -> failwith ("lens set columns not consistent: " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,v) -> k) r))
             end
             ) cols r in
         let recs = Array.of_list (List.map simpl_rec recs) in
