@@ -17,6 +17,8 @@ module LensCol = struct
 
     let alias (col : t) = col.alias
     let exists (cols : t list) (colalias : string) = List.exists (fun c -> alias c = colalias) cols
+
+    let present (col : t) = col.present
 end
 
 module LensSort = struct
@@ -25,6 +27,12 @@ module LensSort = struct
     let fundeps (fds, _, _ : t) = fds
     let predicate = get_lens_sort_pred
     let cols = get_lens_sort_cols
+
+    let present_cols sort = 
+        let cols = cols sort in
+        let cols = List.filter LensCol.present cols in
+        cols
+
     let colset = get_lens_sort_colset
 
     let make fds pred rowType : Types.lens_sort = (fds, pred, rowType)

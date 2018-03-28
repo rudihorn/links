@@ -99,8 +99,6 @@ let rec lens_put_set_step (lens : Value.t) (data : SortedRecords.recs) (fn : Val
             let sort = get_lens_sort l in
             let r = get l in
             let m1 = relational_update (LensSort.fundeps sort) data (SortedRecords.filter r pred) in
-            print_endline (SortedRecords.to_string_tabular data);
-            print_endline (SortedRecords.to_string_tabular m1);
             let nh = SortedRecords.minus (SortedRecords.filter m1 pred) data in
             let r = SortedRecords.minus m1 nh in 
             fn l r

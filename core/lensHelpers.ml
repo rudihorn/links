@@ -164,10 +164,10 @@ let rec lens_get (lens : Value.t) callfn =
         (* let query = lens_get_query lens in
         let sql = construct_select_query query  in *)
         let mappings = List.map (fun c -> get_lens_col_alias c, get_lens_col_type c) cols in
+        let _ = Debug.print sql in
         let res = Debug.debug_time_out 
             (fun () -> execute_select mappings sql db) 
             (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
-        let _ = Debug.print sql in
         res
 
 
@@ -453,7 +453,9 @@ let join_lens_should_swap (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (o
     let on_cols = ColSet.of_list on_columns in
     let covers fds sort =
         let fdcl = get_fd_transitive_closure on_cols fds in
-        ColSet.equal (get_lens_sort_colset sort) fdcl in
+        let other = LensSort.present_cols sort |> List.map (LensCol.alias) |> ColSet.of_list in
+        (* print_endline (ColSet.Show_t.show fdcl ^ " = " ^ ColSet.Show_t.show (other)); *)
+        ColSet.equal other fdcl in
     if covers fds2 sort2 then
         false
     else if covers fds1 sort1 then

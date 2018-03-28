@@ -14,6 +14,9 @@ let leave_tables_opt = Conf.make_bool "leave_tables" false "Do not delete tables
 let db_host_opt = Conf.make_string "db_host" "localhost" "Database server hostname." 
 let verbose_opt = Conf.make_bool "v" false "Print verbose information."
 let classic_opt = Conf.make_bool "classic_lenses" false "Use non incremental relational lenses."
+let benchmark_opt = Conf.make_bool "benchmark" false "Benchmark operations."
+let set_n_opt = Conf.make_int "set_n" 0 "Override n." 
+let set_upto_opt = Conf.make_int "set_upto" 10 "Override upto."
 
 
 module LensTestHelpers = struct
@@ -217,11 +220,16 @@ module LensTestHelpers = struct
         print_endline ("Query Time: " ^ string_of_int (get_query_time ()) ^ " / " ^ string_of_int !query_count ^ " queries")
 
     let time_query in_mem fn =
-        let _ = reset_query_timer () in
-        let _ = force_in_memory in_mem in
+        reset_query_timer ();
         let res = Debug.debug_time_out fn (fun time -> print_endline ("Total Time: " ^ string_of_int time)) in
-        let _ = print_query_time () in
+        print_query_time ();
         res
+
+    let time_op fn =
+        reset_query_timer ();
+        let ttime = ref 0 in
+        let res = Debug.debug_time_out fn (fun time -> ttime := time) in
+        (get_query_time (), !ttime)
 
     let time_query_both fn =
         let res = time_query false fn in

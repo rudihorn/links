@@ -632,7 +632,10 @@ struct
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let data = value env data in
-        let res = LensHelpersCorrect.lens_put lens data in
+        (* 
+        let res = LensHelpersClassic.lens_put lens data in
+        *)
+        let res = LensHelpersCorrect.lens_put lens data in 
         apply_cont cont env (Value.box_unit ()) 
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin

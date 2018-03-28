@@ -39,9 +39,7 @@ let matches_change changes =
         List.fold_left (fun phrase (on,_) ->
             let term = Phrase.matching_cols_simp cols_l on in
             Phrase.combine_or phrase term) None vals in *)
-    List.fold_left (fun phrase change ->
-        let term = is_changed change in
-        Phrase.combine_or phrase term) None changes
+    Phrase.fold_or <| List.map is_changed changes
 
 
 let relational_update (fds : Types.fundepset) (changedata : SortedRecords.recs) (updatedata : SortedRecords.recs) =
@@ -189,10 +187,15 @@ let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Val
             
     | `LensSelect (l, pred, sort) -> 
             let m_hash = delt in
-            let delta_m1 = get_changes (lens_select l (Phrase.negate pred)) delt in
+            let delta_m1 = SortedRecords.merge (get_changes (lens_select l (Phrase.negate pred)) delt) 
+            { columns = delt.columns; plus_rows = Array.of_list []; neg_rows = delt.neg_rows } in
+            (* Debug.print (SortedRecords.to_string_tabular delta_m1);  *)
             let m1_cap_P = SortedRecords.filter delta_m1 pred in
+            (* Debug.print (SortedRecords.to_string_tabular m1_cap_P);  *)
             let delta_nhash = SortedRecords.merge (m1_cap_P) (SortedRecords.negate delt) in
+            (* Debug.print (SortedRecords.to_string_tabular delta_nhash); *)
             let new_delta = SortedRecords.merge delta_m1 (SortedRecords.negate delta_nhash) in
+            (* Debug.print (SortedRecords.to_string_tabular new_delta);  *)
             fn l new_delta
     | _ -> failwith "Unsupport lens."
 
@@ -251,8 +254,7 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let zipped = List.combine key del_key in
         let cond = List.fold_left (fun a b -> a ^ " AND " ^ cond b) (cond (List.hd zipped)) (List.tl zipped) in
         let cmd = "delete from " ^ db#quote_field table ^ " where " ^ cond in
-        if show_query then print_endline cmd else (); 
-        exec cmd; 
+        (* exec cmd; *)
         cmd) delete_vals in
     let update_commands = List.map (fun row ->
         let key_vals = take row key_len in
@@ -262,22 +264,27 @@ let apply_delta (t : Value.table) (data : SortedRecords.recs) =
         let upd = skip (List.combine cols row) key_len in
         let upd = List.fold_left (fun a b -> a ^ ", " ^ cond b) (cond (List.hd upd)) (List.tl upd) in
         let cmd = "update " ^ db#quote_field table ^ " set " ^ upd ^ " where " ^ where in
-        if show_query then print_endline cmd else (); 
         (* exec cmd; *)
         cmd
     ) update_vals in
-    let b = Buffer.create 255 in
-    List.iteri (fun i v -> if i > 0 then Buffer.add_string b "; "; Buffer.add_string b v) update_commands;
-    exec (Buffer.contents b);
     let insert_vals = List.map (fun row -> 
         List.map (db_string_of_value db) row) insert_vals in
+    let b = Buffer.create 255 in
+    let app_cmd str = if Buffer.length b > 0 then Buffer.add_string b "; "; Buffer.add_string b str in
+    List.iter app_cmd delete_commands;
+    List.iter app_cmd update_commands;
     if insert_vals <> [] then
-        let insert_cmd = db#make_insert_query (table, cols, insert_vals) in
-        if show_query then print_endline insert_cmd else (); 
-        exec insert_cmd;
-        ()
-    else
-        ()
+        begin
+            let insert_cmd = db#make_insert_query (table, cols, insert_vals) in
+            app_cmd insert_cmd
+        end;
+    if Buffer.length b > 0 then    
+        begin
+            let cmd = Buffer.contents b in
+            if show_query then print_endline cmd;
+            let _ = exec (Buffer.contents b) in ()
+        end;
+    ()
 
 let get_fds (fds : (string list * string list) list) (cols : Types.lens_col list) : Types.fundepset =
     let check_col xs = List.iter (fun x -> if not (LensCol.exists cols x) then failwith ("The column " ^ x ^ " does not exist.")) xs in

@@ -10,6 +10,9 @@ module SortedRecords = struct
     let is_positiv (t: recs) = 
         Array.length t.neg_rows = 0
 
+    let total_size (a : recs) =
+        (Array.length a.plus_rows) + (Array.length a.neg_rows)
+
     let compare_val (a : Value.t) (b : Value.t) : int =
         match a, b with 
         | `Bool b1, `Bool b2 -> compare b1 b2

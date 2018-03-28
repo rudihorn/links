@@ -316,8 +316,15 @@ module Phrase = struct
     let var = create_phrase_var
 
     let constant c = `Constant c
+    let constant_bool b = `Constant (`Bool b)
     let constant_val v = `Constant (constant_of_value v)
     let constant_int i = `Constant (`Int i)
+
+    let fold_or phrases = 
+        let ored = List.fold_left combine_or None phrases in
+        match ored with
+        | None -> Some (constant_bool false)
+        | _ -> ored
 
     let equal = create_phrase_equal
     let greater_than left right = 
