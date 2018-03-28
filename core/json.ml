@@ -160,7 +160,7 @@ let rec string_listify : string list -> string = function
 let rec jsonize_value' : Value.t -> json_string =
   function
   | `PrimitiveFunction _
-  | `ReifiedContinuation _
+  | `Resumption _
   | `Continuation _
   | `Socket _
       as r ->
@@ -287,7 +287,14 @@ let show_aps aps =
   let ap_list = AccessPointIDSet.elements aps in
   String.concat "," (List.map (AccessPointID.to_json) ap_list)
 
-let print_json_state client_id conn_url procs handlers aps =
+let show_buffers bufs =
+  String.concat "," (List.map (fun (endpoint_id, values) ->
+    let json_vals = String.concat "," (List.map jsonize_value' values |> List.rev) in
+    "{\"buf_id\": " ^ (ChannelID.to_json endpoint_id) ^ "," ^
+    "\"values\": " ^ "[" ^ json_vals ^ "]" ^ "}"
+  ) (ChannelIDMap.bindings bufs))
+
+let print_json_state client_id conn_url procs handlers aps bufs =
     let ws_url_data =
     (match conn_url with
        | Some ws_conn_url -> "\"ws_conn_url\":\"" ^ ws_conn_url ^ "\","
@@ -295,6 +302,7 @@ let print_json_state client_id conn_url procs handlers aps =
   "{\"client_id\":" ^ (ClientID.to_json client_id) ^ "," ^
    ws_url_data ^
    "\"access_points\":" ^ "[" ^ (show_aps aps) ^ "]" ^ "," ^
+   "\"buffers\":" ^ "[" ^ (show_buffers bufs) ^ "]" ^ "," ^
    "\"processes\":" ^ "[" ^ (show_processes procs) ^ "]" ^ "," ^
    "\"handlers\":" ^ "[" ^ (show_handlers handlers) ^ "]}"
 
@@ -305,6 +313,8 @@ module JsonState = struct
     client_id : client_id;
     ws_conn_url : websocket_url option;
     processes: (Value.t * Value.t list) pid_map;
+    buffers : Value.t list channel_id_map;
+    channels : Value.chan list;
     handlers: Value.t intmap;
     aps: apid_set
   }
@@ -314,6 +324,8 @@ module JsonState = struct
     client_id = cid;
     ws_conn_url = url;
     processes = PidMap.empty;
+    buffers = ChannelIDMap.empty;
+    channels = [];
     handlers = IntMap.empty;
     aps = AccessPointIDSet.empty
   }
@@ -330,8 +342,17 @@ module JsonState = struct
   let add_ap_id apid state =
     { state with aps = AccessPointIDSet.add apid state.aps }
 
+  (** Adds a buffer to the state *)
+  let add_buffer chan_id buf state =
+    { state with buffers = ChannelIDMap.add chan_id buf state.buffers }
+
+  let add_carried_channel chan state =
+    { state with channels = chan :: state.channels }
+
+  let get_carried_channels state = state.channels
+
   (** Serialises the state as a JSON string *)
-  let to_string s = print_json_state s.client_id s.ws_conn_url s.processes s.handlers s.aps
+  let to_string s = print_json_state s.client_id s.ws_conn_url s.processes s.handlers s.aps s.buffers
 end
 
 type json_state = JsonState.t

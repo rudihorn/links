@@ -20,7 +20,7 @@ type primitive = [ `Bool | `Int | `Char | `Float | `XmlItem | `DB | `String]
 
 type linearity   = [ `Any | `Unl ]
     deriving (Eq, Show)
-type restriction = [ `Any | `Base | `Session ]
+type restriction = [ `Any | `Base | `Session | `Effect ]
     deriving (Eq, Show)
 
 type subkind = linearity * restriction
@@ -206,6 +206,7 @@ type typ =
     | `Lolli of (typ * row * typ)
     | `Record of row
     | `Variant of row
+    | `Effect of row
     | `Table of typ * typ * typ
     | `Lens of lens_sort 
     | `Alias of ((string * type_arg list) * typ)
@@ -387,6 +388,10 @@ let primary_kind_of_quantifier : quantifier -> primary_kind =
   | _, _, `Row _      -> `Row
   | _, _, `Presence _ -> `Presence
 
+let subkind_of_quantifier : quantifier -> subkind
+  = fun q ->
+    snd (kind_of_quantifier q)
+
 let primary_kind_of_type_arg : type_arg -> primary_kind =
   function
   | `Type _     -> `Type
@@ -395,7 +400,6 @@ let primary_kind_of_type_arg : type_arg -> primary_kind =
 
 let add_quantified_vars qs vars =
   List.fold_right IntSet.add (List.map var_of_quantifier qs) vars
-
 
 (* unl type stuff *)
 
@@ -415,6 +419,7 @@ let rec is_unl_type : (var_set * var_set) -> typ -> bool =
     let iut t = is_unl_type (rec_vars, quant_vars) t in
       function
       | `Not_typed -> assert false
+      | `Effect _
       | `Primitive _
       | `Function _ -> true
       | `Lolli _ -> false
@@ -463,6 +468,7 @@ let rec type_can_be_unl : var_set * var_set -> typ -> bool =
     let tcu t = type_can_be_unl vars t in
     function
     | `Not_typed -> assert false
+    | `Effect _
     | `Primitive _
     | `Function _ -> true
     | `Lolli _ -> false
@@ -514,7 +520,8 @@ let rec make_type_unl : var_set * var_set -> typ -> unit =
   fun ((rec_vars, quant_vars) as vars) ->
     function
     | `Not_typed -> assert false
-    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Lens _ -> ()
+    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Effect | `Lens _ -> ()
+    | `Primitive _ | `Function _ | `Table _ | `End | `Application _ | `Effect _ -> ()
     | `Record r | `Variant r -> make_row_unl vars r
     | `Alias (_, t) -> make_type_unl vars t
     | `ForAll (qs, t) -> make_type_unl (rec_vars, add_quantified_vars !qs quant_vars) t
@@ -578,6 +585,8 @@ let is_sessionable_point : (var_set -> 'a -> bool) -> var_set -> [< 'a meta_max_
     | `Var (_, (_, `Any),     `Flexible) -> true
     | `Var (_, (_, `Base),    `Rigid)
     | `Var (_, (_, `Any),     `Rigid)
+    | `Var (_, (_, `Effect),  `Rigid)
+    | `Var (_, (_, `Effect),  `Flexible)
     | `Var (_, (_, `Base),    `Flexible) -> false
     | `Body t -> f rec_vars t
     | `Recursive (var, t) ->
@@ -876,9 +885,10 @@ let free_type_vars, free_row_type_vars =
       | `Not_typed               -> S.empty
       | `Primitive _             -> S.empty
       | `Function (f, m, t)      ->
-          S.union_all [free_type_vars' rec_vars f; free_row_type_vars' rec_vars m; free_type_vars' rec_vars t]
+         S.union_all [free_type_vars' rec_vars f; free_row_type_vars' rec_vars m; free_type_vars' rec_vars t]
       | `Lolli (f, m, t)         ->
-          S.union_all [free_type_vars' rec_vars f; free_row_type_vars' rec_vars m; free_type_vars' rec_vars t]
+         S.union_all [free_type_vars' rec_vars f; free_row_type_vars' rec_vars m; free_type_vars' rec_vars t]
+      | `Effect row
       | `Record row
       | `Variant row             -> free_row_type_vars' rec_vars row
       | `Table (r, w, n)         ->
@@ -1092,6 +1102,7 @@ and subst_dual_type : var_map -> datatype -> datatype =
         | `Lolli (f, m, t) -> `Lolli (sdt f, sdr m, sdt t)
         | `Record row -> `Record (sdr row)
         | `Variant row -> `Variant (sdr row)
+        | `Effect row -> `Effect (sdr row)
         | `Table (r, w, n) -> `Table (sdt r, sdt w, sdt n)
         (* TODO: we could do a check to see if we can preserve aliases here *)
         | `Alias (_, t) -> sdt t
@@ -1232,6 +1243,7 @@ let rec normalise_datatype rec_names t =
            `Lolli (nt f, nr m, nt t)
       | `Record row              -> `Record (nr row)
       | `Variant row             -> `Variant (nr row)
+      | `Effect row              -> `Effect (nr row)
       | `Table (r, w, n)         ->
           `Table (nt r, nt w, nt n)
       | `Lens (fds, cond, r)                ->
@@ -1477,6 +1489,7 @@ struct
         | `Record row
         | `Variant row -> free_bound_row_type_vars ~include_aliases bound_vars row
         | `Lens (fds, cond, r) -> [] 
+        | `Effect row -> free_bound_row_type_vars ~include_aliases bound_vars row
         | `Table (r, w, n) -> (fbtv r) @ (fbtv w) @ (fbtv n)
         | `ForAll (tyvars, body) ->
             let bound_vars, vars =
@@ -1647,7 +1660,9 @@ struct
     let restriction = function
       | `Any -> "Any"
       | `Base -> "Base"
-      | `Session -> "Session" in
+      | `Session -> "Session"
+      | `Effect -> "Eff"
+    in
     let full (l, r) = "(" ^ linearity l ^ "," ^ restriction r ^ ")" in
 
     fun (policy, _vars) ->
@@ -1661,6 +1676,7 @@ struct
       | (`Any, `Any) -> "Any"
       | (`Unl, `Base) -> restriction `Base
       | (`Any, `Session) -> restriction `Session
+      | (`Unl, `Effect) -> restriction `Effect
       | (l, r) -> full (l, r)
 
   let primary_kind : primary_kind -> string = function
@@ -1672,7 +1688,9 @@ struct
     let restriction = function
       | `Any -> "Any"
       | `Base -> "Base"
-      | `Session -> "Session" in
+      | `Session -> "Session"
+      | `Effect -> "Eff"
+    in
     let full (policy, _vars) (k, sk) =
       primary_kind k ^ subkind (policy, _vars) sk in
     fun (policy, _vars) (k, sk) ->
@@ -1687,6 +1705,7 @@ struct
       | `Type, (`Any, `Session) -> restriction `Session
       | `Type, sk -> subkind ({policy with kinds="full"}, _vars) sk
       | `Row, (`Unl, `Any) -> primary_kind `Row
+      | `Row, (`Unl, `Effect) -> primary_kind `Row
       | `Presence, (`Unl, `Any) -> primary_kind `Presence
       | `Row, _
       | `Presence, _ -> full ({policy with kinds="full"}, _vars) (k, sk)
@@ -1831,6 +1850,7 @@ struct
                 (if is_tuple ur then string_of_tuple r
                  else "(" ^ row "," bound_vars p r ^ ")")
           | `Variant r -> "[|" ^ row "|" bound_vars p r ^ "|]"
+          | `Effect r -> "{" ^ row "," bound_vars p r ^ "}"
           | `ForAll (tyvars, body) ->
               let tyvars = unbox_quantifiers tyvars in
               let bound_vars =
@@ -2000,6 +2020,7 @@ let rec flexible_type_vars : TypeVarSet.t -> datatype -> quantifier TypeVarMap.t
           in
             flexible_type_vars bound_vars body
       | `Variant row -> row_flexible_type_vars bound_vars row
+      | `Effect row -> row_flexible_type_vars bound_vars row
       | `Table (r, w, n) -> TypeVarMap.union_all [ftv r; ftv w; ftv n]
       | `Alias ((_name, ts), d) ->
           TypeVarMap.union_all
@@ -2191,6 +2212,7 @@ let make_fresh_envs : datatype -> datatype IntMap.t * row IntMap.t * field_spec 
       | `Primitive _             -> empties
       | `Function (f, m, t)      -> union [make_env boundvars f; make_env_r boundvars m; make_env boundvars t]
       | `Lolli (f, m, t)         -> union [make_env boundvars f; make_env_r boundvars m; make_env boundvars t]
+      | `Effect row
       | `Record row
       | `Variant row             -> make_env_r boundvars row
       | `Table (r, w, n)         -> union [make_env boundvars r; make_env boundvars w; make_env boundvars n]
@@ -2288,6 +2310,7 @@ let is_sub_type, is_sub_row =
           is_sub_type rec_vars (f', f)
           && is_sub_eff rec_vars (eff, eff')
           && is_sub_type rec_vars (t, t')
+      | `Effect row', `Effect row
       | `Record row', `Record row
       | `Variant row, `Variant row' ->
           let lrow, _ = unwrap_row row
@@ -2429,18 +2452,13 @@ let make_variant_type ts = `Variant (make_closed_row ts)
 let make_table_type (r, w, n) = `Table (r, w, n)
 let make_endbang_type : datatype = `Alias (("EndBang", []), `Output (unit_type, `End))
 
-let make_function_type : datatype -> row -> datatype -> datatype
-  = fun domain effs range ->
-  let domain =
-    match domain with
-      `Record _ as r -> r
-    | _ -> make_record_type (StringMap.add "1" domain StringMap.empty)
-  in
-    `Function (domain, effs, range)
+let make_function_type : datatype list -> row -> datatype -> datatype
+  = fun args effs range ->
+  `Function (make_tuple_type args, effs, range)
 
-let make_pure_function_type : datatype -> datatype -> datatype
+let make_pure_function_type : datatype list -> datatype -> datatype
   = fun domain range -> make_function_type domain (make_empty_closed_row ()) range
 
 let make_thunk_type : row -> datatype -> datatype
   = fun effs rtype ->
-  make_function_type unit_type effs rtype
+  make_function_type [] effs rtype
