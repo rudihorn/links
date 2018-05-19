@@ -414,7 +414,7 @@ let value_of_db_string (value:string) t =
     | `Primitive `Float -> (if value = "" then Value.box_float 0.00      (* HACK HACK *)
                             else Value.box_float (float_of_string value))
     | t -> failwith ("value_of_db_string: unsupported datatype: '" ^
-                        Types.Show_datatype.show t(*string_of_datatype t*)^"'")
+                        Types.show_typ t(*string_of_datatype t*)^"'")
 
 let result_signature field_types result =
     let n = result#nfields in

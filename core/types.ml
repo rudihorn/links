@@ -1,10 +1,11 @@
-(*pp deriving *)
 open Utility
 open Operators 
 
+[@@@ocaml.warning "-32"] (** disable warnings about unused functions in this module**)
+   
 module FieldEnv = Utility.StringMap
-type 'a stringmap = 'a Utility.stringmap
-type 'a field_env = 'a stringmap deriving (Show)
+type 'a stringmap = 'a Utility.stringmap [@@deriving show]
+type 'a field_env = 'a stringmap [@@deriving show]
 
 (* type var sets *)
 module TypeVarSet = Utility.IntSet
@@ -13,58 +14,56 @@ module TypeVarSet = Utility.IntSet
 module TypeVarMap = Utility.IntMap
 
 (* points *)
-type 'a point = 'a Unionfind.point deriving (Show)
+type 'a point = 'a Unionfind.point [@@deriving show]
 
 type primitive = [ `Bool | `Int | `Char | `Float | `XmlItem | `DB | `String]
-    deriving (Show)
+    [@@deriving show]
 
 type linearity   = [ `Any | `Unl ]
-    deriving (Eq, Show)
+    [@@deriving eq,show]
 type restriction = [ `Any | `Base | `Session | `Effect ]
-    deriving (Eq, Show)
+    [@@deriving eq,show]
 
 type subkind = linearity * restriction
-    deriving (Eq, Show)
+    [@@deriving eq,show]
 
 type freedom = [`Rigid | `Flexible]
-    deriving (Eq, Show)
+    [@@deriving eq,show]
 
 type primary_kind = [ `Type | `Row | `Presence ]
-    deriving (Eq, Show)
+    [@@deriving eq,show]
 
 type kind = primary_kind * subkind
-    deriving (Eq, Show)
+    [@@deriving eq,show]
 
 type 't meta_type_var_non_rec_basis =
     [ `Var of (int * subkind * freedom)
     | `Body of 't ]
-      deriving (Show)
+      [@@deriving show]
 
 type 't meta_type_var_basis =
     [ 't meta_type_var_non_rec_basis
     | `Recursive of (int * 't) ]
-      deriving (Show)
+      [@@deriving show]
 
 type 'r meta_row_var_basis =
     [ 'r meta_type_var_basis | `Closed ]
-      deriving (Show)
+      [@@deriving show]
 
-type 't meta_presence_var_basis =
-    [ 't meta_type_var_non_rec_basis ]
-      deriving (Show)
+type 't meta_presence_var_basis = 't meta_type_var_non_rec_basis
+      [@@deriving show]
 
 (* this subsumes all of the other meta_X_basis thingies *)
 type 't meta_max_basis = 't meta_row_var_basis
 
-type istring = string deriving (Show)
-module Eq_istring = Deriving_Eq.Eq_immutable(struct type a = istring end)
+type istring = string [@@deriving show,eq]
 
 module Abstype =
 struct
   type t = { id    : istring ;
              name  : istring ;
              arity : kind list }
-      deriving (Eq, Show)
+      [@@deriving eq,show]
   let make name arity =
     let id = Utility.gensym ~prefix:"abstype:" () in
       { id; name; arity }
@@ -124,13 +123,13 @@ type ('t, 'r) session_type_basis =
     | `Choice of 'r
     | `Dual of 't
     | `End ]
-      deriving (Show)
+      [@@deriving show]
 
 type lens_delete_mode =
   [ `DeleteLeft
   | `DeleteRight
   | `DeleteBoth ]
-      deriving (Show)
+      [@@deriving show]
 
 type lens_phrase = 
   [ `Constant  of Constant.constant
@@ -143,15 +142,20 @@ type lens_phrase =
   | `Case      of lens_phrase option * (lens_phrase * lens_phrase) list * lens_phrase
   | `TupleLit  of lens_phrase list
   ]
-      deriving (Show)
+      [@@deriving show]
 
 (* Lenses *)
 module ColSet = StringSet
 type colset = ColSet.t
-    deriving (Show)
+      [@@deriving show]
 
 module FunDep = struct 
     type t = colset * colset
+    [@@deriving show]
+
+    (* let pp fmt (l,r) = 
+        Format.fprintf fmt "%a -> %a@." ColSet.pp l ColSet.pp r;
+        *)
 
     let left (l,_) = l
     let right (_,r) = r 
@@ -169,21 +173,9 @@ module FunDep = struct
         (left, right)
 
     let make left right = (left, right)
-    
-    module Show_t = Deriving_Show.Defaults(
-        struct
-            type a = ColSet.t * ColSet.t
-            let format formatter (left, right) =
-                Format.pp_open_box formatter 0;
-                ColSet.Show_t.format formatter left;
-                Format.pp_print_string formatter " -> ";
-                ColSet.Show_t.format formatter right;
-                Format.pp_close_box formatter ();
-        end
-    )
 end
 type fundep = FunDep.t
-    deriving (Show)
+        [@@deriving show]
 
 module FunDepSet = struct
     include Set.Make(FunDep)
@@ -194,7 +186,7 @@ module FunDepSet = struct
 end
 
 type fundepset = FunDepSet.t
-    deriving (Show)
+        [@@deriving show]
 (* End of Lenses *)
 
 
@@ -233,10 +225,10 @@ and meta_var = [ `Type of meta_type_var | `Row of meta_row_var | `Presence of me
 and quantifier = int * subkind * meta_var
 and type_arg =
     [ `Type of typ | `Row of row | `Presence of field_spec ]
-      deriving (Show)
+      [@@deriving show]
 
 type session_type = (typ, row) session_type_basis
-  deriving (Show)
+  [@@deriving show]
 
 let dummy_type = `Primitive `Int
 
@@ -655,18 +647,18 @@ let is_sessionable_row = is_sessionable_row IntSet.empty
 let sessionify_type = sessionify_type IntSet.empty
 let sessionify_row = sessionify_row IntSet.empty
 
-type datatype = typ
+type datatype = typ [@@deriving show]
 
 (* useful for debugging: types tend to be too big to read *)
 (*
-module Show_datatype = Show_unprintable (struct type a = datatype end)
-module Show_field_spec = Show_unprintable (struct type a = field_spec end)
-module Show_field_spec_map = Show_unprintable (struct type a = field_spec_map end)
-module Show_row_var = Show_unprintable (struct type a = row_var end)
-module Show_row = Show_unprintable (struct type a = row end)
-module Show_meta_type_var = Show_unprintable (struct type a = meta_type_var end)
-module Show_meta_row_var = Show_unprintable (struct type a = meta_row_var end)
 *)
+let pp_datatype = fun f _ -> Utility.format_omission f
+let pp_field_spec = fun f _ -> Utility.format_omission f
+let pp_field_spec_map = fun f _ -> Utility.format_omission f
+let pp_row_var = fun f _ -> Utility.format_omission f
+let pp_row = fun f _ -> Utility.format_omission f
+let pp_meta_type_var = fun f _ -> Utility.format_omission f
+let pp_meta_row_var = fun f _ -> Utility.format_omission f
 
 let type_var_number = var_of_quantifier
 
@@ -1076,7 +1068,7 @@ let rec dual_type : var_map -> datatype -> datatype =
       (* Still, we might hope to find a way of preserving 'dual
          aliases' in order to simplify the pretty-printing of types... *)
       | `Alias (_, t) -> dt t
-      | t -> raise (Invalid_argument ("Attempt to dualise non-session type: " ^ Show_typ.show t))
+      | t -> raise (Invalid_argument ("Attempt to dualise non-session type: " ^ show_datatype t))
 and dual_row : var_map -> row -> row =
   fun rec_points row ->
     let (fields, row_var, dual) = fst (unwrap_row row) in
@@ -1883,7 +1875,7 @@ struct
                 "Lens(" ^ List.fold_left (fun a b -> a ^ ", " ^ fn b) (fn (List.hd cols)) (List.tl cols) ^ ")"
           | `Alias ((s,[]), _) ->  s
           | `Alias ((s,ts), _) ->  s ^ " ("^ String.concat "," (List.map (type_arg bound_vars p) ts) ^")"
-          | `Application (l, [elems]) when Abstype.Eq_t.eq l list ->  "["^ (type_arg bound_vars p) elems ^"]"
+          | `Application (l, [elems]) when Abstype.equal l list ->  "["^ (type_arg bound_vars p) elems ^"]"
           | `Application (s, []) -> Abstype.name s
           | `Application (s, ts) -> Abstype.name s ^ " ("^ String.concat "," (List.map (type_arg bound_vars p) ts) ^")"
 
@@ -2156,28 +2148,16 @@ let string_of_tycon_spec ?(policy=Print.default_policy) ?(refresh_tyvar_names=tr
 let string_of_primary_kind primary_kind =
   Print.primary_kind primary_kind
 
-module Show_datatype =
-  Deriving_Show.Defaults
-    (struct
-      type a = datatype
-      let format fmt a =
-        Format.pp_print_string fmt (string_of_datatype a)
-     end)
+let pp_datatype fmt a = Format.pp_print_string fmt (string_of_datatype a)
 
-module Show_tycon_spec =
-  Deriving_Show.Defaults
-    (struct
-      type a = tycon_spec
-      let format fmt a =
-        Format.pp_print_string fmt (string_of_tycon_spec a)
-     end)
+let pp_tycon_spec fmt a = Format.pp_print_string fmt (string_of_tycon_spec a)
 
 type environment       = datatype Env.t
 and tycon_environment  = tycon_spec Env.t
 and typing_environment = { var_env    : environment
                          ; tycon_env  : tycon_environment
                          ; effect_row : row }
-    deriving (Show)
+     [@@deriving show] 
 
 let empty_typing_environment = { var_env = Env.empty; tycon_env =  Env.empty; effect_row = make_empty_closed_row ()  }
 
@@ -2193,7 +2173,7 @@ let extend_typing_environment
     {var_env = r ; tycon_env = ar ; effect_row = er } : typing_environment =
   {var_env = Env.extend l r ; tycon_env = Env.extend al ar ; effect_row = er }
 
-let string_of_environment = Show_environment.show
+let string_of_environment = show_environment
 
 let string_of_typing_environment { var_env = env; _ }
   = string_of_environment env

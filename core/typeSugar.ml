@@ -1,4 +1,3 @@
-(*pp deriving *)
 open Utility
 open Sugartypes
 
@@ -8,10 +7,6 @@ let endbang_antiquotes = Basicsettings.TypeSugar.endbang_antiquotes
 
 let check_top_level_purity = Basicsettings.TypeSugar.check_top_level_purity
 
-type var_env =
-    Types.meta_type_var StringMap.t *
-      Types.meta_row_var StringMap.t
-      deriving (Show)
 
 module Env = Env.String
 
@@ -1612,7 +1607,7 @@ let rec close_pattern_type : pattern list -> Types.datatype -> Types.datatype = 
                    the patterns are open *)
           `Effect row
       | `Application (l, [`Type t])
-          when Types.Abstype.Eq_t.eq l Types.list ->
+          when Types.Abstype.equal l Types.list ->
           let rec unwrap p : pattern list =
             match fst p with
               | `Variable _ | `Any -> [p]
@@ -1947,8 +1942,8 @@ let rec extract_formlet_bindings : phrase -> Types.datatype Env.t = function
 
 (* let show_context : context -> context = *)
 (*   fun context -> *)
-(*     Printf.fprintf stderr "Types  : %s\n" (Env.Dom.Show_t.show (Env.domain context.tycon_env)); *)
-(*     Printf.fprintf stderr "Values : %s\n" (Env.Dom.Show_t.show (Env.domain context.var_env)); *)
+(*     Printf.fprintf stderr "Types  : %s\n" (Env.Dom.show_t (Env.domain context.tycon_env)); *)
+(*     Printf.fprintf stderr "Values : %s\n" (Env.Dom.show_t (Env.domain context.var_env)); *)
 (*     flush stderr; *)
 (*     context *)
 
@@ -3106,7 +3101,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
               else
                 Gripers.upcast_subtype pos t2 t1
         | `Upcast _ -> assert false
-        | `Handle { sh_expr = m; sh_effect_cases = cases; sh_descr = descr; _ } ->
+        | `Handle { sh_expr = m; sh_value_cases = val_cases; sh_effect_cases = eff_cases; sh_descr = descr; } ->
            let rec pop_last = function
              | [] -> assert false
              | [x] -> x, []
@@ -3164,7 +3159,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                                                                              shp_types = pat_types } })
              | None -> (henv, [], descr)
            in
-           let type_cases cases =
+           let type_cases val_cases eff_cases =
              let wild_row () =
                let fresh_row = Types.make_empty_open_row (`Unl, `Any) in
                allow_wild fresh_row
@@ -3173,7 +3168,6 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
              let bt = Types.fresh_type_variable (`Unl, `Any) in
              let inner_eff = wild_row () in
              let outer_eff = wild_row () in
-             let (val_cases, eff_cases) = split_handler_cases cases in
              (* Type value patterns *)
              let val_cases, val_pats =
                List.fold_right
@@ -3354,7 +3348,15 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            let m = type_check m_context m in (* Type-check the input computation m under current context *)
            let m_effects = `Effect m_context.effect_row in
            (** Most of the work is done by `type_cases'. *)
-           let (val_cases, rt), eff_cases, body_type, inner_eff, outer_eff = type_cases cases in
+           let (val_cases, eff_cases) =
+             (** The following is a slight hack until I get rid of the
+                 `handler' sugar. It is necessary because of "old
+                 fashioned" parameterised handlers. *)
+             match val_cases with
+             | [] -> split_handler_cases eff_cases
+             | _  -> val_cases, eff_cases
+           in
+           let (val_cases, rt), eff_cases, body_type, inner_eff, outer_eff = type_cases val_cases eff_cases in
            (* Printf.printf "result: %s\ninner_eff: %s\nouter_eff: %s\n%!" (Types.string_of_datatype rt) (Types.string_of_row inner_eff) (Types.string_of_row outer_eff); *)
            (** Patch the result type of `m' *)
            let () =
@@ -3990,7 +3992,7 @@ struct
     try
       Debug.if_set show_pre_sugar_typing
         (fun () ->
-           "before type checking: \n"^ Show_program.show (bindings, body));
+           "before type checking: \n"^ show_program (bindings, body));
       let tyenv', bindings, _ = type_bindings tyenv bindings in
       let tyenv' = Types.normalise_typing_environment tyenv' in
         if Settings.get_value check_top_level_purity then
@@ -4007,7 +4009,7 @@ struct
   let sentence tyenv sentence =
     Debug.if_set show_pre_sugar_typing
       (fun () ->
-         "before type checking: \n"^ Show_sentence.show sentence);
+         "before type checking: \n"^ show_sentence sentence);
     match sentence with
       | `Definitions bindings ->
           let tyenv', bindings, _ = type_bindings tyenv bindings in

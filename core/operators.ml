@@ -9,7 +9,7 @@
      ~      triggers a lexer state switch
 *)
 
-type name = string deriving (Show)
+type name = string [@@deriving show]
 
 type unary_op = [
 | `Minus
@@ -17,13 +17,13 @@ type unary_op = [
 | `Name of name
 ]
 and regexflag = [`RegexList | `RegexNative | `RegexGlobal | `RegexReplace ]
-    deriving (Show)
+    [@@deriving show]
 type logical_binop = [`And | `Or ]
-    deriving (Show)
+    [@@deriving show]
 type binop = [ `Minus | `FloatMinus | `RegexMatch of regexflag list | logical_binop | `Cons | `Name of name ]
-deriving (Show)
+    [@@deriving show]
 type operator = [ unary_op | binop | `Project of name ]
-deriving (Show)
+    [@@deriving show]
 
 let string_of_unary_op =
   function

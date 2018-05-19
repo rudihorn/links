@@ -101,7 +101,7 @@ let debug_print_col_list (cols : string list) =
 let rec debug_print_fd_tree_ex (fd : fd_node) (depth : int) (out : string -> unit) =
     print_spacer depth out;
     out " - ";
-    out (ColSet.Show_t.show (fdnode_left fd));
+    out (show_colset (fdnode_left fd));
     out " -> \n";
     let _ = List.map (fun f -> debug_print_fd_tree_ex f (depth + 1) out) (fdnode_right fd) in
     ()
