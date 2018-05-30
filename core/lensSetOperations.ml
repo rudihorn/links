@@ -311,11 +311,14 @@ module SortedRecords = struct
                 joined
             ) (Array.to_list l1) in
             List.flatten joined in
-        let pos = List.append (join_list left.plus_rows right.plus_rows)
-            (join_list left.neg_rows right.neg_rows) in
+        let pos = join_list left.plus_rows right.plus_rows
+             in
         let pos = List.sort compare pos in
-        let neg = List.append (join_list left.plus_rows right.neg_rows) 
-            (join_list left.neg_rows right.plus_rows) in
+        let neg = List.flatten [
+            join_list left.plus_rows right.neg_rows;
+            join_list left.neg_rows right.plus_rows;
+            join_list left.neg_rows right.neg_rows 
+            ] in
         let neg = List.sort compare neg in
         let (pos, neg) = zip_delta_merge pos neg in
         { columns = List.append left.columns (rjoinmap2 right.columns);
