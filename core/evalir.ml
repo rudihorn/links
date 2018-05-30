@@ -635,7 +635,7 @@ struct
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let data = value env data in
-        let classic = Settings.get_value Basicsettings.RelationalLenses.relational_lenses_classic in
+        let classic = Settings.get_value Basicsettings.RelationalLenses.classic_lenses in
         let res = 
             if classic then
                 LensHelpersClassic.lens_put lens data 
