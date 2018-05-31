@@ -6,7 +6,7 @@ if [ $? -eq 0 ]; then
 	clear
 	echo "Compilation was successful, running tests."
 	# ./links_tests -runner sequential $@
-	./links_tests $@
+	./_build/default/unit/unitTests.exe -runner sequential $@
 else
 	echo "Build failed, not running tests."
 fi

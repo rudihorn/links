@@ -50,7 +50,7 @@ let dat_fd_set_1_recs = List.map (LensTestHelpers.delt_constr_int "A B C D E F G
 (* Tests *)
 
 let test_show_fd_set test_ctx = 
-    let show = FunDepSet.Show_t.show dat_fd_set in
+    let show = show_fundepset dat_fd_set in
     (* let _ = Debug.print show in *)
     let cmp = "{{\"A\"; \"B\"; } -> {\"C\"; \"D\"; }; {\"C\"; \"D\"; } -> {\"E\"; }; {\"E\"; } -> {\"F\"; \"G\"; };}" in
     ()

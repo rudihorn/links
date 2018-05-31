@@ -242,10 +242,10 @@ let test_join_neg_1 test_ctx =
     LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular joined);
     assert (joined.plus_rows = Array.of_list [
         [box_int 2; box_string "12"; box_string "data"];
-        [box_int 5; box_string "abc"; box_string "other"];
     ]);
     assert (joined.neg_rows = Array.of_list [
         [box_int 3; box_string "this"; box_string "in"];
+        [box_int 5; box_string "abc"; box_string "other"];
         [box_int 14; box_string "9012"; box_string "exists"];
     ])
 
