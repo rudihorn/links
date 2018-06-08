@@ -5,12 +5,6 @@ open Value
 
 let get_lens_sort_pred (_, pred, _ : Types.lens_sort) = pred
 
-let get_lens_sort_cols (_, _, rowType : Types.lens_sort) = 
-  rowType
-
-let get_lens_sort_colset (_, _, rowType : Types.lens_sort) = 
-  let cols = List.map (fun (col) -> col.alias) rowType in
-  ColSet.of_list cols
 
 module LensCol = struct 
     type t = Types.lens_col
@@ -21,19 +15,35 @@ module LensCol = struct
     let present (col : t) = col.present
 end
 
+module LensColList = struct
+    type t = LensCol.t list 
+
+    let present (cs : t) =
+        List.filter LensCol.present cs
+
+    let aliases (cs : t) = 
+        List.map LensCol.alias cs
+
+    let present_aliases (cs : t) =
+        let pr = present cs in
+        aliases pr
+end
+
 module LensSort = struct
     type t = Types.lens_sort
 
     let fundeps (fds, _, _ : t) = fds
     let predicate = get_lens_sort_pred
-    let cols = get_lens_sort_cols
+    let cols (_fds, _pred, rowType : t) = rowType
 
-    let present_cols sort = 
+    let cols_present_aliases (sort : t) = 
         let cols = cols sort in
-        let cols = List.filter LensCol.present cols in
-        cols
+        LensColList.present_aliases cols 
 
-    let colset = get_lens_sort_colset
+    let colset (sort:t) = 
+        let columns = cols sort in
+        let columns = LensColList.present_aliases columns in 
+        ColSet.of_list columns
 
     let make fds pred rowType : Types.lens_sort = (fds, pred, rowType)
 end
@@ -59,7 +69,7 @@ let get_lens_col_by_alias (cols : lens_col list) alias =
         NotFound _ -> None
 
 let get_lens_sort_col_by_alias sort alias = 
-    let cols = get_lens_sort_cols sort in
+    let cols = LensSort.cols sort in
     get_lens_col_by_alias cols alias
 
 let get_lens_col_type (col : Types.lens_col) = col.typ
@@ -70,10 +80,6 @@ let set_lens_col_alias (col : Types.lens_col) (new_alias : string) = { col with 
 
 let match_lens_col_alias (c1 : lens_col) (c2 : lens_col) = c1.alias = c2.alias
 
-let get_rowtype_cols (rowType : Types.typ) = 
-    match rowType with 
-    | `Record (fields, row_var, dual) -> fields 
-    | e -> failwith "Expected a record."
 
 let remove_list_values (l : string list) (remove : string list) = 
     List.filter (fun x -> not (List.mem x remove)) l
@@ -94,6 +100,7 @@ let get_field_spec_type (typ : Types.field_spec) =
     match typ with
     | `Present t -> t
     | _ -> failwith "Expected `Present"
+
 let records_equal recA recB =
     (* this function checks that every entry in recA is equal in recB *)
     not (List.exists (fun (name, value) -> get_record_val name recB <> value) (unbox_record recA))
@@ -139,7 +146,7 @@ let reorder_delta_list_cols (recs : (Value.t * int) list) =
         (t,m)::xs
 
 let reorder_delta_list_cols_sort (sort : lens_sort) (recs : (Value.t * int) list) = 
-    let cols = List.filter (fun c -> c.present) (get_lens_sort_cols sort) in
+    let cols = List.filter (fun c -> c.present) (LensSort.cols sort) in
     let cols = List.map (fun c -> c.alias) cols in
     List.map (fun (t,m) -> (reorder_record_cols cols t, m)) recs
 

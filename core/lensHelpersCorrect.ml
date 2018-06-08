@@ -16,7 +16,7 @@ let rec calculate_fd_changelist (fds : FunDepSet.t) (data : SortedRecords.recs) 
         if FunDepSet.is_empty fds then
             []
         else
-            let fd = get_fd_root fds in 
+            let fd = FunDepSet.root_fd fds |> OptionUtils.val_of in 
             let fdl, fdr = FunDep.left fd, FunDep.right fd in
             let cols_l = ColSet.elements fdl in
             let cols_r = ColSet.elements fdr in
@@ -99,13 +99,13 @@ let relational_update (fds : Types.fundepset) (changedata : SortedRecords.recs) 
     
 
 let get_changes (lens : Value.t) (data : SortedRecords.recs) =
-    let sort = get_lens_sort lens in
+    let sort = Lens.sort lens in
     let fds = LensSort.fundeps sort in
     let changelist = calculate_fd_changelist fds data in
     (* query relevant rows in database *)
     let phrase = matches_change changelist in
     let res = lens_get_select_opt lens phrase in
-    let res = SortedRecords.construct_cols (lens_get_cols lens) res in
+    let res = SortedRecords.construct_cols (Lens.cols_present_aliases lens) res in
     (* perform relational update *)
     relational_update fds data res
 
@@ -126,7 +126,7 @@ let query_join_records (lens : Value.t) (set : SortedRecords.recs) (on : string 
     let recs = List.sort_uniq SortedRecords.compare recs in
     let query = Phrase.in_expr on recs in
     let recs = lens_get_select_opt lens query in
-    SortedRecords.construct_cols (lens_get_cols lens) recs
+    SortedRecords.construct_cols (Lens.cols_present_aliases lens) recs
 
 let query_project_records (lens : Value.t) (set : SortedRecords.recs) (key : string list) (drop : string list) =
     let proj = SortedRecords.project_onto set key in
@@ -134,7 +134,7 @@ let query_project_records (lens : Value.t) (set : SortedRecords.recs) (key : str
     let recs = List.sort_uniq SortedRecords.compare recs in
     let query = Phrase.in_expr key recs in
     let recs = lens_get_select_opt lens query in
-    let recs = SortedRecords.construct_cols (lens_get_cols lens) recs in
+    let recs = SortedRecords.construct_cols (Lens.cols_present_aliases lens) recs in
     SortedRecords.project_onto recs (List.append key drop)
 
 let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Value.t -> SortedRecords.recs -> unit) =
@@ -157,10 +157,10 @@ let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Val
             fn l delt 
     | `LensJoin (l1, l2, cols, pd, qd, sort)  -> 
             let cols_simp = List.map (fun (a,_,_) -> a) cols in
-            let sort1 = get_lens_sort l1 in 
-            let proj1 = SortedRecords.project_onto delt (get_lens_sort_cols_list sort1) in 
-            let sort2 = get_lens_sort l2 in
-            let proj2 = SortedRecords.project_onto delt (get_lens_sort_cols_list sort2) in
+            let sort1 = Lens.sort l1 in 
+            let proj1 = SortedRecords.project_onto delt (LensSort.cols_present_aliases sort1) in 
+            let sort2 = Lens.sort l2 in
+            let proj2 = SortedRecords.project_onto delt (LensSort.cols_present_aliases sort2) in
             let delta_m0 = get_changes l1 proj1 in
             let delta_n0 = get_changes l2 proj2 in
             let delta_l =
@@ -200,7 +200,7 @@ let rec lens_put_set_step (lens : Value.t) (delt : SortedRecords.recs) (fn : Val
     | _ -> failwith "Unsupport lens."
 
 let lens_get_delta (lens : Value.t) (data : Value.t) =
-    let cols = lens_get_cols lens in
+    let cols = Lens.cols_present_aliases lens in
     let orig = SortedRecords.construct_cols cols (lens_get lens ()) in
     let data = SortedRecords.merge (SortedRecords.construct_cols cols data) (SortedRecords.negate orig) in
     data

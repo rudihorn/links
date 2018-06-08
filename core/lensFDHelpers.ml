@@ -6,37 +6,40 @@ open LensRecordHelpers
 open Value
 
 
+module FunDep = struct 
+    include Types.FunDep
 
-type fd_node = [
-    | `FDNode of colset * (fd_node list)
-]
+    let left (l,_) = l
+    let right (_,r) = r 
+    
+    let compare (l1,r1) (l2, r2) = 
+        let res = ColSet.compare l1 l2 in
+        if res = 0 then
+            ColSet.compare r1 r2
+        else
+            res
 
-let fdnode_left (fd : fd_node) = match fd with
-    | `FDNode (l, _) -> l
+    let of_lists (left, right : string list * string list) : t =
+        let left = ColSet.of_list left in
+        let right = ColSet.of_list right in
+        (left, right)
 
-let fdnode_right (fd : fd_node) = match fd with
-    | `FDNode (_, l) -> l
+    let make left right : t = (left, right)
 
-let get_fd_root (fds : Types.fundepset) = 
-    let res = FunDepSet.filter (fun fd ->
-        not (FunDepSet.exists (fun fd2 ->
-            ColSet.subset (FunDep.right fd2) (FunDep.left fd)) fds
-        )
-    ) fds in
-    FunDepSet.min_elt res
+    let key_fd (keys : string list) (cols : string list) =
+        let keys = ColSet.of_list keys in
+        let cols = ColSet.of_list cols in
+        let right = ColSet.diff cols keys in
+        make keys right
 
-let get_defining_fd (fds : Types.fundepset) (cols : Types.colset) =
-    let res = FunDepSet.filter (fun fd ->
-        ColSet.subset cols (FunDep.right fd)    
-    ) fds in
-    FunDepSet.min_elt res
+end
 
 module FunDepSet = struct
     include FunDepSet
 
-    let get_root = get_fd_root
-
-    let get_defining = get_defining_fd
+    let of_lists (fds : (string list * string list) list) : t =
+        let fds = List.map FunDep.of_lists fds in
+        of_list fds
 
     let remove_def_by (fds : t) (cols : Types.colset) =
         let remove fd = 
@@ -49,22 +52,64 @@ module FunDepSet = struct
         let keep fd = not (ColSet.is_empty (FunDep.right fd)) in
         let fds = filter keep fds in
         fds
+
+    let key_fds left right =
+        FunDepSet.of_list [FunDep.key_fd left right]
+
+    (* Find the a functional dependency at the root, which is the functional dependency that defines all other nodes *)
+    let root_fd (fds : t) = 
+        let res = filter (fun fd ->
+            not (exists (fun fd2 ->
+                ColSet.subset (FunDep.right fd2) (FunDep.left fd)) fds
+            )
+        ) fds in
+        if is_empty res then
+            None
+        else
+            Some(min_elt res)
+
+    (* Get the functional dependency which defines the columns cols *)
+    let defining_fd (fds : t) (cols : colset) =
+        let res = filter (fun fd ->
+            ColSet.subset cols (FunDep.right fd)    
+        ) fds in
+        min_elt res
+
 end
 
-let rec get_fd_subnodes (fd : Types.fundep) (fds : Types.fundepset) : fd_node = 
-    let subfds = FunDepSet.filter (fun fd2 ->
-        ColSet.subset (FunDep.right fd) (FunDep.left fd2)
-    ) fds in
-    let remaining = ColSet.filter (fun col ->
-        not (FunDepSet.exists (fun fd2 -> ColSet.mem col (FunDep.left fd2)) subfds)) (FunDep.right fd) in
-    let remaining = `FDNode (remaining, []) in
-    let subfds = List.map (fun x -> get_fd_subnodes x fds) (FunDepSet.elements subfds) in
-        `FDNode (FunDep.left fd, remaining :: subfds)
+module FunDepTree = struct  
+    type t = [ `FDNode of colset * (t list) ]
+    
+    let cols (n : t) = 
+        match n with
+        | `FDNode (cols, _) -> cols
 
-let get_fd_tree (fds : Types.fundepset) = 
-    let root = get_fd_root fds in
-    let rootFDNode = get_fd_subnodes root fds in
-        rootFDNode
+    let subnodes (n : t) =
+        match n with
+        | `FDNode (_, subnodes) -> subnodes 
+
+    let rec pp (fmt : Format.formatter) (v : t) = 
+        ColSet.pp fmt (cols v);
+        Format.pp_open_box fmt 2;
+        List.iter (pp fmt) (subnodes v);
+        Format.pp_close_box fmt ()
+
+    let rec fd_subnodes (fds : FunDepSet.t) (fd : FunDep.t) : t = 
+        let subfds = FunDepSet.filter (fun fd2 ->
+            ColSet.subset (FunDep.right fd) (FunDep.left fd2)
+        ) fds in
+        let remaining = ColSet.filter (fun col ->
+            not (FunDepSet.exists (fun fd2 -> ColSet.mem col (FunDep.left fd2)) subfds)) (FunDep.right fd) in
+        let remaining = `FDNode (remaining, []) in
+        let subfds = List.map (fd_subnodes fds) (FunDepSet.elements subfds) in
+            `FDNode (FunDep.left fd, remaining :: subfds)
+
+    let of_fds (fds : Types.fundepset) = 
+        let root = FunDepSet.root_fd fds in
+        OptionUtils.opt_map (fd_subnodes fds) root
+
+end
+
 
 let get_fd_transitive_closure (cols : colset) (fds : fundepset) =
     let rec get = fun attrs fds ->
@@ -79,38 +124,6 @@ let get_fd_transitive_closure (cols : colset) (fds : fundepset) =
 
 let is_key (key : string list) (cols : string list) (fds : Types.fundepset) =
     false
-
-let rec print_list (l : string list) (out : string -> unit) =
-    match l with
-    | x :: [] -> out x
-    | x :: xs -> out (x ^ ", "); print_list xs out
-    | [] -> out ""
-
-let rec print_spacer (depth : int) (out : string -> unit) =
-    match depth with 
-    | 0 -> ()
-    | n -> (out "  "); print_spacer (n - 1) out
-
-let debug_print_col_list (cols : string list) =
-    let inner = match cols with
-    | [] -> ""
-    | x :: xs -> List.fold_left (fun a b -> a ^ ", " ^ b) x xs in
-    "[" ^ inner ^ "]"
-
-
-let rec debug_print_fd_tree_ex (fd : fd_node) (depth : int) (out : string -> unit) =
-    print_spacer depth out;
-    out " - ";
-    out (show_colset (fdnode_left fd));
-    out " -> \n";
-    let _ = List.map (fun f -> debug_print_fd_tree_ex f (depth + 1) out) (fdnode_right fd) in
-    ()
-
-let debug_print_fd_tree (fd : fd_node) =
-    let str = ref "" in
-    let _ = debug_print_fd_tree_ex fd 0 (fun x -> str := !str ^ x) in
-    Debug.print !str
-
 let records_match_on recA recB on =
     ColSet.for_all (fun col ->
         get_record_val col recA = get_record_val col recB) on

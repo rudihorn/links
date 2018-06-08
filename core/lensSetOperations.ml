@@ -40,9 +40,9 @@ module SortedRecords = struct
         let simpl_rec r = List.map2 (fun a (k,v) -> if a = k then v else
             begin
                 try 
-                    let (_,v) = List.find (fun (k,v) -> k = a) r in
+                    let (_,v) = List.find (fun (k,_v) -> k = a) r in
                     v
-                with NotFound _ -> failwith ("lens set columns not consistent: " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,v) -> k) r))
+                with NotFound _ -> failwith ("lens set columns not consistent: " ^ str_list_to_string cols ^ " != " ^ str_list_to_string (List.map (fun (k,_v) -> k) r))
             end
             ) cols r in
         let recs = Array.of_list (List.map simpl_rec recs) in
@@ -53,7 +53,7 @@ module SortedRecords = struct
     let construct (records : Value.t) =
         let l = unbox_list records in
         let recs = List.map unbox_record l in
-        let keys = List.map (fun (k,v) -> k) (List.hd recs) in
+        let keys = List.map (fun (k,_v) -> k) (List.hd recs) in
         construct_cols keys records 
         
     let to_string (rs : recs) =

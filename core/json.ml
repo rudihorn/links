@@ -3,6 +3,7 @@ open ProcessTypes
 open Utility
 open Types
 open Value
+open LensFDHelpers
 
 (* Setting *)
 let show_json = Basicsettings.Json.show_json

@@ -150,39 +150,22 @@ type colset = ColSet.t
       [@@deriving show]
 
 module FunDep = struct 
-    type t = colset * colset
+    type t = colset * colset 
     [@@deriving show]
 
-    (* let pp fmt (l,r) = 
-        Format.fprintf fmt "%a -> %a@." ColSet.pp l ColSet.pp r;
-        *)
-
-    let left (l,_) = l
-    let right (_,r) = r 
-    
-    let compare (l1,r1) (l2, r2) = 
+    let compare (l1, r1 : t) (l2, r2 : t) =
         let res = ColSet.compare l1 l2 in
         if res = 0 then
-            ColSet.compare r1 r2
+            ColSet.compare r1 r2 
         else
             res
-
-    let of_lists (left, right : string list * string list) : t =
-        let left = ColSet.of_list left in
-        let right = ColSet.of_list right in
-        (left, right)
-
-    let make left right = (left, right)
 end
-type fundep = FunDep.t
+
+type fundep = colset * colset 
         [@@deriving show]
 
 module FunDepSet = struct
     include Set.Make(FunDep)
-
-    let of_lists (fds : (string list * string list) list) : t =
-        let fds = List.map FunDep.of_lists fds in
-        of_list fds
 end
 
 type fundepset = FunDepSet.t

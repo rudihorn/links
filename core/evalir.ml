@@ -4,6 +4,7 @@ open Lwt
 open Utility
 open Proc
 open Pervasives
+open LensHelpers
 
 let lookup_fun = Tables.lookup Tables.fun_defs
 let find_fun = Tables.find Tables.fun_defs
@@ -594,53 +595,54 @@ struct
       begin
           let typ = LensRecordHelpers.get_lens_sort_row_type sort in
           match value env table, (TypeUtils.concrete_type typ) with 
-            | `Table ((_, tableName, _, _) as tinfo), `Record row ->
+            | `Table ((_, tableName, _, _) as tinfo), `Record _row ->
                  apply_cont cont env (`Lens (tinfo, LensRecordHelpers.set_lens_sort_table_name sort tableName))
-            | `List records, `Record row -> apply_cont cont env (`LensMem (`List records, sort))
+            | `List records, `Record _row -> apply_cont cont env (`LensMem (`List records, sort))
+            | _ -> failwith ("Unsupported underlying lens value.")
       end
-    | `LensDrop (lens, drop, key, def, sort) as le -> 
+    | `LensDrop (lens, drop, key, def, _sort) -> 
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in 
-        let (fds, cond, cols) = LensHelpers.get_lens_sort lens in
-        let sort = (LensFDHelpers.FunDepSet.remove_def_by fds (Types.ColSet.singleton drop), cond, LensRecordHelpers.remove_record_type_column drop cols) in
+        let fds = Lens.fundeps lens in
+        let cols = Lens.cols lens in
+        let predicate = Lens.predicate lens in
+        let sort = (LensFDHelpers.FunDepSet.remove_def_by fds (Types.ColSet.singleton drop), predicate, LensRecordHelpers.remove_record_type_column drop cols) in
         let def = match value env def with #Value.primitive_value as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
-    | `LensSelect (lens, pred, sort) ->
+    | `LensSelect (lens, pred, _sort) ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let pred = LensQueryHelpers.lens_phrase_of_phrase pred in
-        let sort = LensHelpers.get_lens_sort lens in
+        let sort = Lens.sort lens in
         let sort = LensHelpers.select_lens_sort sort pred in
           apply_cont cont env (`LensSelect (lens, pred, sort))
-    | `LensJoin (lens1, lens2, on, left, right, sort) ->
+    | `LensJoin (lens1, lens2, on, left, right, _sort) ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens1 = value env lens1 in
         let lens2 = value env lens2 in
         let left = LensQueryHelpers.lens_phrase_of_phrase left in
         let right = LensQueryHelpers.lens_phrase_of_phrase right in
-        let get_sort = LensHelpers.get_lens_sort in
-        let lens1, lens2 = if LensHelpers.join_lens_should_swap (get_sort lens1) (get_sort lens2) on then
+        let lens1, lens2 = if LensHelpers.join_lens_should_swap (Lens.sort lens1) (Lens.sort lens2) on then
           lens2, lens1
         else
           lens1, lens2 in
-        let sort, on = LensHelpers.join_lens_sort (get_sort lens1) (get_sort lens2) on in
+        let sort, on = LensHelpers.join_lens_sort (Lens.sort lens1) (Lens.sort lens2) on in
          apply_cont cont env (`LensJoin (lens1, lens2, on, left, right, sort))
-    | `LensGet (lens, rtype) as le ->
+    | `LensGet (lens, _rtype) ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         (* let callfn = fun fnptr -> fnptr in *)
         let res = LensHelpers.lens_get lens () in
           apply_cont cont env res
-    | `LensPut (lens, data, rtype) as le ->
+    | `LensPut (lens, data, _rtype) ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let data = value env data in
         let classic = Settings.get_value Basicsettings.RelationalLenses.classic_lenses in
-        let res = 
-            if classic then
-                LensHelpersClassic.lens_put lens data 
-            else
-                LensHelpersCorrect.lens_put lens data in 
+        if classic then
+            LensHelpersClassic.lens_put lens data 
+        else
+            LensHelpersCorrect.lens_put lens data;
         apply_cont cont env (Value.box_unit ()) 
     | `Table (db, name, keys, (readtype, _, _)) ->
       begin

@@ -1,14 +1,14 @@
 (*pp deriving *)
 
 open Debug
-open LensFDHelpers
-open LensQueryHelpers
-open LensHelpers
 open UnitTestsLensCommon
 open OUnit2
 open Types
 open Value
 open Utility
+open LensFDHelpers
+open LensQueryHelpers
+open LensHelpers
 
 (* let _ = Settings.set_value Debug.debugging_enabled true *)
 
@@ -107,7 +107,7 @@ let construct_join_lens (fd_set : fundepset) (name : string) data =
     l1
 
 let construct_join_lens_2 l1 l2 on =
-    let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
+    let sort, on = join_lens_sort (Lens.sort l1) (Lens.sort l2) on in
     `LensJoin (l1, l2, on, `Constant (`Bool true), `Constant (`Bool false), sort)
 
 let cat_tex cols name delta =
@@ -314,7 +314,7 @@ let test_remove_select_phrase test_ctx =
     let fds = dat_fd_set_2 in
     let l1 = LensTestHelpers.mem_lens_str "A -> B; B -> C" "tbl1" [] in
     let pred = OptionUtils.val_of (Phrase.combine_and_l [Phrase.greater_than (Phrase.var "B") (Phrase.constant_int 10); Phrase.equal (Phrase.var "C") (Phrase.constant_int 5)]) in
-    let sort = select_lens_sort (get_lens_sort l1) pred in
+    let sort = select_lens_sort (Lens.sort l1) pred in
     let phrase = remove_select_phrase sort pred data in
     let _ = LensTestHelpers.print_verbose test_ctx (LensQueryHelpers.construct_query (OptionUtils.val_of phrase)) in 
     ()
@@ -339,7 +339,7 @@ let test_calculate_fd_changelist test_ctx =
 let test_can_remove_phrase test_ctx =
     let data = dat_fd_set_1_recs in
     let lens = construct_join_lens dat_fd_set "tbl1" [] in
-    let sort = get_lens_sort lens in
+    let sort = Lens.sort lens in
     let (row,_) = List.nth data 1 in
     let phrase = can_remove_phrase sort ["E", "E", "table1"] row data in
     let text = LensQueryHelpers.construct_query (OptionUtils.val_of phrase) in

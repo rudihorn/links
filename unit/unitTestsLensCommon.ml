@@ -1,12 +1,12 @@
 open Debug
-open LensFDHelpers
-open LensHelpers
-open LensSetOperations
 open OUnit2
 open Pg_database
 open Types
 open Value
 open Utility
+open LensFDHelpers
+open LensHelpers
+open LensSetOperations
 
 
 let display_table_query_opt = Conf.make_bool "display_table_query" false "Show queries to take and manipulate tables."
@@ -31,10 +31,6 @@ module LensTestHelpers = struct
             print_endline message
         else
             ()
-
-    let force_in_memory v =
-        let _ = Settings.set_value lens_force_mem_enabled v in
-        ()
 
     let colslist_of_string str =
         let cols = String.split_on_char ' ' str in
@@ -76,20 +72,20 @@ module LensTestHelpers = struct
         mem_lens (fundepset_of_string fds) name data
 
     let join_lens_dl l1 l2 on =
-        let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
+        let sort, on = join_lens_sort (Lens.sort l1) (Lens.sort l2) on in
         `LensJoin (l1, l2, on, `Constant (`Bool true), `Constant (`Bool false), sort)
 
     let join_lens_dr l1 l2 on =
-        let sort, on = join_lens_sort (get_lens_sort l1) (get_lens_sort l2) on in
+        let sort, on = join_lens_sort (Lens.sort l1) (Lens.sort l2) on in
         `LensJoin (l1, l2, on, `Constant (`Bool false), `Constant (`Bool true), sort)
 
     let select_lens l phrase =
-        let sort = get_lens_sort l in
+        let sort = Lens.sort l in
         let sort = select_lens_sort sort phrase in
         `LensSelect (l, phrase, sort)
 
     let drop_lens l drop key default = 
-        let sort = get_lens_sort l in
+        let sort = Lens.sort l in
         let (fds, cond, r) = sort in
         let fds = LensFDHelpers.FunDepSet.remove_def_by fds (ColSet.singleton drop) in
         let r = LensRecordHelpers.remove_record_type_column drop r in

@@ -107,23 +107,13 @@ type colset = ColSet.t
 
 module FunDep : sig 
     type t = colset * colset 
-
-    val left    : t -> colset
-    val right   : t -> colset
-    
     val compare : t -> t -> int
-
-    val make    : colset -> colset -> t
-
-    val of_lists : string list * string list -> t
 end
 type fundep = FunDep.t
     [@@deriving show]
 
 module FunDepSet : sig 
     include Utility.Set with type elt = fundep
-
-    val of_lists : (string list * string list) list -> t
 end
 
 type fundepset = FunDepSet.t

@@ -1,5 +1,7 @@
 open Utility
 open Sugartypes
+open LensFDHelpers
+open LensRecordHelpers
 
 (* let constrain_absence_types = Basicsettings.Typing.contrain_absence_types *)
 
@@ -2298,38 +2300,21 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
         | `TableLit _ -> assert false
         | `LensLit (table, _) ->
            let table = tc table in
-           let trowtype = 
-               begin
-                 match typ table with
-                 | `Table (r,_,_) -> r
-                 | `Application (_, [`Type (`Record r)]) -> `Record r
-               end in
-           let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
-           let lens_sort = (Types.FunDepSet.empty, None, tcols) in
+           let cols = LensTypes.sort_cols_of_table "" (typ table) in
+           let lens_sort = (FunDepSet.empty, None, cols) in
            `LensLit(erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensKeysLit (table, keys, _) ->
            let table = tc table in
-           let trowtype = 
-               begin
-                 match typ table with
-                 | `Table (r,_,_) -> r
-                 | `Application (_, [`Type (`Record r)]) -> `Record r
-               end in
-           let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
-           let fds = LensHelpers.get_fds keys trowtype in
-           let lens_sort = (fds, None, tcols) in
+           let cols = LensTypes.sort_cols_of_table "" (typ table) in 
+           let keys = LensTypes.columns_of_phrase keys in 
+           let fds = FunDepSet.key_fds keys (LensColList.present_aliases cols) in
+           let lens_sort = (fds, None, cols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensFunDepsLit (table, fds, _) ->
            let table = tc table in
-           let trowtype = 
-               begin
-                 match typ table with
-                 | `Table (r,_,_) -> r
-                 | `Application (_, [`Type (`Record r)]) -> `Record r
-               end in
-           let tcols = LensHelpers.get_record_type_sort_cols "" trowtype in
-           let fds = LensHelpersCorrect.get_fds fds tcols in
-           let lens_sort = (fds, None, tcols) in
+           let cols = LensTypes.sort_cols_of_table "" (typ table) in 
+           let fds = LensHelpersCorrect.get_fds fds cols in
+           let lens_sort = (fds, None, cols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
         | `LensDropLit (lens, drop, key, default, _) ->
            let _ = LensHelpers.ensure_lenses_enabled () in
@@ -2352,7 +2337,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            and lens2 = tc lens2 in
            let sort1 = LensHelpers.get_lens_type_sort (typ lens1)
            and sort2 = LensHelpers.get_lens_type_sort (typ lens2) in
-           let sort, _ = LensHelpers.join_lens_sort sort1 sort2 (LensHelpers.get_phrase_columns on) in
+           let sort, _ = LensHelpers.join_lens_sort sort1 sort2 (LensTypes.columns_of_phrase on) in
                `LensJoinLit (erase lens1, erase lens2, on, left, right, Some sort), `Lens(sort), merge_usages [usages lens1; usages lens2]
         | `LensGetLit (lens, _) ->
            let _ = LensHelpers.ensure_lenses_enabled () in
