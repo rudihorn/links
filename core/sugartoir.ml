@@ -928,7 +928,7 @@ struct
               let _ = LensHelpers.ensure_lenses_enabled () in
               let lens1 = ev lens1 in
               let lens2 = ev lens2 in
-              let on = LensTypes.columns_of_phrase on in
+              let on = LensTypes.cols_of_phrase on in
                 I.lens_join_handle (lens1, lens2, on, left, right, t)
           | `LensGetLit (lens, Some t) ->
               let _ = LensHelpers.ensure_lenses_enabled () in

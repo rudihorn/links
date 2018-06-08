@@ -88,10 +88,13 @@ module FunDepTree = struct
         match n with
         | `FDNode (_, subnodes) -> subnodes 
 
-    let rec pp (fmt : Format.formatter) (v : t) = 
-        ColSet.pp fmt (cols v);
+    let rec pp_pretty (fmt : Format.formatter) (v : t) = 
+        Format.pp_force_newline fmt ();
         Format.pp_open_box fmt 2;
-        List.iter (pp fmt) (subnodes v);
+        Format.pp_print_string fmt "-";
+        Format.pp_print_space fmt ();
+        ColSet.pp_pretty fmt (cols v);
+        List.iter (fun node -> pp_pretty fmt node) (subnodes v);
         Format.pp_close_box fmt ()
 
     let rec fd_subnodes (fds : FunDepSet.t) (fd : FunDep.t) : t = 
@@ -100,9 +103,9 @@ module FunDepTree = struct
         ) fds in
         let remaining = ColSet.filter (fun col ->
             not (FunDepSet.exists (fun fd2 -> ColSet.mem col (FunDep.left fd2)) subfds)) (FunDep.right fd) in
-        let remaining = `FDNode (remaining, []) in
         let subfds = List.map (fd_subnodes fds) (FunDepSet.elements subfds) in
-            `FDNode (FunDep.left fd, remaining :: subfds)
+        let subfds = if ColSet.is_empty remaining then subfds else `FDNode (remaining, []) :: subfds in
+            `FDNode (FunDep.left fd, subfds)
 
     let of_fds (fds : Types.fundepset) = 
         let root = FunDepSet.root_fd fds in

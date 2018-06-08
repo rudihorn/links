@@ -101,7 +101,12 @@ type lens_phrase =
   ]
     [@@deriving show]
         
-module ColSet = Utility.StringSet
+module ColSet : sig
+    include Utility.Set with type elt = string
+
+    val pp_pretty : Format.formatter -> t -> unit
+end
+
 type colset = ColSet.t
     [@@deriving show]
 

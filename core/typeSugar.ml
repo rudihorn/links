@@ -2306,7 +2306,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
         | `LensKeysLit (table, keys, _) ->
            let table = tc table in
            let cols = LensTypes.sort_cols_of_table "" (typ table) in 
-           let keys = LensTypes.columns_of_phrase keys in 
+           let keys = LensTypes.cols_of_phrase keys in 
            let fds = FunDepSet.key_fds keys (LensColList.present_aliases cols) in
            let lens_sort = (fds, None, cols) in
            `LensLit (erase table, Some (lens_sort)), `Lens (lens_sort), merge_usages [usages table]
@@ -2337,7 +2337,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            and lens2 = tc lens2 in
            let sort1 = LensHelpers.get_lens_type_sort (typ lens1)
            and sort2 = LensHelpers.get_lens_type_sort (typ lens2) in
-           let sort, _ = LensHelpers.join_lens_sort sort1 sort2 (LensTypes.columns_of_phrase on) in
+           let sort, _ = LensHelpers.join_lens_sort sort1 sort2 (LensTypes.cols_of_phrase on) in
                `LensJoinLit (erase lens1, erase lens2, on, left, right, Some sort), `Lens(sort), merge_usages [usages lens1; usages lens2]
         | `LensGetLit (lens, _) ->
            let _ = LensHelpers.ensure_lenses_enabled () in

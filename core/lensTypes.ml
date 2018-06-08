@@ -39,7 +39,7 @@ let var_name (var, _pos : Sugartypes.phrase) =
     | `Var name -> name
     | _ -> failwith "Expected a `Var type"
 
-let columns_of_phrase (key, _pos : Sugartypes.phrase) : string list = 
+let cols_of_phrase (key, _pos : Sugartypes.phrase) : string list = 
     match key with
     | `TupleLit keys -> List.map var_name keys
     | `Var name -> [name]

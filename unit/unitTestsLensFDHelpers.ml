@@ -1,6 +1,5 @@
 (*pp deriving *)
 
-open Debug
 open UnitTestsLensCommon
 open OUnit2
 open Types
@@ -51,16 +50,20 @@ let dat_fd_set_1_recs = List.map (LensTestHelpers.delt_constr_int "A B C D E F G
 
 let test_show_fd_set test_ctx = 
     let show = show_fundepset dat_fd_set in
-    (* let _ = Debug.print show in *)
-    let cmp = "{{\"A\"; \"B\"; } -> {\"C\"; \"D\"; }; {\"C\"; \"D\"; } -> {\"E\"; }; {\"E\"; } -> {\"F\"; \"G\"; };}" in
-    ()
-    (* assert_equal show cmp *)
+    LensTestHelpers.print_verbose test_ctx show;
+    let cmp = "{({A; B; }, {C; D; }); ({C; D; }, {E; }); ({E; }, {F; G; }); }" in
+    assert_equal show cmp
 
-let test_transitive_closure test_ctx = 
+let test_show_fd_tree test_ctx = 
+    let tree = FunDepTree.of_fds dat_fd_set |> OptionUtils.val_of in
+    LensTestHelpers.fmt_std_v test_ctx (fun fmt -> FunDepTree.pp_pretty fmt tree)
+
+
+let test_transitive_closure _test_ctx = 
     let outp = get_fd_transitive_closure dat_cols dat_fd_set in
     assert_equal true (ColSet.equal outp dat_closure)
 
-let test_find_update_recs test_ctx =
+let test_find_update_recs _test_ctx =
     let matches fd ind1 ind2 =
         let res = find_update_record fd (List.nth dat_update_recs ind1) dat_update_recs in
         match res with
@@ -71,11 +74,11 @@ let test_find_update_recs test_ctx =
     let fd = FunDepSet.max_elt dat_fd_set_2 in
     matches fd 2 3
 
-let test_is_update_record test_ctx =
+let test_is_update_record _test_ctx =
     let res = List.map (fun a -> is_update_record dat_fd_set_2 a dat_update_recs) dat_update_recs in
     assert_equal [true; true; true; true; false; false; false] res
 
-let test_join_update_filter test_ctx =
+let test_join_update_filter _test_ctx =
     let dat_fd_set_1 = FunDepSet.of_lists [
         (["A"], ["B"]);
         (["B"], ["C"])
@@ -103,7 +106,7 @@ let construct_join_lens (fd_set : fundepset) (name : string) data =
     let colFn tbl name = {
         alias = name; name = name; table = tbl; typ = `Primitive `Int; present = true
     } in
-    let l1 = `LensMem ((`List data), (fd_set, None, List.map (colFn "table1") cols)) in
+    let l1 = `LensMem ((`List data), (fd_set, None, List.map (colFn name) cols)) in
     l1
 
 let construct_join_lens_2 l1 l2 on =
@@ -111,7 +114,7 @@ let construct_join_lens_2 l1 l2 on =
     `LensJoin (l1, l2, on, `Constant (`Bool true), `Constant (`Bool false), sort)
 
 let cat_tex cols name delta =
-    let cs = List.fold_right (fun a b -> b ^ "c") cols "" in
+    let cs = List.fold_right (fun _a b -> b ^ "c") cols "" in
     let _ = Debug.print ("\\begin{array}{c|" ^ cs ^ "}") in
     let _ = Debug.print ("\t" ^ name ^ 
         (List.fold_left (fun a b -> a ^ " & " ^ b) "" cols )
@@ -127,7 +130,7 @@ let cat_tex cols name delta =
     let _ = Debug.print "\\end{array}" in
     ()
 
-let run_join_test_case_1 data exp1 exp2 dbg =
+let run_join_test_case_1 data _exp1 _exp2 _dbg =
     let dat_fd_set_1 = FunDepSet.of_lists [
         (["A"], ["B"]);
         (["B"], ["C"])
@@ -136,7 +139,6 @@ let run_join_test_case_1 data exp1 exp2 dbg =
         (["B"], ["D"]);
         (["D"], ["E"])
     ] in
-    let on = ["B", "table1", "B"] in
     let l1 = construct_join_lens dat_fd_set_1 "table1" (List.map (rec_constr ["A"; "B"; "C"]) [
         [5; 5; 5];
         [6; 5; 5];
@@ -149,11 +151,11 @@ let run_join_test_case_1 data exp1 exp2 dbg =
         [7; 7; 7];
         [8; 8; 8];
     ]) in
-    let constr_cmp_left data = List.map (delt_constr ["A"; "B"; "C"]) data in
-    let constr_cmp_right data = List.map (delt_constr ["B"; "D"; "E"]) data in
+    let _constr_cmp_left data = List.map (delt_constr ["A"; "B"; "C"]) data in
+    let _constr_cmp_right data = List.map (delt_constr ["B"; "D"; "E"]) data in
     let constr_data = List.map (delt_constr ["A"; "B"; "C"; "D"; "E"]) in
-    let data_c = constr_data data in
-    let l = construct_join_lens_2 l1 l2 ["B"] in
+    let _data_c = constr_data data in
+    let _l = construct_join_lens_2 l1 l2 ["B"] in
     (* let (outp1, outp2) = LensHelpers.lens_delta_put_join (get_lens_sort l) l1 l2 on (`Constant (`Bool true)) (`Constant (`Bool false)) data_c in
     let _ = if dbg then
         let _ = LensHelpers.lens_debug_delta outp1 in
@@ -181,7 +183,7 @@ let run_join_test_case_1 data exp1 exp2 dbg =
     let _ = assert_equal outp2 cmp_right in *)
     ()
 
-let test_join_1_insert_new test_ctx = 
+let test_join_1_insert_new _test_ctx = 
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], +1;
     ] [
@@ -190,7 +192,7 @@ let test_join_1_insert_new test_ctx =
         [1; 1; 1], 1;
     ] false
 
-let test_join_1_delete test_ctx = 
+let test_join_1_delete _test_ctx = 
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1
     ] [
@@ -199,7 +201,7 @@ let test_join_1_delete test_ctx =
         [1; 1; 1], 0;
     ] false
 
-let test_join_1_delete_l test_ctx = 
+let test_join_1_delete_l _test_ctx = 
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
         [2; 1; 1; 1; 1], 0
@@ -210,7 +212,7 @@ let test_join_1_delete_l test_ctx =
         [1; 1; 1], 0;
     ] false
 
-let test_join_1_update_right test_ctx =
+let test_join_1_update_right _test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], +1;
         [1; 1; 1; 2; 1], -1
@@ -221,7 +223,7 @@ let test_join_1_update_right test_ctx =
         [1; 2; 1], -1
     ] false
 
-let test_join_1_left_remove_left_add test_ctx =
+let test_join_1_left_remove_left_add _test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
         [2; 1; 1; 1; 1], +1;
@@ -232,7 +234,7 @@ let test_join_1_left_remove_left_add test_ctx =
         [1; 1; 1], 0;
     ] false 
 
-let test_join_1_left_remove_left_add_2 test_ctx =
+let test_join_1_left_remove_left_add_2 _test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
         [1; 2; 1; 1; 1], +1
@@ -244,7 +246,7 @@ let test_join_1_left_remove_left_add_2 test_ctx =
         [2; 1; 1], +1;
     ] false
 
-let test_join_1_left_update test_ctx =
+let test_join_1_left_update _test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
         [1; 1; 2; 1; 1], +1;
@@ -255,7 +257,7 @@ let test_join_1_left_update test_ctx =
         [1; 1; 1], 0;
     ] false
 
-let test_join_1_weird_fd_right_change test_ctx =
+let test_join_1_weird_fd_right_change _test_ctx =
     run_join_test_case_1 [
         [1; 1; 1; 1; 1], -1;
         [1; 2; 1; 2; 1], +1;
@@ -267,7 +269,7 @@ let test_join_1_weird_fd_right_change test_ctx =
         [2; 2; 1], +1;
     ] false 
 
-let test_join_1_change_right_existing test_ctx =
+let test_join_1_change_right_existing _test_ctx =
     run_join_test_case_1 [
         [5; 5; 5; 5; 5], -1;
         [5; 5; 5; 5; 6], +1;
@@ -278,7 +280,7 @@ let test_join_1_change_right_existing test_ctx =
         [5; 5; 6], +1;
     ] false
 
-let test_join_1_change_add_existing test_ctx =
+let test_join_1_change_add_existing _test_ctx =
     run_join_test_case_1 [
         [1; 5; 1; 5; 6], +1;
     ] [
@@ -288,7 +290,7 @@ let test_join_1_change_add_existing test_ctx =
         [5; 5; 5], -1;
     ] false 
 
-let test_join_1_change_add_right test_ctx =
+let test_join_1_change_add_right _test_ctx =
     run_join_test_case_1 [
         [9; 9; 9; 9; 9], +1;
     ] [
@@ -297,7 +299,7 @@ let test_join_1_change_add_right test_ctx =
         [9; 9; 9], +1;
     ] false 
 
-let test_join_1_add_left_neutral test_ctx =
+let test_join_1_add_left_neutral _test_ctx =
     run_join_test_case_1 [
         [5; 5; 5; 5; 5], 0;
         [1; 5; 5; 5; 5], +1;
@@ -311,7 +313,6 @@ let test_join_1_add_left_neutral test_ctx =
 
 let test_remove_select_phrase test_ctx =
     let data = dat_update_recs in
-    let fds = dat_fd_set_2 in
     let l1 = LensTestHelpers.mem_lens_str "A -> B; B -> C" "tbl1" [] in
     let pred = OptionUtils.val_of (Phrase.combine_and_l [Phrase.greater_than (Phrase.var "B") (Phrase.constant_int 10); Phrase.equal (Phrase.var "C") (Phrase.constant_int 5)]) in
     let sort = select_lens_sort (Lens.sort l1) pred in
@@ -350,6 +351,7 @@ let suite =
     "lens_fd_helpers">:::
     [
         "show_fd_set">:: test_show_fd_set;
+        "show_fd_tree" >:: test_show_fd_tree;
         "transitive_closure">:: test_transitive_closure;
         "find_update_recs">:: test_find_update_recs;
         "is_update_record">:: test_is_update_record;

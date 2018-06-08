@@ -145,7 +145,13 @@ type lens_phrase =
       [@@deriving show]
 
 (* Lenses *)
-module ColSet = StringSet
+module ColSet = struct
+    include StringSet
+
+    let pp_pretty fmt cs = 
+        List.iter (fun c -> Format.pp_print_string fmt c; Format.pp_print_space fmt ()) (elements cs)
+end
+
 type colset = ColSet.t
       [@@deriving show]
 

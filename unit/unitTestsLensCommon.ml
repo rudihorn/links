@@ -25,6 +25,18 @@ module LensTestHelpers = struct
         (* host port dbname user pw *) 
         new pg_database (db_host_opt test_ctx) "5432" "links" "links" "links"
 
+    (** Only print when **)
+    let fmt_std_v test_ctx (fn : Format.formatter -> unit) =
+        if verbose_opt test_ctx then
+            fn Format.std_formatter
+        else
+            ()
+
+    let fmt_err_v test_ctx (fn : Format.formatter -> unit) =
+        if verbose_opt test_ctx then
+            fn Format.err_formatter
+        else
+            ()
 
     let print_verbose test_ctx message = 
         if verbose_opt test_ctx then
