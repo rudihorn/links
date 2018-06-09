@@ -20,7 +20,7 @@ build: [
 depends: [
   "jbuilder" {build}
   "ocamlfind"
-  "oUnit"
+  "ounit"
   "links"
   "links-postgresql"
 ]
