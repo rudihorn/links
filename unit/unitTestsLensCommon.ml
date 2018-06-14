@@ -93,13 +93,13 @@ module LensTestHelpers = struct
 
     let select_lens l phrase =
         let sort = Lens.sort l in
-        let sort = select_lens_sort sort phrase in
+        let sort = LensTypes.select_lens_sort sort phrase in
         `LensSelect (l, phrase, sort)
 
     let drop_lens l drop key default = 
         let sort = Lens.sort l in
         let (fds, cond, r) = sort in
-        let fds = LensFDHelpers.FunDepSet.remove_def_by fds (ColSet.singleton drop) in
+        let fds = LensFDHelpers.FunDepSet.remove_defines fds (ColSet.singleton drop) in
         let r = LensRecordHelpers.remove_record_type_column drop r in
         `LensDrop (l, drop, key, default, (fds, cond, r))
 

@@ -315,7 +315,7 @@ let test_remove_select_phrase test_ctx =
     let data = dat_update_recs in
     let l1 = LensTestHelpers.mem_lens_str "A -> B; B -> C" "tbl1" [] in
     let pred = OptionUtils.val_of (Phrase.combine_and_l [Phrase.greater_than (Phrase.var "B") (Phrase.constant_int 10); Phrase.equal (Phrase.var "C") (Phrase.constant_int 5)]) in
-    let sort = select_lens_sort (Lens.sort l1) pred in
+    let sort = LensTypes.select_lens_sort (Lens.sort l1) pred in
     let phrase = remove_select_phrase sort pred data in
     let _ = LensTestHelpers.print_verbose test_ctx (LensQueryHelpers.construct_query (OptionUtils.val_of phrase)) in 
     ()

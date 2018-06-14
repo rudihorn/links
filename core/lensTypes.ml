@@ -1,6 +1,9 @@
 open Types
 open Utility
 open Value
+open LensFDHelpers
+open LensQueryHelpers
+open LensRecordHelpers
 
 let unpack_field_spec (typ : Types.field_spec) = 
     match typ with
@@ -44,4 +47,14 @@ let cols_of_phrase (key, _pos : Sugartypes.phrase) : string list =
     | `TupleLit keys -> List.map var_name keys
     | `Var name -> [name]
     | _ -> failwith "Expected a tuple or a variable."
+
+let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_sort =
+    let oldPred = LensSort.predicate sort in
+    let pred = Phrase.combine_and oldPred (Some pred) in
+    (LensSort.fundeps sort, pred, LensSort.cols sort)
+
+let drop_lens_sort (sort : Types.lens_sort) (drop : ColSet.t) (key : ColSet.t) =
+    let fds = FunDepSet.remove_defines (LensSort.fundeps sort) drop in
+    let domain = List.map (fun c -> if ColSet.mem (LensCol.alias c) drop then LensCol.hide c else c) (LensSort.cols sort) in
+    LensSort.make fds (LensSort.predicate sort) domain
 

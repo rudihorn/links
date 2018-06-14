@@ -11,8 +11,14 @@ module LensCol = struct
 
     let alias (col : t) = col.alias
     let exists (cols : t list) (colalias : string) = List.exists (fun c -> alias c = colalias) cols
-
     let present (col : t) = col.present
+    let typ (col : t) = col.typ
+
+    let hide (cs : t) = 
+        { cs with present = false }
+
+    let rename (name : string) (cs : t) =
+        { cs with alias = name }
 end
 
 module LensColList = struct
@@ -27,6 +33,12 @@ module LensColList = struct
     let present_aliases (cs : t) =
         let pr = present cs in
         aliases pr
+
+    let mem_alias (alias : string) (cs : t) = 
+        List.exists (fun c -> LensCol.alias c = alias) cs
+
+    let find_alias (alias : string) (cs : t) =
+        List.find_opt (fun c -> LensCol.alias c = alias) cs
 end
 
 module LensSort = struct
@@ -46,6 +58,9 @@ module LensSort = struct
         ColSet.of_list columns
 
     let make fds pred rowType : Types.lens_sort = (fds, pred, rowType)
+
+    let find_col_alias (alias : string) (sort : t) =
+        LensColList.find_alias alias (cols sort)
 end
 
 

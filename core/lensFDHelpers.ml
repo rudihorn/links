@@ -1,5 +1,3 @@
-(*pp deriving *)
-
 open Types
 open Utility
 open LensRecordHelpers
@@ -41,13 +39,12 @@ module FunDepSet = struct
         let fds = List.map FunDep.of_lists fds in
         of_list fds
 
-    let remove_def_by (fds : t) (cols : Types.colset) =
+    let remove_defines (fds : t) (cols : Types.colset) =
         let remove fd = 
-            let left = FunDep.left fd in
-            if ColSet.subset cols left then
+            if ColSet.inter cols (FunDep.left fd) |> ColSet.is_empty |> not then
                 failwith "Cannot remove a column defining other columns.";
             let newRight = ColSet.diff (FunDep.right fd) cols in
-            FunDep.make left newRight in
+            FunDep.make (FunDep.left fd) newRight in
         let fds = map remove fds in
         let keep fd = not (ColSet.is_empty (FunDep.right fd)) in
         let fds = filter keep fds in

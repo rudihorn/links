@@ -4,6 +4,7 @@ open Lwt
 open Utility
 open Proc
 open Pervasives
+open Types
 open LensHelpers
 
 let lookup_fun = Tables.lookup Tables.fun_defs
@@ -603,18 +604,14 @@ struct
     | `LensDrop (lens, drop, key, def, _sort) -> 
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in 
-        let fds = Lens.fundeps lens in
-        let cols = Lens.cols lens in
-        let predicate = Lens.predicate lens in
-        let sort = (LensFDHelpers.FunDepSet.remove_def_by fds (Types.ColSet.singleton drop), predicate, LensRecordHelpers.remove_record_type_column drop cols) in
-        let def = match value env def with #Value.primitive_value as l -> l | _ as a -> failwith ("default value not of primitive type but: " ^ Value.string_of_value a) in 
+        let def = value env def in
+        let sort = LensTypes.drop_lens_sort (Lens.sort lens) (ColSet.singleton drop) (ColSet.singleton key) in
           apply_cont cont env (`LensDrop (lens, drop, key, def, sort))
     | `LensSelect (lens, pred, _sort) ->
         let _ = LensHelpers.ensure_lenses_enabled () in
         let lens = value env lens in
         let pred = LensQueryHelpers.lens_phrase_of_phrase pred in
-        let sort = Lens.sort lens in
-        let sort = LensHelpers.select_lens_sort sort pred in
+        let sort = LensTypes.select_lens_sort (Lens.sort lens) pred in
           apply_cont cont env (`LensSelect (lens, pred, sort))
     | `LensJoin (lens1, lens2, on, left, right, _sort) ->
         let _ = LensHelpers.ensure_lenses_enabled () in
