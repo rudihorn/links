@@ -3,7 +3,6 @@ open Utility
 open Value
 open LensFDHelpers
 open LensQueryHelpers
-open LensSetOperations
 open LensRecordHelpers
 
 let query_timer = ref 0
@@ -24,20 +23,20 @@ module Lens = struct
 
     let sort (v : t) = 
         match v with
-        | `Lens (a, sort) -> sort
-        | `LensMem (a, sort) -> sort
-        | `LensDrop (lens, drop, key, def, sort) -> sort
-        | `LensSelect (lens, pred, sort) -> sort
-        | `LensJoin (lens1, lens2, on, _, _, sort) -> sort
-        | e -> failwith "Did not match a lens value (Lens.sort)"
+        | `Lens (_table, sort) -> sort
+        | `LensMem (_data, sort) -> sort
+        | `LensDrop (_lens, _drop, _key, _def, sort) -> sort
+        | `LensSelect (_lens, _pred, sort) -> sort
+        | `LensJoin (_lens1, _lens2, _on, _left, _right, sort) -> sort
+        | _e -> failwith "Did not match a lens value (Lens.sort)"
    
     let rec is_memory_lens (lens : Value.t) =
         match lens with
         | `Lens _ -> false
         | `LensMem _ -> true
-        | `LensDrop (lens, drop, key, def, rtype) -> is_memory_lens lens
-        | `LensSelect (lens, pred, sort) -> is_memory_lens lens
-        | `LensJoin (lens1, lens2, on, _, _, sort) -> is_memory_lens lens1 || is_memory_lens lens2
+        | `LensDrop (lens, _drop, _key, _def, _rtype) -> is_memory_lens lens
+        | `LensSelect (lens, _pred, _sort) -> is_memory_lens lens
+        | `LensJoin (lens1, lens2, _on, _, _, _sort) -> is_memory_lens lens1 || is_memory_lens lens2
         | _ -> failwith ("Unknown lens (is_memory_lens) :" ^ (string_of_value lens))
 
     let cols (lens : t) =
@@ -68,7 +67,7 @@ module LensType = struct
     let sort (v : t) = 
         match v with 
         | `Lens (sort) -> sort
-        | e -> failwith "Type is not a lens (LensType.sort)."
+        | _e -> failwith "Type is not a lens (LensType.sort)."
 end
 
 
@@ -76,12 +75,12 @@ end
 
 let rec get_primary_key (lens : Value.t) =
     match lens with 
-    | `Lens (a, sort) -> 
+    | `Lens (_a, sort) -> 
         let fds = LensSort.fundeps sort in
         let fd = FunDepSet.min_elt fds in
         let left = FunDep.left fd in
         left
-    | `LensMem (a, sort) ->  
+    | `LensMem (_a, sort) ->  
         let fds = LensSort.fundeps sort in
         let fd = FunDepSet.min_elt fds in
         let left = FunDep.left fd in
@@ -94,16 +93,16 @@ let rec get_primary_key (lens : Value.t) =
 let rec lens_get_mem (lens : Value.t) callfn =
     match lens with
     | `Lens _ -> failwith "Non memory lenses not implemented."
-    | `LensMem (table, rtype) -> table
-    | `LensDrop (lens, drop, key, def, rtype) ->
+    | `LensMem (table, _rtype) -> table
+    | `LensDrop (lens, drop, _key, _def, _rtype) ->
         let records = lens_get_mem lens callfn in
         let result = List.map (fun a -> drop_record_column drop a) (unbox_list records) in
           `List result
-    | `LensSelect (lens, pred, sort) ->
+    | `LensSelect (lens, pred, _sort) ->
         let records = lens_get_mem lens callfn in
         let res = List.filter (fun x -> unbox_bool (calculate_predicate_rec pred x)) (unbox_list records) in 
            box_list res
-    | `LensJoin (lens1, lens2, on, left, right, sort) ->
+    | `LensJoin (lens1, lens2, on, _left, _right, _sort) ->
         let records1 = lens_get_mem lens1 callfn in
         let records2 = lens_get_mem lens2 callfn in
         let on = List.map (fun (a, _, _) -> a) on in
@@ -132,17 +131,17 @@ let rec lens_get_query (lens : Value.t) =
             pred = None;
             db = db;
         }
-  | `LensSelect (lens, pred, sort) ->
+  | `LensSelect (lens, pred, _sort) ->
         let query = lens_get_query lens in
         { query with pred = Some pred }
         (* get_lens_sort_row_type sort *)
-  | `LensJoin (lens1, lens2, on, left, right, sort) ->
+  | `LensJoin (lens1, lens2, _on, _left, _right, sort) ->
         let q1 = lens_get_query lens1 in
         let q2 = lens_get_query lens2 in
         (* all table names must be unique, rename them *)
-        let tables2 = List.map (fun (n2, al2) -> 
+        let _tables2 = List.map (fun (n2, al2) -> 
             try 
-                let tbl = List.find (fun (n1,al1) -> n1 = n2) q1.tables in
+                let _tbl = List.find (fun (n1,_al1) -> n1 = n2) q1.tables in
                 failwith "Cannot reuse a table twice in a join query!"
             with
                 NotFound _ -> (n2, al2)
@@ -176,98 +175,12 @@ let lens_get (lens : Value.t) callfn =
             (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
         res
 
-
-let lens_put_delta  (lens : Value.t) (data : (Value.t * int) list) callfn = 
-    match lens with
-    | `Lens _ ->  data
-    | `LensMem _ -> data
-    | `LensSelect (l, pred, sort) ->
-        data
-    | `LensJoin  (l1, l2, on, left, right, sort) ->
-        data
-    | _ -> failwith "Unsupported lens."
-
-let rec lens_put_mem (lens : Value.t) (data : Value.t) callfn =
-    match lens with
-    | `Lens _ -> data
-    | `LensMem _ -> data
-    | `LensDrop (l, drop, key, def, rtype) -> 
-            let records = lens_get l callfn in
-            let newRecords = List.map (fun x -> restore_column drop key def x records) (unbox_list data) in
-                lens_put_mem l (box_list newRecords) callfn
-    | `LensSelect (l, pred, sort) ->
-            let arrData = Array.of_list (List.map (fun r -> r,false) (unbox_list data)) in
-            let records = unbox_list (lens_get l callfn) in
-            let output = ref [] in
-            let _ = List.map (fun r -> 
-                (* if the record matches P remove it *)
-                if not (unbox_bool (calculate_predicate_rec pred r)) then
-                    begin
-                        let upd, r = apply_fd_record_revision r data (LensSort.fundeps sort) in
-                        if upd then
-                            begin
-                                if not (unbox_bool (calculate_predicate_rec pred r)) then
-                                    mark_found_records r arrData
-                            end
-                        else
-                            output := r :: !output
-                    end
-                else
-                   () 
-            ) records in
-            let filteredData = List.filter (fun (r,m) -> not m) (Array.to_list arrData) in
-            let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
-            lens_put_mem l (box_list output) callfn 
-    | `LensJoin (l1, l2, on, left, right, sort) ->
-            let oldOn = List.map (fun (a, _, _) -> a) on in
-            let fds = LensSort.fundeps sort in
-            let sort_cols = LensSort.cols_present_aliases sort in
-            let l1_cols = Lens.cols_present_aliases l1 in
-            let remcols1 = remove_list_values sort_cols l1_cols in
-            let rec1 = lens_get l1 callfn in
-            let rec1 = apply_fd_merge_record_revision rec1 (drop_records_columns remcols1 data) fds in
-            let l2_cols = Lens.cols_present_aliases l2 in
-            let remcols2 = remove_list_values sort_cols l2_cols in
-            let rec2 = lens_get l2 callfn in
-            let rec2 = apply_fd_merge_record_revision rec2 (drop_records_columns remcols2 data) fds in
-            let removed = List.map (fun r1 ->
-                let rows = List.filter (fun r2 -> is_row_cols_record_match r1 r2 (ColSet.of_list oldOn)) (unbox_list rec2) in
-                let rows = List.map (fun r2 -> join_records r1 r2 oldOn) rows in
-                let rows = List.filter (fun r -> not (contains_record r data)) rows in
-                    rows
-            ) (unbox_list rec1) in
-            let removed = List.concat removed in
-            let not_on_cols = remove_list_values sort_cols oldOn in 
-            let removed_left, removed_any = List.partition (fun r -> contains_record (drop_record_columns not_on_cols r) data) removed in
-            let rec1 = List.filter (fun r -> not (contains_record r (box_list removed_left))) (unbox_list rec1) in
-            let rec1 = lens_put_mem l1 (box_list rec1) callfn in
-            let rec2 = List.filter (fun r -> not (contains_record r (box_list removed_any))) (unbox_list rec2) in
-            let rec2 = lens_put_mem l2 (box_list rec2) callfn in
-                box_record (["t1", rec1; "t2", rec2])
-    | _ -> failwith "Not a lens."
-
-type delete_side = [
-    | `Left
-    | `Any
-    | `Right
-    | `Both
-]
-
 let lens_debug_delta (delta : (Value.t * int) list) = 
     List.map (fun (t,m) -> print (string_of_int m ^ ": " ^ string_of_value t)) delta
 
 let project_lens (l : Value.t) (t : (Value.t * int) list) = 
     let cols = Lens.colset l in
     List.map (fun (row,t) -> project_record_columns cols row,t) t
-
-let is_update_row data prim cols (t,m) = 
-    if m = 0 then
-        false
-    else
-        let sameleft = fun t2 -> records_match_on t t2 prim in
-        let diffright = fun t2 -> not (records_match_on t t2 cols) in
-        List.exists (fun (t',m') -> m = - m && sameleft t' && diffright t') data
-
 
 let lens_select (lens : Value.t) (phrase : Types.lens_phrase) =
     let sort = Lens.sort lens in
@@ -283,8 +196,8 @@ let lens_get_select_opt (lens : Value.t) (phrase : Types.lens_phrase option) =
     | Some phrase  -> lens_get_select lens phrase
 
 let calculate_fd_changelist (fds : FunDepSet.t) (data : (Value.t * int) list) =
-    let additions = List.filter (fun (t,m) -> m = +1) data in
-    let additions = List.map (fun (t,m) -> t) additions in
+    let additions = List.filter (fun (_t,m) -> m = +1) data in
+    let additions = List.map (fun (t,_m) -> t) additions in
     (* get the key of the row for finding complements *)
     let rec loop fds =
         begin 
@@ -315,112 +228,15 @@ let query_exists (lens : Value.t) phrase =
             (fun () -> execute_select mappings sql db)
             (fun time -> query_timer := !query_timer + time; query_count := !query_count + 1) in
         let _ = Debug.print sql in
-        let (_,v)::_ = unbox_record (List.hd (unbox_list res)) in
+        let (_,v) = unbox_record (List.hd (unbox_list res)) |> List.hd in
         unbox_bool v
-
-
-let can_remove_phrase (sort : Types.lens_sort) (on : (string * string * string) list) (row : Value.t) (data : (Value.t * int) list) =
-    let on_simp = List.map (fun (a,_,_) -> a) on in
-    let fds = LensSort.fundeps sort in
-    let fd = OptionUtils.val_of (FunDepSet.root_fd fds) in
-    let key = FunDep.left fd in
-    (* phrase_on tries to find all records where on is identical to the values of row *)
-    let phrase_on = Phrase.matching_cols (ColSet.of_list on_simp) row in
-    (* phrase not added changes *)
-    let changelist = calculate_fd_changelist fds data in
-    let rec ignore_change col =
-        let fd = FunDepSet.defining_fd fds col in
-        let (_,changes) = List.find (fun (fd', changes) -> fd = fd') changelist in
-        let phrases = List.map (fun (chl, chr) ->
-                Phrase.negate (OptionUtils.val_of (Phrase.matching_cols (FunDep.left fd) chl))
-            ) changes in
-        let phrases = Phrase.combine_and_l phrases in
-        if ColSet.subset key (FunDep.left fd) then
-            phrases
-        else 
-            Phrase.combine_and (ignore_change (FunDep.left fd)) phrases in
-    let phrase_not_changed = ignore_change (ColSet.of_list on_simp) in
-    (* phrase_not_removed finds all records which aren't marked for deletion *)
-    let removed = List.filter (fun (r,m) -> m = -1 && Record.match_on r row on_simp) data in
-    let removed = List.map (fun (r,m) -> r) removed in
-    let dels = List.filter (fun r -> 
-        let compl = List.filter (fun (r',m) -> m = +1 && Record.match_on r r' (ColSet.elements key)) data in
-        compl = []
-    ) removed in
-    let phrase_not_removed = List.fold_left (fun phrase delrow ->
-        let term = Phrase.negate (OptionUtils.val_of (Phrase.matching_cols key delrow)) in
-        Phrase.combine_and phrase (Some term)
-    ) None dels in
-    (* combine all criteria *)
-    let phrase = Phrase.combine_and_l_opt [ 
-        phrase_on; 
-        phrase_not_removed; 
-        phrase_not_changed; 
-    ] in
-    phrase
-
-let remove_select_phrase (sort : Types.lens_sort) (predicate : Types.lens_phrase) (data : (Value.t * int) list) =
-    let fds = LensSort.fundeps sort in
-    let fd =  FunDepSet.root_fd fds |> OptionUtils.val_of in
-    let key = FunDep.left fd in
-    (* phrase_on tries to find all records where on is identical to the values of row *)
-    let phrase_not_matched = Phrase.negate (Phrase.tuple predicate)  in
-    (* phrase not added changes *)
-    let changelist = calculate_fd_changelist fds data in
-    (* for a specific column find an expression which calculates its actual value *)
-    let rec var_expr col curCols vals (otherwise : Types.lens_phrase) = 
-        let (fd, defch) = List.find (fun (fd, changes) ->
-            ColSet.subset curCols (FunDep.right fd)) changelist in
-        let changes = OptionUtils.opt_app (fun vals -> List.map (fun (chl, chr) -> 
-            let (_, res) = List.find (fun (chl', chr') -> Record.match_on chr chl' (ColSet.elements (FunDep.right fd))) vals in
-            (chl, res)
-        ) defch) defch vals in
-        let phrase = `Case (None, (List.map (fun (chl, chr) -> 
-                OptionUtils.val_of (Phrase.matching_cols (FunDep.left fd) chl), Phrase.constant (constant_of_value (Record.column col chr))) changes
-            ),otherwise) in
-        if ColSet.subset key (FunDep.left fd) then
-            phrase
-        else
-            var_expr col (FunDep.left fd) (Some changes) phrase in
-    (* for every used column, determine this expression *)
-    let used_vars = Phrase.get_vars predicate in
-    let varmap = List.map (fun col ->
-        col, var_expr col (ColSet.of_list [col]) None (Phrase.var col)
-    ) (ColSet.elements used_vars) in
-    (* replace every used var instance in the predicate with the new value *)
-    let now_match_predicate = Phrase.traverse predicate (fun expr ->
-        match expr with
-        | `Var n -> 
-            let (_, repl) = List.find (fun (a,_) -> a = n) varmap in
-            repl
-        | _ -> expr
-    ) in
-    (* phrase_not_removed finds all records which aren't marked for deletion *)
-    let removed = List.filter (fun (r,m) -> m = -1) data in
-    let removed = List.map (fun (r,m) -> r) removed in
-    let dels = List.filter (fun r -> 
-        let compl = List.filter (fun (r',m) -> m = +1 && Record.match_on r r' (ColSet.elements key)) data in
-        compl = []
-    ) removed in
-    let phrase_not_removed = List.fold_left (fun phrase delrow ->
-        let term = Phrase.negate (OptionUtils.val_of (Phrase.matching_cols key delrow)) in
-        Phrase.combine_and phrase (Some term)
-    ) None dels in
-    (* combine all criteria *)
-    let phrase = Phrase.combine_and_l_opt [ 
-        Some phrase_not_matched; 
-        phrase_not_removed; 
-        Some now_match_predicate; 
-    ] in
-    phrase
-
 
 let join_lens_should_swap (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_columns : string list) =
     let fds1 = LensSort.fundeps sort1 in
     let fds2 = LensSort.fundeps sort2 in
     let on_cols = ColSet.of_list on_columns in
     let covers fds sort =
-        let fdcl = get_fd_transitive_closure on_cols fds in
+        let fdcl = FunDepSet.transitive_closure on_cols fds in
         let other = LensSort.colset sort in
         (* print_endline (ColSet.Show_t.show fdcl ^ " = " ^ ColSet.Show_t.show (other)); *)
         ColSet.equal other fdcl in
@@ -468,8 +284,8 @@ let join_lens_sort (sort1 : Types.lens_sort) (sort2 : Types.lens_sort) (on_colum
     let pred = match LensSort.predicate sort1, LensSort.predicate sort2 with
     | None, None -> None
     | Some p1, None -> Some p1
-    | None, Some p2 -> Some (rename_var p2 join_renames)
-    | Some p1, Some p2 -> Some (create_phrase_and (create_phrase_tuple p1) (create_phrase_tuple (rename_var p2 join_renames))) in
+    | None, Some p2 -> Some (Phrase.rename_var p2 join_renames)
+    | Some p1, Some p2 -> Some (create_phrase_and (create_phrase_tuple p1) (create_phrase_tuple (Phrase.rename_var p2 join_renames))) in
     let join_pred = List.fold_left (fun pred (alias, newalias) -> 
         let jn = create_phrase_equal (create_phrase_var alias) (create_phrase_var newalias) in
         match pred with Some p -> Some (create_phrase_and p jn) | None -> Some jn

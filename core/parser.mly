@@ -1,7 +1,6 @@
 %{
 
 open Utility
-open Operators
 open Sugartypes
 
 (* Generation of fresh type variables *)

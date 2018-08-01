@@ -1038,6 +1038,14 @@ struct
           | `ConstructorLit _
           | `Switch _
           | `TableLit _
+          | `LensLit _
+          | `LensDropLit _
+          | `LensSelectLit _
+          | `LensJoinLit _
+          | `LensGetLit _
+          | `LensPutLit _
+          | `LensFunDepsLit _
+          | `LensKeysLit _
           | `Offer _
           | `QualifiedVar _
           | `HandlerLit _

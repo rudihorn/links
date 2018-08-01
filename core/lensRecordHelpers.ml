@@ -102,13 +102,13 @@ let remove_list_values (l : string list) (remove : string list) =
 let update_rowtype_cols (cols : Types.field_spec_map) (rowType : Types.typ) =
     match rowType with 
     | `Record (_, row_var, dual) -> `Record (cols, row_var, dual)
-    | e -> failwith "Expected a record."
+    | _e -> failwith "Expected a record."
 
 let try_find p l = try Some (List.find p l) with Not_found -> None | NotFound _ -> None
 
 let get_record_val (key : string) (r : Value.t) = 
     let columns = unbox_record r in
-    let (_, value) = List.find (fun (name, value) -> name = key) columns in
+    let (_, value) = List.find (fun (name, _value) -> name = key) columns in
     value
       
 let get_field_spec_type (typ : Types.field_spec) = 
@@ -130,7 +130,7 @@ let contains_record (recA : Value.t) (recordsB : Value.t) =
 
 let build_col_map (record : Value.t) =
     let r = unbox_record record in
-    List.map (fun (n,a) -> n) r
+    List.map (fun (n,_a) -> n) r
 
 let reorder_record_cols cols r =
     let vals = unbox_record r in
@@ -228,7 +228,7 @@ module Record = struct
     let match_on = records_match_on
     let project record cols = 
         let d = unbox_record record in
-        let d = List.filter (fun (k,v) -> ColSet.mem k cols) d in
+        let d = List.filter (fun (k,_v) -> ColSet.mem k cols) d in
         box_record d
 
     let set_column (record : Value.t) (k : string) (v : Value.t) = 

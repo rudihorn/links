@@ -60,7 +60,7 @@ let test_show_fd_tree test_ctx =
 
 
 let test_transitive_closure _test_ctx = 
-    let outp = get_fd_transitive_closure dat_cols dat_fd_set in
+    let outp = FunDepSet.transitive_closure dat_cols dat_fd_set in
     assert_equal true (ColSet.equal outp dat_closure)
 
 let test_find_update_recs _test_ctx =
@@ -311,15 +311,6 @@ let test_join_1_add_left_neutral _test_ctx =
     ] false
 
 
-let test_remove_select_phrase test_ctx =
-    let data = dat_update_recs in
-    let l1 = LensTestHelpers.mem_lens_str "A -> B; B -> C" "tbl1" [] in
-    let pred = OptionUtils.val_of (Phrase.combine_and_l [Phrase.greater_than (Phrase.var "B") (Phrase.constant_int 10); Phrase.equal (Phrase.var "C") (Phrase.constant_int 5)]) in
-    let sort = LensTypes.select_lens_sort (Lens.sort l1) pred in
-    let phrase = remove_select_phrase sort pred data in
-    let _ = LensTestHelpers.print_verbose test_ctx (LensQueryHelpers.construct_query (OptionUtils.val_of phrase)) in 
-    ()
-
 let test_calculate_fd_changelist test_ctx =
     let data = UnitTestsLensSetOperations.test_data_3 in
     let fds = dat_fd_set_2 in
@@ -335,16 +326,6 @@ let test_calculate_fd_changelist test_ctx =
     let phrase = LensHelpersCorrect.matches_change changeset in
     let str = match phrase with None -> "None" | Some phrase -> LensQueryHelpers.construct_query phrase in
     LensTestHelpers.print_verbose test_ctx str;
-    ()
-
-let test_can_remove_phrase test_ctx =
-    let data = dat_fd_set_1_recs in
-    let lens = construct_join_lens dat_fd_set "tbl1" [] in
-    let sort = Lens.sort lens in
-    let (row,_) = List.nth data 1 in
-    let phrase = can_remove_phrase sort ["E", "E", "table1"] row data in
-    let text = LensQueryHelpers.construct_query (OptionUtils.val_of phrase) in
-    let _ = LensTestHelpers.print_verbose test_ctx text in 
     ()
 
 let suite =
@@ -377,8 +358,6 @@ let suite =
         ];
 
         "phrase_gen">::: [
-            "can_remove_phrase">::test_can_remove_phrase;
-            "remove_select_phrase">::test_remove_select_phrase;
         ];
     ];;
 

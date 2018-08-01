@@ -1,7 +1,6 @@
 open Utility
 open Notfound
 open ProcessTypes
-open Types
 
 [@@@ocaml.warning "-39-32"] (** disable warnings about unused rec flags & functions in this module**)
 
@@ -920,7 +919,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
   | `LensMem (_, _) -> fprintf ppf "(lens)" 
   | `LensDrop (_lens, dr, key, def, _typ) -> fprintf ppf ("(lensdrop %s determined by %s default %a)") dr key p_value def
   | `LensSelect (_lens, _pred, _sort) -> fprintf ppf ("(lensselect)")
-  | `LensJoin (_lens1, _lens2, on, _left, _right, _sort) -> fprintf ppf "(lensjoin)"
+  | `LensJoin (_lens1, _lens2, _on, _left, _right, _sort) -> fprintf ppf "(lensjoin)"
   | `Table (_, name, _, _) -> fprintf ppf "(table %s)" name
   | `Database (_, params) -> fprintf ppf "(database %s" params
   | `SessionChannel (ep1, ep2) ->

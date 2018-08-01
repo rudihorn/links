@@ -1,5 +1,4 @@
 open Utility
-open Operators 
 
 [@@@ocaml.warning "-32"] (** disable warnings about unused functions in this module**)
    
@@ -874,7 +873,7 @@ let free_type_vars, free_row_type_vars =
       | `Table (r, w, n)         ->
           S.union_all
             [free_type_vars' rec_vars r; free_type_vars' rec_vars w; free_type_vars' rec_vars n]
-      | `Lens (_, _, r)          -> S.empty
+      | `Lens (_, _, _r)          -> S.empty
       | `Alias ((_, ts), datatype) ->
           S.union (S.union_all (List.map (free_tyarg_vars' rec_vars) ts)) (free_type_vars' rec_vars datatype)
       | `Application (_, datatypes) -> S.union_all (List.map (free_tyarg_vars' rec_vars) datatypes)
@@ -1468,7 +1467,7 @@ struct
             (fbtv f) @ (free_bound_row_type_vars ~include_aliases bound_vars m) @ (fbtv t)
         | `Record row
         | `Variant row -> free_bound_row_type_vars ~include_aliases bound_vars row
-        | `Lens (fds, cond, r) -> [] 
+        | `Lens (_fds, _cond, _r) -> [] 
         | `Effect row -> free_bound_row_type_vars ~include_aliases bound_vars row
         | `Table (r, w, n) -> (fbtv r) @ (fbtv w) @ (fbtv n)
         | `ForAll (tyvars, body) ->
@@ -1859,7 +1858,7 @@ struct
                datatype bound_vars p r ^ "," ^
                datatype bound_vars p w ^ "," ^
                datatype bound_vars p n ^ ")"
-          | `Lens (fds, cond, cols) ->  
+          | `Lens (_fds, _cond, cols) ->  
                 let fn col = col.alias  ^ ":" ^ datatype bound_vars p col.typ in 
                 "Lens(" ^ List.fold_left (fun a b -> a ^ ", " ^ fn b) (fn (List.hd cols)) (List.tl cols) ^ ")"
           | `Alias ((s,[]), _) ->  s
@@ -2184,7 +2183,7 @@ let make_fresh_envs : datatype -> datatype IntMap.t * row IntMap.t * field_spec 
       | `Record row
       | `Variant row             -> make_env_r boundvars row
       | `Table (r, w, n)         -> union [make_env boundvars r; make_env boundvars w; make_env boundvars n]
-      | `Lens (fds, cond, r)     -> empties
+      | `Lens (_fds, _cond, _r)     -> empties
       | `Alias ((_name, ts), d)  -> union (List.map (make_env_ta boundvars) ts @ [make_env boundvars d])
       | `Application (_, ds)     -> union (List.map (make_env_ta boundvars) ds)
       | `ForAll (qs, t)          ->

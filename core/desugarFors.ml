@@ -1,6 +1,5 @@
 open Utility
 open Sugartypes
-open Operators
 
 (*
   Desugaring n-ary for comprehensions with conditions and orderby

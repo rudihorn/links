@@ -66,11 +66,21 @@ module FunDepSet = struct
             Some(min_elt res)
 
     (* Get the functional dependency which defines the columns cols *)
-    let defining_fd (fds : t) (cols : colset) =
+    let defining_fd (cols : colset) (fds : t) =
         let res = filter (fun fd ->
             ColSet.subset cols (FunDep.right fd)    
         ) fds in
         min_elt res
+
+    let transitive_closure (cols : colset) (fds : fundepset) =
+        let rec get = fun attrs fds ->
+            let (newAttrs, fds) = FunDepSet.partition (fun fd -> ColSet.subset (FunDep.left fd) attrs) fds in
+            let newAttrs = FunDepSet.fold (fun fd c -> ColSet.union c (FunDep.right fd)) newAttrs attrs in
+            if ColSet.cardinal newAttrs > ColSet.cardinal attrs then
+                get newAttrs fds
+            else
+                attrs in
+        get cols fds
 
 end
 
@@ -110,20 +120,6 @@ module FunDepTree = struct
 
 end
 
-
-let get_fd_transitive_closure (cols : colset) (fds : fundepset) =
-    let rec get = fun attrs fds ->
-        let (newAttrs, fds) = FunDepSet.partition (fun (left,_) ->
-            ColSet.subset left attrs) fds in
-        let newAttrs = FunDepSet.fold (fun (_,right) c -> ColSet.union c right) newAttrs attrs in
-        if ColSet.cardinal newAttrs > ColSet.cardinal attrs then
-            get newAttrs fds
-        else
-            attrs in
-    get cols fds
-
-let is_key (key : string list) (cols : string list) (fds : Types.fundepset) =
-    false
 let records_match_on recA recB on =
     ColSet.for_all (fun col ->
         get_record_val col recA = get_record_val col recB) on
@@ -213,11 +209,11 @@ let apply_fd_merge_record_revision (n : Value.t) (m : Value.t) (fds : Types.fund
     let arrM = Array.of_list (List.map (fun r -> r,false) (unbox_list m)) in
     let output = ref [] in
     let _ = List.map (fun r ->
-        let upd, r = apply_fd_record_revision r m fds in
+        let _upd, r = apply_fd_record_revision r m fds in
             mark_found_records r arrM;
             output := r :: !output
     ) (unbox_list n) in
-    let filteredData = List.filter (fun (r,m) -> not m) (Array.to_list arrM) in
-    let output = List.append !output (List.map (fun (r,m) -> r) filteredData) in
+    let filteredData = List.filter (fun (_r,m) -> not m) (Array.to_list arrM) in
+    let output = List.append !output (List.map (fun (r,_m) -> r) filteredData) in
         (box_list output)
 

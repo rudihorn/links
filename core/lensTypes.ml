@@ -1,6 +1,5 @@
 open Types
 open Utility
-open Value
 open LensFDHelpers
 open LensQueryHelpers
 open LensRecordHelpers
@@ -15,13 +14,13 @@ let extract_record_type (t : Types.typ) =
     | `Record _ as r -> r
     | `Application (_, [`Type (`Record _ as r)]) -> r
     | `Table (r, _, _) -> r
-    | e -> failwith ("LensTypes does not type.") (* TODO: display incorrectly expected type **)
+    | _ -> failwith ("LensTypes does not type.") (* TODO: display incorrectly expected type **)
 
 (** Returns the columns of a `Record type. **)
 let record_fields (rt : Types.typ) = 
     match rt with 
-    | `Record (fields, row_var, dual) -> fields 
-    | e -> failwith "Expected a record type." (* TODO: display incorrectly expected type **)
+    | `Record (fields, _row_var, _dual) -> fields 
+    | _ -> failwith "Expected a record type." (* TODO: display incorrectly expected type **)
 
 let sort_cols_of_record (tableName : string) (typ : Types.typ) = 
     let fields = record_fields typ in
@@ -30,7 +29,7 @@ let sort_cols_of_record (tableName : string) (typ : Types.typ) =
 
 let cols_of_record (typ: Types.typ) =
     let fields = record_fields typ in
-    StringMap.to_list (fun k v -> k) fields
+    StringMap.to_list (fun k _v -> k) fields
 
 (** Generate a sort for a table with the given type **)
 let sort_cols_of_table (tableName : string) (t : Types.typ) = 
@@ -54,6 +53,9 @@ let select_lens_sort (sort : Types.lens_sort) (pred : lens_phrase) : Types.lens_
     (LensSort.fundeps sort, pred, LensSort.cols sort)
 
 let drop_lens_sort (sort : Types.lens_sort) (drop : ColSet.t) (key : ColSet.t) =
+    (* Verify that the functional dependencies contain X \to A *)
+    if ColSet.subset drop (FunDepSet.transitive_closure key (LensSort.fundeps sort)) |> not then
+        failwith "The dropped columns must be defined by the key";
     let fds = FunDepSet.remove_defines (LensSort.fundeps sort) drop in
     let domain = List.map (fun c -> if ColSet.mem (LensCol.alias c) drop then LensCol.hide c else c) (LensSort.cols sort) in
     LensSort.make fds (LensSort.predicate sort) domain

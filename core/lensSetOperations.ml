@@ -105,7 +105,8 @@ module SortedRecords = struct
                 match r with
                 | 0 -> Some r
                 | a when a > 0 -> pivot s (m-1)
-                | a when a < 0 -> pivot (m+1) e in
+                | a when a < 0 -> pivot (m+1) e
+                | _ -> failwith "impossible" in
         let r = pivot 0 ((Array.length rs) - 1) in
         r
 
@@ -125,7 +126,8 @@ module SortedRecords = struct
                 match res with
                 | 0 -> if b then pivot (m+1) e b else pivot s (m-1) b 
                 | a when a > 0 -> pivot s (m-1) b
-                | a when a < 0 -> pivot (m+1) e b in
+                | a when a < 0 -> pivot (m+1) e b
+                | _ -> failwith "impossible" in
         let b = pivot 0 ((Array.length rs) - 1) false in
         let e = pivot 0 ((Array.length rs) - 1) true in
         (b,e)
@@ -255,12 +257,13 @@ module SortedRecords = struct
                     begin 
                         match compare x y with
                         | 0 -> (* x = y, so skip both *) do_next xs ys
-                        | -1 -> (* x < y, so take x and see if can find y *) 
+                        | a when a < 0 -> (* x < y, so take x and see if can find y *) 
                                 let (left,right) = do_next xs right in
                                 (x :: left, right)
-                        | +1 -> (* x > y, so take y and try find x *)
+                        | a when a > 0 -> (* x > y, so take y and try find x *)
                                 let (left, right) = do_next left ys in
                                 (left, y :: right)
+                        | _ -> failwith "impossible"
                     end
             | _ -> (left, right) (* one of them is empty so return rest *)
         in

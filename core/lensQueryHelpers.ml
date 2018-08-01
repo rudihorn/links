@@ -70,7 +70,7 @@ let rec calculate_predicate (expr : lens_phrase) (get_val : string -> Value.t) =
         let a2 = calculate_predicate a2 get_val in
         begin
             match (string_of_binop op) with
-            | "==" -> box_bool ( match a1 with `Bool b -> b == unbox_bool a2 | `Int i -> i == unbox_int a2 | `String s -> s = unbox_string a2)
+            | "==" -> box_bool ( match a1 with `Bool b -> b == unbox_bool a2 | `Int i -> i == unbox_int a2 | `String s -> s = unbox_string a2 | _ -> failwith "Unsupported equality constant.")
             | "&&" -> box_bool (unbox_bool a1 && unbox_bool a2)
             | "+" -> box_int ((unbox_int a1) + (unbox_int a2))
             | "*" -> box_int (unbox_int a1 * unbox_int a2)
@@ -107,7 +107,7 @@ let rec calculate_predicate (expr : lens_phrase) (get_val : string -> Value.t) =
             | None -> `Bool true
             | Some inp -> calculate_predicate inp get_val in
             try
-                let (k,v) = List.find (fun (k,v) -> calculate_predicate k get_val = inp) cases in
+                let (_k,v) = List.find (fun (k,_v) -> calculate_predicate k get_val = inp) cases in
                 calculate_predicate v get_val
             with
                 NotFound _ -> calculate_predicate otherwise get_val
@@ -124,10 +124,10 @@ let rec calculate_predicate (expr : lens_phrase) (get_val : string -> Value.t) =
     | _ -> failwith "Unknown phrasenode for calculate_predicate."
 
 
-class dummy_database = object(self)
+class dummy_database = object(_self)
   inherit Value.database
   method driver_name () = "dummy"
-  method exec query : Value.dbvalue =
+  method exec _query : Value.dbvalue =
     failwith "Dummy database exec not supported."
   method escape_string str =
     "'" ^ Str.global_replace (Str.regexp "'") "''" str ^ "'"
@@ -170,7 +170,6 @@ let rec construct_query_db (expr : lens_phrase) (db : Value.database) (mapCol : 
                 let cases = List.fold_left (fun a (k,v) -> a ^ " WHEN " ^ construct_query k ^ " THEN " ^ construct_query v) "" cases in
                 (match inp with None -> "CASE" | Some inp -> "CASE (" ^ construct_query inp ^ ")") ^
                     cases ^ " ELSE " ^ otherwise ^ " END"
-    | _ -> failwith "Unsupported lens phrase in construct_query_db"
 
 let construct_query (expr : lens_phrase) =
   let db = (new dummy_database) in
@@ -211,52 +210,7 @@ let construct_select_query_sort db (sort : lens_sort) =
   | Some qphrase -> sql ^ " WHERE " ^ construct_query_db qphrase db mapCol
   | None -> sql
 
-let rec traverse_lens_phrase (expr : lens_phrase) dosth =
-    let fn expr' = traverse_lens_phrase expr' dosth in
-    let expr = match expr with
-    | `Constant _ -> expr
-    | `Var n -> expr
-    | `UnaryAppl (a, arg) -> 
-            let arg = fn arg in
-            `UnaryAppl (a, arg)
-    | `InfixAppl (a, a1, a2) -> 
-            let a1 = fn a1 in
-            let a2 = fn a2 in
-            `InfixAppl (a, a1, a2) 
-    | `TupleLit (x :: []) -> 
-            let x = fn x in
-            `TupleLit ([x])
-    | `Case (phr, cases, otherwise) ->
-            let phr = OptionUtils.opt_map fn phr in
-            let cases = List.map (fun (inp, lst) -> fn inp, fn lst) cases in
-            let otherwise = fn otherwise in
-            `Case (phr, cases, otherwise)
-    | _ -> failwith "Unknown operation" in
-    dosth expr
 
-let rec replace_var (expr : lens_phrase) (repl : (string * Value.t) list) : lens_phrase =
-    traverse_lens_phrase expr (fun expr -> 
-        match expr with
-        | `Var n -> 
-            begin try
-                let _,v = List.find (fun (k,v) -> k = n) repl in
-                `Constant (constant_of_value v)
-                with NotFound _ -> expr
-            end
-        | _ -> expr
-    )
-
-let rec rename_var (expr : lens_phrase) (repl : (string * string) list) : lens_phrase =
-    traverse_lens_phrase expr (fun expr ->
-        match expr with
-        | `Var n ->
-            begin try 
-                let _,v = List.find (fun (k,v) -> k = n) repl in
-                `Var v
-                with NotFound _ -> expr
-            end
-        | _ -> expr
-    )
 
 let create_phrase_and (left : lens_phrase) (right : lens_phrase) =
     `InfixAppl (`And, left, right)
@@ -362,16 +316,62 @@ module Phrase = struct
 
     let case var = `Case var
 
+
+    (* a generic function for traversing phrase expressions,
+     * the function dosth is called on each node, and the
+     * result is replaced with it *)
+    let rec traverse (expr : lens_phrase) dosth =
+        let fn expr' = traverse expr' dosth in
+        let expr = match expr with
+        | `Constant _ -> expr
+        | `Var _ -> expr
+        | `UnaryAppl (a, arg) -> 
+                let arg = fn arg in
+                `UnaryAppl (a, arg)
+        | `InfixAppl (a, a1, a2) -> 
+                let a1 = fn a1 in
+                let a2 = fn a2 in
+                `InfixAppl (a, a1, a2) 
+        | `TupleLit (x :: []) -> 
+                let x = fn x in
+                `TupleLit ([x])
+        | `Case (phr, cases, otherwise) ->
+                let phr = OptionUtils.opt_map fn phr in
+                let cases = List.map (fun (inp, lst) -> fn inp, fn lst) cases in
+                let otherwise = fn otherwise in
+                `Case (phr, cases, otherwise)
+        | _ -> failwith "Unknown operation" in
+        dosth expr
+
     let get_vars expr =
         let cols = ref ColSet.empty in
-        let _ = traverse_lens_phrase expr (fun expr ->
+        let _ = traverse expr (fun expr ->
             match expr with
             | `Var n -> cols := ColSet.add n (!cols); expr
             | _ -> expr
         ) in
         !cols
 
-    let traverse = traverse_lens_phrase
+    let rename_var (expr : lens_phrase) (repl : (string * string) list) : lens_phrase =
+        traverse expr (fun expr ->
+            match expr with
+            | `Var n ->
+                let v = List.find_opt (fun (k,_v) -> k = n) repl in 
+                let v = OptionUtils.opt_map (fun (_k,v) -> `Var v) v in
+                OptionUtils.from_option expr v
+            | _ -> expr
+        )
+    
+    let replace_var (expr : lens_phrase) (repl : (string * Value.t) list) : lens_phrase =
+        traverse expr (fun expr -> 
+            match expr with
+            | `Var n -> 
+                let v = List.find_opt (fun (k,_v) -> k = n) repl in
+                let v = OptionUtils.opt_map (fun (_,v) -> `Constant (constant_of_value v)) v in
+                OptionUtils.from_option expr v
+            | _ -> expr
+        )
+
 
 end
 
