@@ -2,7 +2,6 @@
 open ProcessTypes
 open Utility
 open Types
-open Value
 open LensFDHelpers
 
 (* Setting *)
@@ -83,6 +82,74 @@ type json_node_type =
    | `Unquoted
    ]
 
+type writefn = string -> unit
+
+let json_str v (wr : writefn) =
+    wr "\"";
+    js_dq_escape_string v |> wr;
+    wr "\""
+
+let json_attr_str key value (wr : writefn) =
+    wr key;
+    wr ": ";
+    json_str value
+
+let json_attr_unquoted key value (wr : writefn) =
+    wr key;
+    wr ": ";
+    value wr
+
+let json_node attributes (wr : writefn) =  
+    wr "{";
+    List.iteri (fun i (k,v) ->
+        if i > 0 then wr ", ";
+        json_attr_unquoted k v wr;
+    ) attributes;
+    wr "}"
+
+let json_list elems (wr : writefn) =
+    wr "[";
+    List.iteri (fun i v ->
+        if i > 0 then wr ", ";
+        v wr
+    ) elems;
+    wr "]"
+
+let json_constant (const : Constant.constant) (wr : writefn) =
+    match const with
+    | `Float f -> string_of_float' f |> wr
+    | `Int i -> string_of_int i |> wr
+    | `Bool b -> string_of_bool b |> wr
+    | `Char c -> json_node [("_c", js_dq_escape_char c |> json_str)] wr
+    | `String s -> json_str s wr
+    
+let rec json_phrase (phrase : Types.lens_phrase) (wr : writefn) =
+    match phrase with
+    | `Constant c -> json_constant c wr
+    | `Var v -> json_node [("_var", json_str v)] wr
+    | `InfixAppl (op, l, r) -> json_node [
+        ("_infx", Operators.string_of_binop op |> json_str);
+        ("_l", json_phrase phrase);
+        ("_r", json_phrase r)
+    ] wr
+    | `UnaryAppl (op, l) -> json_node [
+        ("_op", Operators.string_of_unary_op op |> json_str);
+        ("_l", json_phrase l)
+    ] wr
+    | `In (attrs, vals) -> json_node [
+        ("_in", json_list (List.map json_str attrs));
+        ("_vals", json_list (List.map (List.map json_constant ->- json_list) vals)) 
+    ] wr
+
+
+let expand v = 
+    let buf = Buffer.create 256 in
+    let wr = Buffer.add_string buf in
+    v wr;
+    Buffer.contents buf
+
+
+let json_str v = "\"" ^ js_dq_escape_string v ^ "\""
 let json_attr_str key value = key ^ ": \"" ^ js_dq_escape_string value ^ "\""
 let json_attr_unquoted key value = key ^ ": " ^ value 
 
@@ -94,6 +161,10 @@ let json_node attributes = "{" ^ mapstrcat ", " (fun (k,t,v) ->
 
 let json_node_str attributes = "{" ^ mapstrcat ", " (fun (k,v) -> json_attr_str k v) attributes ^ "}"
 
+let rec string_listify : string list -> string = function
+  | [] -> nil_literal
+  | x::xs -> Printf.sprintf "{\"_head\":%s, \"_tail\":%s}" x (string_listify xs)
+ 
 
 let json_of_constant (const : Constant.constant) =
   match const with
@@ -101,7 +172,7 @@ let json_of_constant (const : Constant.constant) =
   | `Int i -> string_of_int i 
   | `Bool b -> string_of_bool b 
   | `Char c -> json_node_str [("_c", js_dq_escape_char c)]
-  | `String s -> "\"" ^ js_dq_escape_string s ^ "\""
+  | `String s -> json_str s 
 
 let rec json_of_phrase (phrase : Types.lens_phrase) =
   match phrase with
@@ -114,6 +185,10 @@ let rec json_of_phrase (phrase : Types.lens_phrase) =
   | `UnaryAppl (op,l) -> json_node [
      ("unary", `String, Operators.string_of_unary_op op);
      ("l", `Unquoted, json_of_phrase l)]
+  | `In (attrs, vals) -> json_node [
+      ("in", `Unquoted, string_listify (List.map json_str attrs));
+      ("vals", `Unquoted, string_listify (List.map (List.map json_of_constant ->- string_listify) vals))
+    ]
   | `TupleLit (inner) -> json_node [("tuple", `Unquoted, json_of_phrase (List.hd inner))]
 
 
@@ -153,10 +228,6 @@ let jsonize_location : Ir.location -> string = function
   | `Server  -> "server"
   | `Native  -> "native"
   | `Unknown -> "unknown"
-
-let rec string_listify : string list -> string = function
-  | [] -> nil_literal
-  | x::xs -> Printf.sprintf "{\"_head\":%s, \"_tail\":%s}" x (string_listify xs)
 
 let rec jsonize_value' : Value.t -> json_string =
   function

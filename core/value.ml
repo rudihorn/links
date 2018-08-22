@@ -759,13 +759,15 @@ module Continuation
 
 type t = [
 | primitive_value
-| `List of t list
 | `Lens of table * Types.lens_sort
 | `LensMem of t * Types.lens_sort
+(* lens select: lens, predicate, sort *)
+| `LensSelect of t * Types.lens_phrase * Types.lens_sort
+(* lens join: left lens, right lens, column maps (left, right to out?), delete left phrase, delete right phrase, sort *)
+| `LensJoin of t * t * (string * string * string) list * Types.lens_phrase * Types.lens_phrase * Types.lens_sort
 (* lens drop: lens, drop, key (defined by), default, sort *)
 | `LensDrop of t * string * string * t * Types.lens_sort
-| `LensSelect of t * Types.lens_phrase * Types.lens_sort
-| `LensJoin of t * t * (string * string * string) list * Types.lens_phrase * Types.lens_phrase * Types.lens_sort
+| `List of t list
 | `Record of (string * t) list
 | `Variant of string * t
 | `FunctionPtr of (Ir.var * t option)
@@ -916,7 +918,7 @@ let rec p_value (ppf : formatter) : t -> 'a = function
                                fprintf ppf "fun"
   | `Socket _ -> fprintf ppf "<socket>"
   | `Lens (_, _) -> fprintf ppf "(lens)"
-  | `LensMem (_, _) -> fprintf ppf "(lens)" 
+  | `LensMem (_, _) -> fprintf ppf "(lens)"
   | `LensDrop (_lens, dr, key, def, _typ) -> fprintf ppf ("(lensdrop %s determined by %s default %a)") dr key p_value def
   | `LensSelect (_lens, _pred, _sort) -> fprintf ppf ("(lensselect)")
   | `LensJoin (_lens1, _lens2, _on, _left, _right, _sort) -> fprintf ppf "(lensjoin)"

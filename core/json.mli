@@ -74,4 +74,9 @@ type json_node_type =
 val json_node : (string * json_node_type * string) list -> json_string
 val jsonize_sort : Types.lens_sort -> json_string
 
+type writefn = string -> unit
+val expand : (writefn -> unit) -> string
+
+val json_constant : Constant.constant -> writefn -> unit
+val json_phrase : Types.lens_phrase -> writefn -> unit
 

@@ -10,6 +10,7 @@ open Utility
 (* let _ = Settings.set_value Debug.debugging_enabled true *)
 
 
+(* 
 let test_jsonize_value_list_empty test_ctx = 
    assert_equal "[]" (jsonize_value (`List []))
 
@@ -81,11 +82,27 @@ let test_parse_json_phrase test_ctx =
 let test_parse_json_lens test_ctx =
    let res = Json.jsonize_value data_lens in
    let lens = Json.parse_json res in
-   assert_equal data_lens lens
+   assert_equal data_lens lens *)
+
+let test_json_const const comp test_ctx = 
+    let res = Json.expand <| Json.json_constant const in
+    assert_equal res comp
+
+let test_json_phrase phrase comp test_ctx = 
+    let res = Json.expand <| Json.json_phrase phrase in
+    assert_equal res comp
 
 let suite =
    "json" >:::
       [
+         "constants" >::: [
+             "int5" >:: (test_json_const (`Int 5) "5");
+         ];
+         "phrase" >::: [
+             "inC56" >:: (test_json_phrase (`In (["C"], [[`Int 5; `Int 6]])) "{_in: [\"C\"], _vals: [[5, 6]]}")
+         ];
+
+          (* 
          "json_node" >::: [
             "simple" >:: test_json_node_simple;
          ];
@@ -102,6 +119,6 @@ let suite =
          "parse_json" >::: [
             "phrase" >:: test_parse_json_phrase;
             (* "lens" >:: test_parse_json_lens; *)
-         ];
+         ]; *)
       ];;
 

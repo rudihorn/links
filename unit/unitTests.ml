@@ -9,7 +9,7 @@ let suites =
             UnitTestsLensSetOperations.suite;
             UnitTestsLensPerformance.suite;
             UnitTestsLensPrimitives.suite;
-            (* UnitTestsJson.suite; *)
+            UnitTestsJson.suite; 
         ];
    ];;
 
