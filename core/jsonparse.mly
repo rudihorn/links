@@ -234,8 +234,13 @@ members:
 | id COLON value                     { [$1, $3] }
 | members COMMA id  COLON value      { ($3, $5) :: $1 }
 
+arraymembers:
+| value                              { [$1] }
+| arraymembers COMMA value           { $3 :: $1 (* reverse order then reverse more efficient? *) }
+
 array:
 | LBRACKET RBRACKET                  { `List ([]) (* For now, we denote Nil as [] *) }
+| LBRACKET arraymembers RBRACKET     { `List (List.rev $2) }
 
 value:
 | string                             { $1 }

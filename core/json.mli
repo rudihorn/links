@@ -71,9 +71,6 @@ type json_node_type =
    | `Unquoted
    ]
 
-val json_node : (string * json_node_type * string) list -> json_string
-val jsonize_sort : Types.lens_sort -> json_string
-
 type writefn = string -> unit
 val expand : (writefn -> unit) -> string
 
