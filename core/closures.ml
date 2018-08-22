@@ -12,7 +12,7 @@ struct
      each non-global function f to a list of its non-global free
      variables. *)
   class visitor tenv globals =
-    object (o : 'self) inherit Transform.visitor(tenv) as super
+    object (o : 'self) inherit IrTraversals.Transform.visitor(tenv) as super
       val globals = globals
       val bound_vars = IntSet.empty
       val free_vars = IntSet.empty
@@ -254,7 +254,7 @@ struct
                             StringMap.empty, None))
 
   class visitor tenv fenv =
-    object (o : 'self) inherit Transform.visitor(tenv) as super
+    object (o : 'self) inherit IrTraversals.Transform.visitor(tenv) as super
       (* currently active mutually recursive functions*)
       val parents : Ir.binder list = []
       (* currently active closure environment *)
@@ -322,7 +322,10 @@ struct
           let parents', parent_env', cvars' = parents, parent_env, cvars in
           let zs = IntMap.find f fenv in
           let cvars = List.fold_left (fun cvars (z, _) -> IntSet.add z cvars) IntSet.empty zs in
-          let zb, o =
+
+          (* The following type annotation is necessary as of OCaml
+             4.07.0. Is this a bug in OCaml? *)
+          let zb, (o : 'self) =
             match zs with
             | [] -> None, o
             | _ ->
@@ -421,7 +424,7 @@ struct
     e
 end
 
-let program tyenv globals program =
+let program globals tyenv program =
   (* Debug.print ("Before closure conversion: " ^ Ir.show_program program); *)
   (* ensure that all top-level bindings are marked as global
      (desugaring can break this invariant) *)

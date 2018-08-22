@@ -11,6 +11,7 @@ let endbang_antiquotes = Basicsettings.TypeSugar.endbang_antiquotes
 
 let check_top_level_purity = Basicsettings.TypeSugar.check_top_level_purity
 
+let dodgey_type_isomorphism = Basicsettings.TypeSugar.dodgey_type_isomorphism
 
 module Env = Env.String
 
@@ -1449,10 +1450,13 @@ let type_binary_op ctxt =
    If there are no _ or variable patterns at a variant type, then that
    variant will be closed.
 *)
-let rec close_pattern_type : pattern list -> Types.datatype -> Types.datatype = fun pats t ->
-  let cpt : pattern list -> Types.datatype -> Types.datatype = close_pattern_type in
+let close_pattern_type : pattern list -> Types.datatype -> Types.datatype = fun pats t ->
+  (* We use a table to keep track of encountered recursive variables
+     in order to avert non-termination. *)
+  let rec_vars_seen = Hashtbl.create 8 in
+  let rec cpt : pattern list -> Types.datatype -> Types.datatype = fun pats t ->
     match t with
-      | `Alias (alias, t) -> `Alias (alias, close_pattern_type pats t)
+      | `Alias (alias, t) -> `Alias (alias, cpt pats t)
       | `Record row when Types.is_tuple row->
           let fields, row_var, dual = fst (Types.unwrap_row row) in
           let rec unwrap_at i p =
@@ -1577,29 +1581,48 @@ let rec close_pattern_type : pattern list -> Types.datatype -> Types.datatype = 
                  match field_spec with
                  | `Present t ->
                     begin match TypeUtils.concrete_type t with
-                    | `Function (domain, effs, codomain) ->
-                       (* TODO FIXME we need to be careful here. Unary
-                          operations must be treated specially because
-                          unary tuples are treated differently from
-                          nullary and n-ary ones in the type
-                          checker. *)
-                       let is_unary =
-                         StringMap.size (fst3 (TypeUtils.extract_row domain)) = 1
-                       in
-                       let pats =
-                         let pats = concat_map (unwrap_at name) pats in
-                         if is_unary then pats
-                         else [`Tuple pats, SourceCode.dummy_pos]
-                       in
-                       let domain =
-                         if is_unary then List.hd (TypeUtils.arg_types t)
-                         else domain
-                       in
-                       let domain = cpt pats domain in
+                    | `Function (_, effs, codomain) ->
+                       (* Idea: For each operation `name' extract its
+                          patterns `ps' from `Effect(name, ps, _)' and
+                          arrange each such ps as a row in and n x p
+                          matrix, where n is the number of cases for
+                          `name' and p is |ps|. Afterwards, point-wise
+                          close the patterns by recursively calling
+                          close_pattern_type on each column. *)
                        let t =
-                         if is_unary then Types.make_function_type [domain] effs codomain
-                         else `Function (domain, effs, codomain)
+                       (* Construct an p x n matrix (i.e. the
+                          transposition of p x n matrix as it is easier
+                          to map column-wise) *)
+                         let pmat : pattern list list =
+                           let non_empty ps = ps <> [] in
+                           let rows =
+                             map_filter
+                               (unwrap_at name)
+                               non_empty
+                               pats
+                           in
+                           transpose rows
+                         in
+                         (* Annotate each pattern with its inferred type *)
+                         let annot_pmat =
+                           try
+                             let annotate ps t = (ps, t) in
+                             let types = TypeUtils.arg_types t in
+                             List.map2 annotate pmat types
+                           with
+                             Invalid_argument _ -> failwith "Inconsistent pattern type"
+                         in
+                         (* Recursively close each subpattern. This
+                            yields the domain type for the operation. *)
+                         let domain : Types.datatype list =
+                           List.map
+                             (fun (ps, t) -> cpt ps t)
+                             annot_pmat
+                         in
+                       (* Reconstruct the type for the whole pattern *)
+                         Types.make_function_type domain effs codomain
                        in
+                       (* Bind name |-> Pre(t) *)
                        StringMap.add name (`Present t) env
                     | _ ->
                        StringMap.add name (`Present t) env
@@ -1628,7 +1651,10 @@ let rec close_pattern_type : pattern list -> Types.datatype -> Types.datatype = 
             match Unionfind.find point with
               | `Body t -> cpt pats t
               | `Var _ -> t
-              | `Recursive _ -> assert false
+              | `Recursive (i, t') when not (Hashtbl.mem rec_vars_seen i) ->
+                 Hashtbl.add rec_vars_seen i ();
+                 cpt pats t'
+              | `Recursive _ -> t
           end
       | `Not_typed
       | `Primitive _
@@ -1640,19 +1666,44 @@ let rec close_pattern_type : pattern list -> Types.datatype -> Types.datatype = 
       | #Types.session_type
        (* TODO: expand applications? *)
       | `Application _ -> t
+  in
+  cpt pats t
 
-let unify ~pos ~(handle:Gripers.griper) ((_,ltype as t1), (_,rtype as t2)) =
-  try
-    Utils.unify (ltype, rtype)
-  with
-      Unify.Failure error ->
-        begin
-          match error with
-            | `Msg s ->
-                Debug.print ("Unification error: "^s)
-            | _ -> ()
-        end;
-        handle ~pos ~t1 ~t2 ~error
+type unify_result = UnifySuccess | UnifyFailure of (Unify.error * SourceCode.pos)
+
+let raise_unify ~(handle:Gripers.griper) ~pos error t1 t2 =
+  begin
+    match error with
+    | `Msg s -> Debug.print ("Unification error: "^s)
+    | _ -> ()
+  end;
+  handle ~pos ~t1 ~t2 ~error
+
+let unify ~pos unifyTys  =
+  try Utils.unify unifyTys; UnifySuccess
+  with Unify.Failure error -> UnifyFailure (error, pos)
+
+let unify_or_raise ~(handle:Gripers.griper) ~pos (_, ltype1 as lt1, (_, rtype1 as rt1)) =
+  begin
+  match unify ~pos (ltype1, rtype1) with
+  | UnifySuccess -> ()
+  | UnifyFailure (err, pos) -> raise_unify ~handle ~pos err lt1 rt1
+  end
+
+(* Expects at least one pair of arguments to succesfully unify *)
+let unify_or ~(handle:Gripers.griper) ~pos ((_, ltype1), (_, rtype1))
+                                          ((_, ltype2) as lt2, ((_, rtype2) as rt2)) =
+  begin
+  match unify ~pos (ltype1, rtype1) with
+  | UnifySuccess -> ()
+  | UnifyFailure _ ->
+     begin
+       match unify ~pos (ltype2, rtype2) with
+       | UnifySuccess -> ()
+       | UnifyFailure (err, pos) -> raise_unify ~handle ~pos err lt2 rt2
+     end
+  end
+
 
 (** check for duplicate names in a list of pattern *)
 let check_for_duplicate_names : Sugartypes.position -> pattern list -> string list = fun pos ps ->
@@ -1719,7 +1770,7 @@ let type_pattern closed : pattern -> pattern * Types.environment * Types.datatyp
   let rec type_pattern (pattern, pos' : pattern) : pattern * Types.environment * (Types.datatype * Types.datatype) =
     let _UNKNOWN_POS_ = "<unknown>" in
     let tp = type_pattern in
-    let unify (l, r) = unify ~pos:pos' (l, r)
+    let unify (l, r) = unify_or_raise ~pos:pos' (l, r)
     and erase (p,_, _) = p
     and ot (_,_,(t,_)) = t
     and it (_,_,(_,t)) = t
@@ -1755,8 +1806,8 @@ let type_pattern closed : pattern -> pattern * Types.environment * Types.datatyp
         let ps' = List.map tp ps in
         let env' = List.fold_right (env ->- (++)) ps' Env.empty in
         let list_type p ps typ =
-          let _ = List.iter (fun p' -> unify ~handle:Gripers.list_pattern ((pos p, typ p),
-                                                                           (pos p', typ p'))) ps in
+          let () = List.iter (fun p' -> unify ~handle:Gripers.list_pattern ((pos p, typ p),
+                                                                            (pos p', typ p'))) ps in
           Types.make_list_type (typ p) in
         let ts =
           match ps' with
@@ -2038,7 +2089,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
     let _UNKNOWN_POS_ = "<unknown>" in
     let no_pos t = (_UNKNOWN_POS_, t) in
 
-    let unify (l, r) = unify ~pos:pos (l, r)
+    let unify (l, r) = unify_or_raise ~pos:pos (l, r)
     and (++) env env' = {env with var_env = Env.extend env.var_env env'} in
 
     let typ (_,t,_) : Types.datatype = t
@@ -2661,7 +2712,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
             let ps = List.map (tc) ps in
 
               (*
-                We take advantage of this type isomorphism:
+                SL: though superficially appealing, the following is unsound
+                as it evidently violates the value restriction!
+                Thus we disable it by default.
+
+                I think the isomorphism for projections is still OK.
+
+                We can take advantage of this type isomorphism:
 
                 forall X.P -> Q == P -> forall X.Q
                 where X is not free in P
@@ -2708,10 +2765,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
 
                       (* quantifiers for the return type *)
                       let rqs =
-                        (fst -<- List.split -<- snd -<- List.split)
-                          (List.filter
-                             (fun (q, _) -> not (free_in_arg q))
-                             xs) in
+                        if Settings.get_value dodgey_type_isomorphism then
+                          (fst -<- List.split -<- snd -<- List.split)
+                            (List.filter
+                               (fun (q, _) -> not (free_in_arg q))
+                               xs)
+                        else
+                          [] in
 
                       (* type arguments to apply f to *)
                       let tyargs = (snd -<- List.split -<- snd -<- List.split) xs in
@@ -2743,17 +2803,14 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
 
                   | ft ->
                       let rettyp = Types.fresh_type_variable (`Any, `Any) in
-                        begin
-                          try
-                            unify ~handle:Gripers.fun_apply
-                                  ((exp_pos f, ft), no_pos (`Function (Types.make_tuple_type (List.map typ ps),
-                                                                       context.effect_row, rettyp)))
-                          with _ ->
-                               unify ~handle:Gripers.fun_apply
-                                     ((exp_pos f, ft), no_pos (`Lolli (Types.make_tuple_type (List.map typ ps),
-                                                                          context.effect_row, rettyp)))
-                        end;
-                        `FnAppl (erase f, List.map erase ps), rettyp, merge_usages (usages f :: List.map usages ps)
+                      begin
+                        unify_or ~handle:Gripers.fun_apply ~pos
+                                ((exp_pos f, ft), no_pos (`Function (Types.make_tuple_type (List.map typ ps),
+                                                                     context.effect_row, rettyp)))
+                                ((exp_pos f, ft), no_pos (`Lolli (Types.make_tuple_type (List.map typ ps),
+                                                                  context.effect_row, rettyp)))
+                      end;
+                      `FnAppl (erase f, List.map erase ps), rettyp, merge_usages (usages f :: List.map usages ps)
               end
         | `TAbstr (qs, e) ->
             let (e, _), t, u = tc e in
@@ -3175,12 +3232,16 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                      match pat with
                      | `Variant (opname, Some pat'), pos ->
                         begin match pat' with
+                        | `Tuple [], _ ->
+                           `Effect (opname, [], (`Any, SourceCode.dummy_pos)), pos
                         | `Tuple ps, _ ->
                            let kpat, pats = pop_last ps in
                            let eff = `Effect (opname, pats, kpat) in
                            eff, pos
                         | _ -> `Effect (opname, [], pat'), pos
                         end
+                     | `Variant (opname, None), pos ->
+                        `Effect (opname, [], (`Any, SourceCode.dummy_pos)), pos
                      | _, pos -> Gripers.die pos "Improper pattern matching"
                    in
                    let pat = tpo pat in
@@ -3484,7 +3545,7 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
 and type_binding : context -> binding -> binding * context * usagemap =
   fun context (def, pos) ->
     let type_check = type_check in
-    let unify pos (l, r) = unify ~pos:pos (l, r)
+    let unify pos (l, r) = unify_or_raise ~pos:pos (l, r)
     and typ (_,t,_) = t
     and erase (e, _, _) = e
     and usages (_,_,u) = u
@@ -3800,7 +3861,7 @@ and type_regex typing_env : regex -> regex =
         | `Repeat (repeat, r) -> `Repeat (repeat, tr r)
         | `Splice ((_pn, pos) as e) ->
             let e = type_check typing_env e in
-            let () = unify ~pos:pos ~handle:Gripers.splice_exp
+            let () = unify_or_raise ~pos:pos ~handle:Gripers.splice_exp
               (no_pos (typ e), no_pos Types.string_type)
             in
               `Splice (erase e)
@@ -3841,7 +3902,7 @@ and type_cp (context : context) = fun (p, pos) ->
 
   let use s u = StringMap.add s 1 u in
 
-  let unify ~pos ~handle (t, u) = unify ~pos:pos ~handle:handle (("<unknown>", t), ("<unknown>", u)) in
+  let unify ~pos ~handle (t, u) = unify_or_raise ~pos:pos ~handle:handle (("<unknown>", t), ("<unknown>", u)) in
 
   let (p, t, u) = match p with
     | `Unquote (bindings, e) ->

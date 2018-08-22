@@ -84,7 +84,7 @@ end
 
 module String = struct
   include String
-  let pp = Format.pp_print_string 
+  let pp = Format.pp_print_string
   let show = fun x -> x
 end
 
@@ -108,7 +108,7 @@ end
 module Char =
 struct
   include Char
-  
+
   let pp = Format.pp_print_char
   let show = fun x  -> Format.asprintf "%a" pp x
   let isAlpha = function 'a'..'z' | 'A'..'Z' -> true | _ -> false
@@ -197,10 +197,10 @@ struct
         m (empty, empty)
 
 
-    let pp af formatter map = 
+    let pp af formatter map =
       Format.pp_open_box formatter 0;
       Format.pp_print_string formatter "{";
-      iter (fun key value -> 
+      iter (fun key value ->
                 Format.pp_open_box formatter 0;
                 Ord.pp formatter key;
                 Format.pp_print_string formatter " => ";
@@ -210,7 +210,7 @@ struct
              ) map;
       Format.pp_print_string formatter "}";
       Format.pp_close_box formatter ()
-    
+
     let show = (fun af x  -> Format.asprintf "%a" (pp af) x)
   end
 end
@@ -246,7 +246,7 @@ struct
     let pp formatter set =
       Format.pp_open_box formatter 0;
       Format.pp_print_string formatter "{";
-      iter (fun elt -> 
+      iter (fun elt ->
                 Format.pp_open_box formatter 0;
                 Ord.pp formatter elt;
                 Format.fprintf formatter ";@;";
@@ -462,6 +462,14 @@ struct
         if pred x then (f x)::(filter_map pred f xs) else
           (filter_map pred f xs)
 
+  let rec map_filter f pred = function
+    | [] -> []
+    | x :: xs ->
+       let y = f x in
+       if pred y
+       then y :: (map_filter f pred xs)
+       else (map_filter f pred xs)
+
   let print_list xs =
     let rec print_list_inner = function
         | [] -> ""
@@ -482,6 +490,12 @@ struct
     | [], [] -> []
     | x :: xs, y :: ys -> (x, y) :: zip' xs ys
     | _, _ -> raise Lists_length_mismatch
+
+  let rec transpose : 'a list list -> 'a list list = function
+    | [] -> []
+    | [] :: xss -> transpose xss
+    | (x :: xs) :: xss ->
+       (x :: (List.map List.hd xss)) :: transpose (xs :: List.map List.tl xss)
 end
 include ListUtils
 
@@ -856,7 +870,7 @@ let read_hex c =
    confused by all the backslashes and quotes and refuses to translate
    the file.
 *)
-let escape_regexp = Str.regexp "\\\\n\\|\\\\r\\|\\\\t\\|\\\\\"\\|\\\\\\\\\\|\\\\[0-3][0-7][0-7]\\|\\\\[xX][0-9a-fA-F][0-9a-fA-F]"
+let escape_regexp = Str.regexp "\\\\b\\|\\\\n\\|\\\\r\\|\\\\t\\|\\\\\"\\|\\\\\\\\\\|\\\\[0-3][0-7][0-7]\\|\\\\[xX][0-9a-fA-F][0-9a-fA-F]"
 let decode_escapes s =
   let unquoter s =
     (* Yes, the Str interface is stateful.  A pretty poor show.  PCRE
@@ -869,6 +883,7 @@ let decode_escapes s =
         | "\\n" -> "\n"
         | "\\r" -> "\r"
         | "\\t" -> "\t"
+        | "\\b" -> "\b"
         | other when other.[1] = 'x' || other.[1] = 'X' ->
             String.make 1 (read_hex (String.sub other 2 2))
         | other -> String.make 1 (read_octal (String.sub other 1 3)) in
@@ -964,6 +979,7 @@ module StringLabels = Notfound.StringLabels
 module Sys = Notfound.Sys
 module Unix = Notfound.Unix
 module UnixLabels = Notfound.UnixLabels
+module Printexc = Notfound.Printexc
 
 exception NotFound = Notfound.NotFound
 

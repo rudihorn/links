@@ -532,15 +532,15 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   "childNodes",
   (p1 (function
          | `List [`XML (Value.Node (_, children))] ->
-           let children = List.filter (function 
-             | (Value.Node _) -> true 
-             | (Value.NsNode _) -> true 
+           let children = List.filter (function
+             | (Value.Node _) -> true
+             | (Value.NsNode _) -> true
              | _ -> false) children in
            `List (map (fun x -> `XML x) children)
          | `List [ `XML (Value.NsNode (_, _, children)) ] ->
-           let children = List.filter (function 
-             | (Value.Node _) -> true 
-             | (Value.NsNode _) -> true 
+           let children = List.filter (function
+             | (Value.Node _) -> true
+             | (Value.NsNode _) -> true
              | _ -> false) children in
            `List (map (fun x -> `XML x) children)
          | _ -> failwith "non-XML given to childNodes"),
@@ -589,7 +589,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   IMPURE);
 
   "print",
-  (p1 (fun msg -> print_endline (Value.unbox_string msg); flush stdout; `Record []),
+  (p1 (fun msg -> print_string (Value.unbox_string msg); flush stdout; `Record []),
    datatype "(String) ~> ()",
   IMPURE);
 
@@ -816,7 +816,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   IMPURE);
 
   "domSetPropertyFromRef",
-  (`Client, datatype "(DomNode, String, String) ~> String",
+  (`Client, datatype "(DomNode, String, String) ~> ()",
   IMPURE);
 
   "domHasAttribute",
@@ -832,7 +832,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   IMPURE);
 
   "domSetAttributeFromRef",
-  (`Client, datatype "(DomNode, String, String) ~> String",
+  (`Client, datatype "(DomNode, String, String) ~> ()",
   IMPURE);
 
   "domGetStyleAttrFromRef",
@@ -844,7 +844,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
   IMPURE);
 
   "domSetStyleAttrFromRef",
-  (`Client, datatype "(DomNode, String, String) ~> String",
+  (`Client, datatype "(DomNode, String, String) ~> ()",
   IMPURE);
 
   (* Section:  Navigation for DomNodes *)
@@ -1607,7 +1607,7 @@ let env : (string * (located_primitive * Types.datatype * pure)) list = [
     (* Crypt API *)
 
     "crypt",
-    (`Server (p1 (Value.box_string -<- Bcrypt.string_of_hash -<-  (Bcrypt.hash ?count:None ?seed:None) -<- Value.unbox_string)),
+    (`Server (p1 (Value.box_string -<- Bcrypt.string_of_hash -<- (fun s -> Bcrypt.hash ?count:None ?seed:None s) -<- Value.unbox_string)),
     datatype "(String) ~> String",
     PURE);
 

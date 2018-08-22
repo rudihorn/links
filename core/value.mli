@@ -29,7 +29,7 @@ class virtual database :
     method virtual exec : string -> dbvalue
     method make_insert_query : (string * string list * string list list) -> string
     method make_insert_returning_query : (string * string list * string list list * string) -> string list
-  end 
+  end
 
 
 val equal_database : database -> database -> bool
@@ -48,7 +48,7 @@ type xmlitem =   Text of string
                | NsAttr of (string * string * string)
                | NsNode of (string * string * xml)
 and xml = xmlitem list
-  [@@deriving show]
+  [@@deriving show,yojson]
 
 type table = (database * string) * string * string list list * Types.row
   [@@deriving show]
@@ -62,6 +62,7 @@ type primitive_value = [
 | `Int of int
 | `XML of xmlitem
 | `String of string ]
+[@@deriving show]
 
 type spawn_location = [
   | `ClientSpawnLoc of client_id

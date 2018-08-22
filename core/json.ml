@@ -345,7 +345,7 @@ let show_processes procs =
 let show_handlers evt_handlers =
   (* Show the JSON for an event handler: the evt handler key, and the associated process(es) *)
   let show_evt_handler (key, proc) =
-    (* If the list of processes handling each key is represented by a 'List term, we translate it to a 
+    (* If the list of processes handling each key is represented by a 'List term, we translate it to a
        JS Array. This Array is supposed to be processes  by jslib code only*)
     let jsonize_handler_list = function
       | `List elems -> string_listify (List.map jsonize_value' elems)
@@ -425,6 +425,22 @@ module JsonState = struct
 
   (** Serialises the state as a JSON string *)
   let to_string s = print_json_state s.client_id s.ws_conn_url s.processes s.handlers s.aps s.buffers
+
+  let _merge s s' =
+    let select_left _ x _ = Some x in
+    let processes = PidMap.union select_left s.processes s'.processes in
+    let buffers   = ChannelIDMap.union select_left s.buffers s'.buffers in
+    let channels  =
+      List.fold_left
+        (fun acc chan ->
+          (* make sure each channel only appears once *)
+          chan :: List.filter (fun chan' -> chan <> chan') acc)
+        s.channels s'.channels
+    in
+    let handlers = IntMap.union select_left s.handlers s'.handlers in
+    (* TODO: access points *)
+    let aps = AccessPointIDSet.union s.aps s'.aps in
+    { s with processes = processes; buffers = buffers; channels = channels; handlers = handlers; aps = aps }
 end
 
 type json_state = JsonState.t
