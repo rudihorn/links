@@ -177,7 +177,6 @@ let keywords = [
  "from"     , FROM;
  "fun"      , FUN;
  "formlet"  , FORMLET;
- "get"      , GET;
  "handle"   , HANDLE;
  "handler"  , HANDLER;
  "if"       , IF;
@@ -185,6 +184,8 @@ let keywords = [
  "left"     , LEFT;
  "lens"     , LENS;
  "lensdrop" , LENSDROP;
+ "lensget"  , LENSGET;
+ "lensput"  , LENSPUT;
  "lensselect", LENSSELECT;
  "lensjoin" , LENSJOIN;
  "open"     , OPEN;
@@ -202,7 +203,6 @@ let keywords = [
  "open"     , OPEN;
  "otherwise", OTHERWISE;
  "page"     , PAGE;
- "put"      , PUT;
  "query"    , QUERY;
  "raise"    , RAISE;
  "readonly" , READONLY;

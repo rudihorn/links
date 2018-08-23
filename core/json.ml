@@ -36,46 +36,6 @@ let js_dq_escape_char =
     '"' -> "\\\""
   | '\\' -> "\\\\"
   | ch -> String.make 1 ch
-       
-(* Helper functions for jsonization *)
-(*
-  SL:
-    Having implemented jsonisation of database values, I'm now
-    unsure if this is what we really want. From a security point
-    of view it certainly isn't a very good idea to pass this kind of
-    information to the client.
-*)
-let json_of_db (db, params) =
-  let driver = db#driver_name() in
-  let (name, args) = Value.parse_db_string params in
-    "{_db:{driver:\"" ^ driver ^ "\",name:\"" ^ name ^ "\", args:\"" ^ args ^ "\"}}"
-
-(* let parse_json_db r : (Value.database * string) =
-   parse_json_record [
-      `Keys (["driver"; "name"; "args"], fun [driver; name; args] -> (driver, Value.reconstruct_db_string (unbox_string name, unbox_string args)))
-   ] r *)
-
-(*
-WARNING:
-  May need to be careful about free type variables / aliases in row
-*)
-let json_of_table ((db, params), name, keys, row) =
-  let json_of_key k = "[" ^ (mapstrcat ", " (fun x -> x) k) ^ "]" in
-  let json_of_keylist ks = "[" ^ (mapstrcat ", " json_of_key ks) ^ "]" in
-    "{_table:{db:'" ^ json_of_db (db, params) ^ "',name:\"" ^ name ^
-      "\",row:\"" ^ Types.string_of_datatype (`Record row) ^
-      "\",keys:\"" ^ json_of_keylist keys ^ "\"}}"  
-
-(* let parse_json_db r =
-   let unbox_keys keys = List.map (fun a -> List.map (fun b -> unbox_string b) (unbox_list a)) (unbox_list keys) in
-   let unbox_database = function
-      | `Database db -> db
-      | _ -> failwith "Not a database" in
-   parse_json_record [
-      `Keys (["db"; "name"; "row"; "keys"], fun [db; name; row; keys] ->
-         unbox_database db, unbox_string name, DesugarDatatypes.read ~aliases:Env.String.empty (unbox_string row), unbox_keys keys)
-   ] r *)
-
 
 type json_node_type = 
    [ `String 
@@ -94,11 +54,6 @@ let json_str v (wr : writefn) =
 
 let json_int v (wr : writefn) =
     string_of_int v |> wr
-
-let json_attr_str key value (wr : writefn) =
-    wr key;
-    wr ": ";
-    json_str value
 
 let json_attr_unquoted key value (wr : writefn) =
     wr key;
@@ -138,7 +93,7 @@ let rec json_phrase (phrase : Types.lens_phrase) (wr : writefn) =
     | `Var v -> json_node [("_var", json_str v)] wr
     | `InfixAppl (op, l, r) -> json_node [
         ("_infx", Operators.string_of_binop op |> json_str);
-        ("_l", json_phrase phrase);
+        ("_l", json_phrase l);
         ("_r", json_phrase r)
     ] wr
     | `UnaryAppl (op, l) -> json_node [
@@ -148,7 +103,10 @@ let rec json_phrase (phrase : Types.lens_phrase) (wr : writefn) =
     | `In (attrs, vals) -> json_node [
         ("_in", json_list (List.map json_str attrs));
         ("_vals", json_list (List.map (List.map json_constant ->- json_list) vals)) 
-    ] wr
+    ] wr 
+    (* | `Case (phrase, cases, default) -> 
+        let nodes = List.concat [ ] *)
+                
 
 
 let expand v = 
@@ -193,7 +151,14 @@ let json_location (loc : Ir.location) =
   | `Native  -> json_str "native"
   | `Unknown -> json_str "unknown"
 
-
+(* Helper functions for jsonization *)
+(*
+  SL:
+    Having implemented jsonisation of database values, I'm now
+    unsure if this is what we really want. From a security point
+    of view it certainly isn't a very good idea to pass this kind of
+    information to the client.
+*)
 let json_db (db, params) =
   let driver = db#driver_name() in
   let (name, args) = Value.parse_db_string params in
@@ -205,6 +170,10 @@ let json_db (db, params) =
 	])
   ]
 
+(*
+WARNING:
+  May need to be careful about free type variables / aliases in row
+*)
 let json_table ((db, params), name, keys, row) =
   let json_of_key k = List.map json_str k |> json_list in
   let json_of_keylist ks = json_list (List.map json_of_key ks) in
@@ -374,260 +343,27 @@ let show_buffers bufs =
 let print_json_state client_id conn_url procs handlers aps bufs =
   let ws_url_data =
     match conn_url with
-    | Some ws_conn_url -> json_node [
+    | Some ws_conn_url -> [
       ("ws_conn_url", json_str ws_conn_url)
     ]
-    | None -> json_unquoted "" in
-  json_node [
-     ("client_id", ClientID.to_json client_id |> json_unquoted);
-     ("access_points", show_aps aps);
-     ("buffers", show_buffers bufs);
-     ("processes", show_processes procs);
-     ("handlers", show_handlers handlers);
-  ]
-
+    | None -> [] in
+  let nodes = List.concat [
+    [("client_id", ClientID.to_json client_id |> json_unquoted)];
+    ws_url_data;
+    [
+      ("access_points", show_aps aps);
+      ("buffers", show_buffers bufs);
+      ("processes", show_processes procs);
+      ("handlers", show_handlers handlers);
+    ]
+  ] in
+  json_node nodes
+     
 let value_with_state v s =
   json_node [
     ("value", v);
     ("state", s);
   ]
-
-
-(* old from below *)
-
-
-
-(* 
-let json_str v = "\"" ^ js_dq_escape_string v ^ "\""
-let json_attr_str key value = key ^ ": \"" ^ js_dq_escape_string value ^ "\""
-let json_attr_unquoted key value = key ^ ": " ^ value 
-
-let json_node attributes = "{" ^ mapstrcat ", " (fun (k,t,v) ->
-   match t with
-   | `String -> json_attr_str k v
-   | `Unquoted -> json_attr_unquoted k v
-) attributes ^ "}"
-
-let json_node_str attributes = "{" ^ mapstrcat ", " (fun (k,v) -> json_attr_str k v) attributes ^ "}"
-
-let rec string_listify : string list -> string = function
-  | [] -> nil_literal
-  | x::xs -> Printf.sprintf "{\"_head\":%s, \"_tail\":%s}" x (string_listify xs)
- 
-
-let json_of_constant (const : Constant.constant) =
-  match const with
-  | `Float f -> string_of_float' f 
-  | `Int i -> string_of_int i 
-  | `Bool b -> string_of_bool b 
-  | `Char c -> json_node_str [("_c", js_dq_escape_char c)]
-  | `String s -> json_str s 
-
-let rec json_of_phrase (phrase : Types.lens_phrase) =
-  match phrase with
-  | `Constant c -> json_of_constant c
-  | `Var v -> json_node_str [("var", v)] 
-  | `InfixAppl (op,l,r) -> json_node [
-     ("infx", `String, Operators.string_of_binop op); 
-     ("l", `Unquoted, json_of_phrase l);
-     ("r", `Unquoted, json_of_phrase r)]
-  | `UnaryAppl (op,l) -> json_node [
-     ("unary", `String, Operators.string_of_unary_op op);
-     ("l", `Unquoted, json_of_phrase l)]
-  | `In (attrs, vals) -> json_node [
-      ("in", `Unquoted, string_listify (List.map json_str attrs));
-      ("vals", `Unquoted, string_listify (List.map (List.map json_of_constant ->- string_listify) vals))
-    ]
-  | `TupleLit (inner) -> json_node [("tuple", `Unquoted, json_of_phrase (List.hd inner))]
- 
-
-let json_of_col (col : Types.lens_col) =
-   json_node [
-      ("table", `String, col.table);
-      ("name", `String, col.name);
-      ("alias", `String, col.alias);
-      ("typ", `String, Types.string_of_datatype col.typ);
-      ("present", `Unquoted, string_of_bool col.present)]
-
-
-
-let json_of_cols (cols : Types.lens_col list) =
-  "[" ^ mapstrcat ", " json_of_col cols ^ "]"
-
-let jsonize_sort (fundeps, phrase, cols : Types.lens_sort) =
-  let json_of_key k = "[" ^ (mapstrcat ", " (fun x -> "\"" ^ js_dq_escape_string x ^ "\"") (ColSet.elements k)) ^ "]" in
-  let json_of_fd (fd : fundep) = "[" ^ json_of_key (FunDep.left fd) ^ ", " ^ (json_of_key (FunDep.right fd)) ^ "]" in
-  let json_of_fds (fds : fundepset) = "[" ^ mapstrcat ", " (fun fd -> json_of_fd fd) (FunDepSet.elements fds) ^ "]" in
-  match phrase with 
-  | None ->
-     json_node [
-        ("fds", `Unquoted, json_of_fds fundeps);
-        ("cols", `Unquoted, json_of_cols cols)
-     ]
-  | Some phrase ->
-     json_node [
-        ("fds", `Unquoted, json_of_fds fundeps);
-        ("phrase", `Unquoted, json_of_phrase phrase);
-        ("cols", `Unquoted, json_of_cols cols)
-     ]
-
-
-let jsonize_location : Ir.location -> string = function
-  | `Client  -> "client"
-  | `Server  -> "server"
-  | `Native  -> "native"
-  | `Unknown -> "unknown"
-
-let rec jsonize_value' : Value.t -> json_string =
-  function
-  | `PrimitiveFunction _
-  | `Resumption _
-  | `Continuation _
-  | `Socket _
-      as r ->
-      failwith ("Can't jsonize " ^ Value.string_of_value r);
-  | `FunctionPtr (f, fvs) ->
-    let (_, _, _, location) = Tables.find Tables.fun_defs f in
-    let location = jsonize_location location in
-    let env_string =
-      match fvs with
-      | None     -> ""
-      | Some fvs ->
-        let s = jsonize_value' fvs in
-        ", \"environment\":" ^ s in
-    "{\"func\":\"" ^ Js.var_name_var f ^ "\"," ^
-    " \"location\":\"" ^ location ^ "\"" ^ env_string ^ "}"
-  | `ClientDomRef i -> "{\"_domRefKey\":" ^ (string_of_int i) ^ "}"
-  | `ClientFunction name -> "{\"func\":\"" ^ name ^ "\"}"
-  | #Value.primitive_value as p -> jsonize_primitive p
-  | `Variant (label, value) ->
-    let s = jsonize_value' value in
-    "{\"_label\":\"" ^ label ^ "\",\"_value\":" ^ s ^ "}"
-  | `Record fields ->
-    let ls, vs = List.split fields in
-    let ss = jsonize_values vs in
-      "{" ^
-        mapstrcat "," (fun (kj, s) -> "\"" ^ kj ^ "\":" ^ s) (List.combine ls ss)
-      ^ "}"
-  | `List l ->  string_listify (List.map jsonize_value' l)
-  | `AccessPointID (`ClientAccessPoint (cid, apid)) ->
-      "{\"_clientAPID\": " ^ (AccessPointID.to_json apid) ^
-      ", \"_clientId\":" ^ (ClientID.to_json cid) ^  "}"
-  | `AccessPointID (`ServerAccessPoint (apid)) ->
-      "{\"_serverAPID\": " ^ (AccessPointID.to_json apid) ^ "}"
-  | `Pid (`ClientPid (client_id, process_id)) ->
-      "{\"_clientPid\":" ^ (ProcessID.to_json process_id) ^
-      ", \"_clientId\":" ^ (ClientID.to_json client_id) ^ "}"
-  | `Pid (`ServerPid (process_id)) ->
-      "{\"_serverPid\":" ^ (ProcessID.to_json process_id) ^ "}"
-  | `SessionChannel (ep1, ep2) ->
-      "{\"_sessEP1\":" ^ ChannelID.to_json ep1 ^
-      ",\"_sessEP2\":" ^ ChannelID.to_json ep2 ^ "}"
-  | `SpawnLocation (`ClientSpawnLoc client_id) ->
-      "{\"_clientSpawnLoc\":" ^ (ClientID.to_json client_id) ^ "}"
-  | `SpawnLocation (`ServerSpawnLoc) ->
-      "{\"_serverSpawnLoc\": [] }"
-  | `Lens (t, sort) -> json_node [
-     ("_lens", `Unquoted, json_of_table t);
-     ("_sort", `Unquoted, jsonize_sort sort);
-   ]
-and jsonize_primitive : Value.primitive_value -> string  = function
-  | `Bool value -> string_of_bool value
-  | `Int value -> string_of_int value
-  | `Float value -> string_of_float' value
-  | `Char c -> "{\"_c\":\"" ^ (js_dq_escape_char c) ^"\"}"
-  | `Database db -> json_of_db db
-  | `Table t -> json_of_table t
-  | `XML xmlitem -> json_of_xmlitem xmlitem
-  | `String s -> "\"" ^ js_dq_escape_string s ^ "\""
-and json_of_xmlitem = function
-  | Value.Text s ->
-      "{ \"type\": \"TEXT\", \"text\": \"" ^ js_dq_escape_string (s) ^ "\"}"
-  (* TODO: check that we don't run into problems when HTML containing
-     an event handler is copied *)
-  | Value.NsNode (ns, tag, xml) ->
-      let attrs, body =
-        List.fold_right (fun xmlitem (attrs, body) ->
-            match xmlitem with
-            | Value.Attr (label, value) ->
-                ("\"" ^label ^ "\" : " ^ "\"" ^ js_dq_escape_string value ^ "\"") :: attrs, body
-            | Value.NsAttr (ns, label, value) ->
-                ("\"" ^ ns ^ ":" ^ label ^ "\" : " ^ "\"" ^ js_dq_escape_string value ^ "\"") :: attrs, body
-            | _ ->
-              let s = json_of_xmlitem xmlitem in
-              attrs, s :: body) xml ([], [])
-      in
-        "{ \"type\": \"ELEMENT\"," ^
-          "\"tagName\": \"" ^ tag ^ "\"," ^
-          (if (String.length(ns) > 0) then "\"namespace\": \"" ^ ns ^ "\"," else "") ^
-          "\"attrs\": {" ^ String.concat "," attrs ^ "}," ^
-          "\"children\":" ^ string_listify body ^
-        "}"
-  | Value.Node (name, children) -> json_of_xmlitem (Value.NsNode ("", name, children))
-  | _ -> failwith "Cannot jsonize a detached attribute."
-
-and jsonize_values : Value.t list -> string list  =
-  fun vs ->
-    let ss =
-      List.fold_left
-        (fun ss v ->
-           let s = jsonize_value' v in
-           s::ss) [] vs in
-    List.rev ss
-
-
-let value_with_state v s =
-  "{\"value\":" ^ v ^ ",\"state\":" ^ s ^ "}"
-
-(* 
-let show_processes procs =
-  (* Show the JSON for a prcess, including the PID, process to be run, and mailbox *)
-  let show_process (pid, (proc, msgs)) =
-    let ps = jsonize_value' proc in
-    let ms = String.concat "," (List.map jsonize_value' msgs) in
-    "{\"pid\":" ^ (ProcessID.to_json pid) ^ "," ^
-    " \"process\":" ^ ps ^ "," ^
-    " \"messages\": [" ^ ms ^ "]}" in
-  let bnds = PidMap.bindings procs in
-  String.concat "," (List.map show_process bnds)
-
-let show_handlers evt_handlers =
-  (* Show the JSON for an event handler: the evt handler key, and the associated process(es) *)
-  let show_evt_handler (key, proc) =
-    (* If the list of processes handling each key is represented by a 'List term, we translate it to a
-       JS Array. This Array is supposed to be processes  by jslib code only*)
-    let jsonize_handler_list = function
-      | `List elems -> string_listify (List.map jsonize_value' elems)
-      | _ ->  jsonize_value' proc in
-    "{\"key\": " ^ string_of_int key ^ "," ^
-    " \"eventHandlers\":" ^ jsonize_handler_list proc ^ "}" in
-  let bnds = IntMap.bindings evt_handlers in
-  String.concat "," (List.map show_evt_handler bnds)
-
-let show_aps aps =
-  let ap_list = AccessPointIDSet.elements aps in
-  String.concat "," (List.map (AccessPointID.to_json) ap_list)
-
-let show_buffers bufs =
-  String.concat "," (List.map (fun (endpoint_id, values) ->
-    let json_vals = String.concat "," (List.map jsonize_value' values |> List.rev) in
-    "{\"buf_id\": " ^ (ChannelID.to_json endpoint_id) ^ "," ^
-    "\"values\": " ^ "[" ^ json_vals ^ "]" ^ "}"
-  ) (ChannelIDMap.bindings bufs))
-
-let print_json_state client_id conn_url procs handlers aps bufs =
-    let ws_url_data =
-    (match conn_url with
-       | Some ws_conn_url -> "\"ws_conn_url\":\"" ^ ws_conn_url ^ "\","
-       | None -> "") in
-  "{\"client_id\":" ^ (ClientID.to_json client_id) ^ "," ^
-   ws_url_data ^
-   "\"access_points\":" ^ "[" ^ (show_aps aps) ^ "]" ^ "," ^
-   "\"buffers\":" ^ "[" ^ (show_buffers bufs) ^ "]" ^ "," ^
-   "\"processes\":" ^ "[" ^ (show_processes procs) ^ "]" ^ "," ^
-   "\"handlers\":" ^ "[" ^ (show_handlers handlers) ^ "]}"
-*)
-*)
 
 (* JSON state definition *)
 module JsonState = struct

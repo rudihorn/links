@@ -241,6 +241,8 @@ sig
   class visitor :
   object ('self_type)
     method primitive : primitive -> (primitive * 'self_type)
+    method lens_col : lens_col -> (lens_col * 'self_type)
+    method lens_sort : lens_sort -> (lens_sort * 'self_type)
     method typ : typ -> (typ * 'self_type)
     method row : row -> (row * 'self_type)
     method row_var : row_var -> (row_var * 'self_type)
@@ -346,6 +348,18 @@ struct
      | `Presence p ->
         let (p', o) = o#field_spec p in (`Presence p', o)
 
+   method lens_col (col : lens_col) = 
+     let (t', o) = o#typ col.typ in
+     ({ col with typ = t' }, o)
+
+   method lens_sort (fds, phrase, cols) =
+     let (cols', o) = List.fold_right (fun arg (acc_args, o) ->
+         let (arg', o) = o#lens_col arg in
+         (arg' :: acc_args, o)
+     ) cols ([], o) in
+     ((fds, phrase, cols'), o)
+     
+
    method typ = function
      | `Not_typed ->
         (`Not_typed, o)
@@ -375,6 +389,9 @@ struct
         let (t2', o) = o#typ t2 in
         let (t3', o) = o#typ t3 in
           (`Table (t1', t2', t3'), o)
+     | `Lens sort -> 
+        let (sort', o) = o#lens_sort sort in
+          (`Lens sort', o)
      | `Alias ((name, args), t) ->
         let (args', o) = List.fold_right (fun arg (acc_args, o) ->
             let (arg', o) = o#type_arg arg in
@@ -601,6 +618,7 @@ let rec is_unl_type : (var_set * var_set) -> typ -> bool =
       | `Record r
       | `Variant r -> is_unl_row (rec_vars, quant_vars) r
       | `Table _ -> true
+      | `Lens _sort -> true
       | `Alias (_, t) -> iut t
       (* We might support linear lists like this...
          but we'd need to replace hd and tl with a split operation. *)
@@ -1271,6 +1289,7 @@ and subst_dual_type : var_map -> datatype -> datatype =
         | `Variant row -> `Variant (sdr row)
         | `Effect row -> `Effect (sdr row)
         | `Table (r, w, n) -> `Table (sdt r, sdt w, sdt n)
+        | `Lens _sort -> t
         (* TODO: we could do a check to see if we can preserve aliases here *)
         | `Alias (_, t) -> sdt t
         | `Application (abs, ts) -> `Application (abs, List.map (subst_dual_type_arg rec_points) ts)
@@ -2189,6 +2208,7 @@ let rec flexible_type_vars : TypeVarSet.t -> datatype -> quantifier TypeVarMap.t
       | `Variant row -> row_flexible_type_vars bound_vars row
       | `Effect row -> row_flexible_type_vars bound_vars row
       | `Table (r, w, n) -> TypeVarMap.union_all [ftv r; ftv w; ftv n]
+      | `Lens _sort -> TypeVarMap.empty
       | `Alias ((_name, ts), d) ->
           TypeVarMap.union_all
             ((ftv d)::(List.map (tyarg_flexible_type_vars bound_vars) ts))

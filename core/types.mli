@@ -422,6 +422,8 @@ sig
   class visitor :
   object ('self_type)
     method primitive : primitive -> (primitive * 'self_type)
+    method lens_col : lens_col -> (lens_col * 'self_type)
+    method lens_sort : lens_sort -> (lens_sort * 'self_type)
     method typ : typ -> (typ * 'self_type)
     method row : row -> (row * 'self_type)
     method row_var : row_var -> (row_var * 'self_type)
