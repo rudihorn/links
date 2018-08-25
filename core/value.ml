@@ -845,6 +845,11 @@ and compress_val (v : t) : compressed_t =
   let cv = compress_val in
     match v with
       | #primitive_value as v -> compress_primitive_value v
+      | `Lens _
+      | `LensJoin _
+      | `LensSelect _
+      | `LensDrop _
+      | `LensMem _ -> failwith "Lens compression for serialization not supported."
       | `List vs -> `List (List.map cv vs)
       | `Record fields -> `Record(List.map(fun(name, v) -> (name, cv v)) fields)
       | `Variant (name, v) -> `Variant (name, cv v)

@@ -41,7 +41,7 @@ tests: links
 	@OCAMLRUNPARAM="" ./run-tests
 
 unit: 
-	jbuilder runtest
+	dune build -p links-postgresql,links-unit @install
 
 clean:
 	dune clean

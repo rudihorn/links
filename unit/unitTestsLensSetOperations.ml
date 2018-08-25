@@ -1,4 +1,5 @@
 open LensSetOperations
+open SortedRecords
 open UnitTestsLensCommon
 open OUnit2
 open Value
@@ -77,7 +78,7 @@ SortedRecords.sort test_data_2;;
 SortedRecords.sort test_data_3;;
 SortedRecords.sort test_data_4
 
-let test_construct_set test_ctx =
+let test_construct_set _test_ctx =
     let recs = test_data_1 in
     assert_equal recs.columns ["a"; "b"; "str"];
     assert_equal recs.plus_rows (Array.of_list [
@@ -87,14 +88,14 @@ let test_construct_set test_ctx =
     ];);
     ()
 
-let test_merge test_ctx =
+let test_merge _test_ctx =
     let merge = SortedRecords.merge test_data_1 test_data_2 in
     let str = SortedRecords.to_string_tabular merge in
     print_endline str;
     ()
 
 
-let test_minus test_ctx = 
+let test_minus _test_ctx = 
     let set = box_list [
         box_record ["a", box_bool true; "b", box_int 5; "str", box_string "abc"];
         box_record ["a", box_bool true; "b", box_int 3; "str", box_string "this"];
@@ -107,11 +108,11 @@ let test_minus test_ctx =
     ] in
     let recs2 = SortedRecords.construct set2 in
     let res = SortedRecords.minus recs1 recs2 in
-    let str = SortedRecords.to_string_tabular res in
-    (* print_endline ("\n" ^ str); *)
+    let _str = SortedRecords.to_string_tabular res in
+    (* print_endline ("\n" ^ _str); *)
     ()
 
-let test_project test_ctx = 
+let test_project _test_ctx = 
     let set = box_list [
         box_record ["a", box_bool true; "b", box_int 5; "str", box_string "abc"];
         box_record ["a", box_bool true; "b", box_int 3; "str", box_string "this"];
@@ -128,7 +129,7 @@ let test_project test_ctx =
         [box_string "this"; box_int 3];
     ]; neg_rows = Array.of_list []; }
 
-let test_compare test_ctx = 
+let test_compare _test_ctx = 
     let set = box_list [
         box_record ["a", box_bool true; "b", box_int 5; "str", box_string "abc"];
         box_record ["a", box_bool true; "b", box_int 3; "str", box_string "this"];
@@ -142,7 +143,7 @@ let test_compare test_ctx =
     assert ((cmp 2) > 0)
 
 
-let test_find_set test_ctx =
+let test_find_set _test_ctx =
     let set1 = box_list [
         box_record ["a", box_bool true; "b", box_int 5; "str", box_string "abc"];
         box_record ["a", box_bool true; "b", box_int 3; "str", box_string "this"];
@@ -154,7 +155,7 @@ let test_find_set test_ctx =
     let set3 = box_list [
         box_record ["a", box_bool false; "b", box_int 9; "str", box_string "0123"];
     ] in
-    let set4 = box_list [
+    let _set4 = box_list [
     ] in
     let find = [box_bool true; box_int 3; box_string "this"] in
     let find2 = [box_bool true; box_int 5; box_string "abc"] in
@@ -168,7 +169,7 @@ let test_find_set test_ctx =
     assert (test set1 find3);
     ()
 
-let test_reorder_cols test_ctx =
+let test_reorder_cols _test_ctx =
     let cols1 = ["a"; "b"; "c"; "test"] in
     let reorder = ["test"; "b"] in
     let res = SortedRecords.reorder_cols cols1 reorder in

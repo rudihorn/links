@@ -1,8 +1,6 @@
-open OUnit2
+open OUnitTest
 open LensHelpers
-open LensHelpersCorrect
 open LensQueryHelpers
-open LensRecordHelpers
 open LensSetOperations
 open UnitTestsLensCommon
 open Value
@@ -18,7 +16,7 @@ module Query = struct
             if c = col then 0 else 1 + fndi (List.tl l) in
         fndi (unbox_record r)
 
-    let skip f a b = f a
+    let skip f a _b = f a
 
     let set (col : string) (fn : Value.t -> Value.t -> Value.t) (r : Value.t) =
         let r' = unbox_record r in
@@ -56,7 +54,7 @@ module Query = struct
         let (_,v) = List.find (fun (c,_) -> c = col) (unbox_record v) in
         v
 
-    let cst i (v : Value.t) = i
+    let cst i (_v : Value.t) = i
 
     let iadd (i : int) (v : Value.t) = 
         box_int (i + unbox_int v)
@@ -112,7 +110,7 @@ let test_put test_ctx lens res =
                 LensTestHelpers.print_verbose test_ctx (SortedRecords.to_string_tabular res)
             ) in
     if benchmark_opt then
-        let runs = initlist 20 (fun i -> LensTestHelpers.time_op run) in
+        let runs = initlist 20 (fun _i -> LensTestHelpers.time_op run) in
         let (qts, tts) = List.split runs in
         LensTestHelpers.print_query_time ();
         print_endline "query times";
@@ -120,9 +118,9 @@ let test_put test_ctx lens res =
         prlist qts; prlist tts
     else 
         (* calculate what the first step does *)
-        let res = LensTestHelpers.time_query false run in
+        let _res = LensTestHelpers.time_query false run in
         ();
-        ;
+    ;
 
     (* perform full update *)
     let put = if classic_opt then
@@ -151,7 +149,7 @@ let test_select_lens_1 n test_ctx =
     let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (n / 15); `Rand] n in
     let l2 = LensTestHelpers.select_lens l1 (Phrase.equal (Phrase.var "b") (Phrase.constant_int 5)) in
     let res = lens_get l2 None in
-    let res = Query.map_records (Query.set "c" (Query.ifcol "a" (Query.band (Query.gt 60) (Query.lt 80)) (box_int 5))) (lens_get l2 None) in
+    let _res = Query.map_records (Query.set "c" (Query.ifcol "a" (Query.band (Query.gt 60) (Query.lt 80)) (box_int 5))) (lens_get l2 None) in
     test_put test_ctx l2 res;
     LensTestHelpers.drop_if_cleanup test_ctx db "t1"
 
@@ -160,25 +158,10 @@ let test_drop_lens_1 n test_ctx =
     let db = LensTestHelpers.get_db test_ctx in
     let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (n / (UnitTestsLensCommon.set_upto_opt test_ctx)); `Rand] n in
     let l2 = LensTestHelpers.drop_lens l1 "c" "a" (box_int 1) in
-    let res = lens_get l2 None in
+    let _res = lens_get l2 None in
     let res = Query.map_records (Query.set "b" (Query.ifcol "a" (Query.band (Query.gt 60) (Query.lt 80)) (box_int 5))) (lens_get l2 None) in
     test_put test_ctx l2 res;
     LensTestHelpers.drop_if_cleanup test_ctx db "t1"
-
-let test_select_lens_2 n test_ctx =
-    let n = override_n n test_ctx in
-    let db = LensTestHelpers.get_db test_ctx in
-    let upto = n / 10 in
-    let l1 = LensTestHelpers.drop_create_populate_table test_ctx db "t1" "a -> b c" "a b c" [`Seq; `RandTo (upto); `RandTo (100)] n in
-    let l2 = LensTestHelpers.drop_create_populate_table test_ctx db "t2" "b -> d" "b d" [`Seq; `RandTo (upto)] upto in 
-    let l3 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
-    let l4 = LensTestHelpers.select_lens l3 (
-        Phrase.equal (Phrase.var "c") (Phrase.constant_int 3)) in
-    let res = Query.map_records (Query.set "d" (Query.ifcol "b" (Query.band (Query.gt 0) (Query.lt 100)) (box_int 5))) (lens_get l4 ()) in
-    test_put test_ctx l4 res; 
-    LensTestHelpers.drop_if_cleanup test_ctx db "t1";
-    LensTestHelpers.drop_if_cleanup test_ctx db "t2";
-    ()
 
 let test_select_lens_2 n test_ctx =
     let n = override_n n test_ctx in
@@ -228,9 +211,9 @@ let test_get_delta test_ctx =
     let l3 = LensTestHelpers.join_lens_dl l1 l2 ["b"] in
     let res = Query.map_records (Query.set "d" (Query.ifcol "b" (Query.band (Query.gt 0) (Query.lt 10)) (box_int 5))) (lens_get l3 ()) in
     let run () = 
-        let data = LensHelpersCorrect.lens_get_delta l3 res in
+        let _data = LensHelpersCorrect.lens_get_delta l3 res in
         () in
-    let runs = initlist 20 (fun i -> LensTestHelpers.time_op run) in
+    let runs = initlist 20 (fun _i -> LensTestHelpers.time_op run) in
     let (qts, tts) = List.split runs in
     print_endline "query times";
     let prlist = print_endline << string_of_value << box_list << List.map box_int in
@@ -274,7 +257,7 @@ let test_put_delta test_ctx =
         LensTestHelpers.print_verbose test_ctx ("Delta Size: " ^ string_of_int (SortedRecords.total_size delta));
         let run () = LensHelpersCorrect.apply_delta table delta in
         run in
-    let runs = initlist 20 (fun i -> LensTestHelpers.time_op run) in
+    let runs = initlist 20 (fun _i -> LensTestHelpers.time_op run) in
     let (qts, tts) = List.split runs in
     print_endline "query times";
     let prlist = print_endline << string_of_value << box_list << List.map box_int in
@@ -345,7 +328,7 @@ let test_join_lens_dr_2 n test_ctx =
 
 (* override the >:: so that it increases the timeout 
  * normally it is 60s and not enough for benchmarking *)
-let (>::) name testfn = OUnitTest.TestLabel (name, TestCase (Huge, testfn))
+let (>::) name testfn = TestLabel (name, TestCase (Huge, testfn))
 
 let suite =
     "lens_primitives">:::

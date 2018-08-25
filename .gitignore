@@ -1,4 +1,3 @@
-
 *~
 *.o
 *.a
@@ -46,7 +45,6 @@ doc/*.toc
 
 # build artefacts
 _build
-<<<<<<< HEAD
 links.opt
 links.byte
 links.native
@@ -54,10 +52,8 @@ links_unit
 links_unit.opt
 *.omc
 *.omakedb*
-=======
 links
 linx
->>>>>>> 2613ceb150f21518f24c5645ae61401bd922ded9
 
 # database configuration
 tests/database/config

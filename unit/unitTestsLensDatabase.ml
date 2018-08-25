@@ -1,7 +1,5 @@
 open OUnit2
-open Pg_database
 open UnitTestsLensCommon
-open Value
 
 let test_create_table test_ctx =
     let db = LensTestHelpers.get_db test_ctx in
@@ -25,7 +23,7 @@ let test_create_table_rand test_ctx =
 
 let test_drop_create_and_populate test_ctx = 
     let db = LensTestHelpers.get_db test_ctx in
-    let lens = LensTestHelpers.drop_create_populate_table test_ctx db "table_test" "a -> b c" "a b c" [`Seq; `RandTo 15; `Rand] 500 in  
+    let _lens = LensTestHelpers.drop_create_populate_table test_ctx db "table_test" "a -> b c" "a b c" [`Seq; `RandTo 15; `Rand] 500 in  
     let _ = LensTestHelpers.drop_if_cleanup test_ctx db "table1" in
     ()
 

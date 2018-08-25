@@ -6,7 +6,6 @@ open Types
 open Value
 open Utility
 open LensFDHelpers
-open LensQueryHelpers
 open LensHelpers
 
 (* let _ = Settings.set_value Debug.debugging_enabled true *)

@@ -1,4 +1,3 @@
-open Debug
 open OUnit2
 open Pg_database
 open Types
@@ -111,7 +110,7 @@ module LensTestHelpers = struct
         let query = "CREATE TABLE " ^ tablename ^ " ( " 
             ^ List.fold_left (fun a b -> a ^ colfn b ^ ", ") "" fields
             ^ "CONSTRAINT \"PK_" ^ tablename ^ "\" PRIMARY KEY ("
-                ^ List.fold_left (fun a b -> a ^ ", " ^ b) (List.hd fields) (List.tl fields)
+                ^ List.fold_left (fun a b -> a ^ ", " ^ b) (List.hd primary_key) (List.tl primary_key)
             ^ "));" in
         let _ = if display_table_query_opt test_ctx then Debug.print query else () in
         db#exec query 
@@ -207,14 +206,15 @@ module LensTestHelpers = struct
     let drop_create_populate_table test_ctx (db : database) table str str2 colGen cnt =
         let fd = fundep_of_string str in
         let left = FunDep.left fd in
-        let right = FunDep.right fd in
+        let _right = FunDep.right fd in
         let cols = colslist_of_string str2 in
         let _ = drop_if_exists test_ctx db table in
         let _ = create_table test_ctx db table (ColSet.elements left) cols in
         let data = gen_data colGen cnt in
         if List.length data > 0 then
             let data = box_int_record_list cols data in
-            insert_rows db table data; ()
+            let _ = insert_rows db table data in
+            ()
         else
             ();
         let lens = create_lens_db db table fd (ColSet.elements left) cols in
@@ -227,7 +227,7 @@ module LensTestHelpers = struct
     let print_query_time () = 
         print_endline ("Query Time: " ^ string_of_int (get_query_time ()) ^ " / " ^ string_of_int !query_count ^ " queries")
 
-    let time_query in_mem fn =
+    let time_query _in_mem fn =
         reset_query_timer ();
         let res = Debug.debug_time_out fn (fun time -> print_endline ("Total Time: " ^ string_of_int time)) in
         print_query_time ();
@@ -236,7 +236,7 @@ module LensTestHelpers = struct
     let time_op fn =
         reset_query_timer ();
         let ttime = ref 0 in
-        let res = Debug.debug_time_out fn (fun time -> ttime := time) in
+        let _ = Debug.debug_time_out fn (fun time -> ttime := time) in
         (get_query_time (), !ttime)
 
     let time_query_both fn =
@@ -257,8 +257,8 @@ module LensTestHelpers = struct
             assert (actual = expected)
 end
 
-let test_fundep_of_string test_ctx = 
-    let fds = LensTestHelpers.fundepset_of_string "A B -> C; C -> D; D -> E F" in
+let test_fundep_of_string _test_ctx = 
+    let _fds = LensTestHelpers.fundepset_of_string "A B -> C; C -> D; D -> E F" in
     let _ = assert_equal "{{\"A\"; \"B\"; } -> {\"C\"; }; {\"C\"; } -> {\"D\"; }; {\"D\"; } -> {\"E\"; \"F\"; }; }" in
     ()
 

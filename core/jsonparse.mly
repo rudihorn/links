@@ -155,7 +155,7 @@ object_:
                                               | `Database db -> db
                                               | _ -> failwith ("jsonparse: first argument to a table must be a database")
                                           end
-               and name = Value.unbox_string (List.assoc "name" bs)
+					and name = Value.unbox_string (List.assoc "name" bs)
                                         and row =
                                           begin
                                             match DesugarDatatypes.read ~aliases:Env.String.empty (Value.unbox_string (List.assoc "row" bs)) with
@@ -163,17 +163,17 @@ object_:
                                                 | _ -> failwith ("jsonparse: tables must have record type")
                                           end
                                         and keys =
-                 begin
-                   match List.assoc "keys" bs with
-                     | `List keys ->
-                    List.map
-                      (function
-                         | `List part_keys ->
-                        List.map Value.unbox_string part_keys
-                         | _ -> failwith "jsonparse: keys must be lists of strings")
-                      keys
-                     | _ -> failwith ("jsonparse: table keys must have list type")
-                 end
+					  begin
+					    match List.assoc "keys" bs with
+					      | `List keys ->
+						  List.map
+						    (function
+						       | `List part_keys ->
+							   List.map Value.unbox_string part_keys
+						       | _ -> failwith "jsonparse: keys must be lists of strings")
+						    keys
+					      | _ -> failwith ("jsonparse: table keys must have list type")
+					  end
                                         in
                                           `Table (db, name, keys, row)
                                     | _ -> failwith ("jsonparse: table value must be a record")
@@ -227,20 +227,14 @@ object_:
                             | ["_domRefKey", id] ->
                               `ClientDomRef(Value.unbox_int id)
                             | _ -> `Record (List.rev $2)
-
                         }
 
 members:
 | id COLON value                     { [$1, $3] }
 | members COMMA id  COLON value      { ($3, $5) :: $1 }
 
-arraymembers:
-| value                              { [$1] }
-| arraymembers COMMA value           { $3 :: $1 (* reverse order then reverse more efficient? *) }
-
 array:
 | LBRACKET RBRACKET                  { `List ([]) (* For now, we denote Nil as [] *) }
-| LBRACKET arraymembers RBRACKET     { `List (List.rev $2) }
 
 value:
 | string                             { $1 }

@@ -114,7 +114,7 @@ let binding_scope : binding -> scope =
 let binder_of_fun_def (fb, _, _, _) = fb
 
 let tapp (v, tyargs) =
-    match tyargs with
+  match tyargs with
     | [] -> v
     | _ -> `TApp (v, tyargs)
 
@@ -123,15 +123,14 @@ let letmv (b, v) = letm (b, `Return v)
 (*let letv (b, v) = `Let (b, `Return v)*)
 
 let rec is_atom =
-    function
-        | `Constant (`Bool _)
-        | `Constant (`Int _)
-        | `Constant (`Char _)
-        | `Constant (`Float _)
-        | `Variable _ -> true
+  function
+    | `Constant (`Bool _)
+    | `Constant (`Int _)
+    | `Constant (`Char _)
+    | `Constant (`Float _)
+    | `Variable _ -> true
         (*
   This can only be an atom if
-
   Erase is just an upcast, and our language
   is properly parametric.
 *)

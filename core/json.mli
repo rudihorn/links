@@ -62,18 +62,3 @@ val jsonize_call :
   string -> (* Name of the function *)
   Value.t list -> (* Arguments *)
   json_string
-
-
-(* Internal Functions for Unit testing *)
-
-type json_node_type = 
-   [ `String 
-   | `Unquoted
-   ]
-
-type writefn = string -> unit
-val expand : (writefn -> unit) -> string
-
-val json_constant : Constant.constant -> writefn -> unit
-val json_phrase : Types.lens_phrase -> writefn -> unit
-
