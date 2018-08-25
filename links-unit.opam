@@ -17,7 +17,6 @@ build: [
 
 depends: [
   "dune" {build}
-  "ppx_deriving"
   "ocamlfind"
   "ounit"
   "links"
