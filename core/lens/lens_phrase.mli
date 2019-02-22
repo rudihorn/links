@@ -98,3 +98,68 @@ module Record : sig
   (** Evaluate the phrase with a given record *)
   val eval : t -> record -> record
 end
+
+
+(** This module contains operators and short hand constructors for producing phrase expressions.
+
+  Example:
+
+  {[
+    let phrase =
+      let open Lens_phrase.O in
+      v "A" < i 20 && v "B" > i 45 in
+    ...
+  ]}
+
+*)
+module O : sig
+
+  (** Greater than comparison. *)
+  val (>) : t -> t -> t
+
+  (** Less than comparison. *)
+  val (<) : t -> t -> t
+
+  (** Equality comparison. *)
+  val (=) : t -> t -> t
+
+  (** Logical and operator. *)
+  val (&&) : t -> t -> t
+
+  (** Logical or operator. *)
+  val (||) : t -> t -> t
+
+  (** Variable reference. *)
+  val v : string -> t
+
+  (** Integer constant phrase. *)
+  val i : int -> t
+
+  (** Boolean constant phrase. *)
+  val b : bool -> t
+end
+
+
+(** This module is a simple algorithm for determining which variables affect each other during
+    execution. *)
+module Grouped_variables : sig
+  include Lens_set.S with type elt = Lens_alias.Set.t
+
+  (** Generate a grouped type variable value from a list of lists of column names.
+      This is mainly useful for debugging. *)
+  val of_lists : string list list -> t
+
+  (** Calculate the grouped type variables from a phrase. *)
+  val gtv : lens_phrase -> t
+
+  (** Determine if the grouped type variables contains a group which
+      only partially overlaps with the specified set of [cols].
+
+      Example:
+
+      When called on the set `{ A; A B; C D; }` with the cols `A B`, the
+      result is false because `A B` only occurs in groups without further
+      variables. If it is called with cols `C`, then it returns true, because
+      the group `C D` contains the column `D` in addition to the column `C`. *)
+  val has_partial_overlaps : t -> cols:elt -> bool
+end

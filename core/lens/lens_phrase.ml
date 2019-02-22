@@ -2,6 +2,7 @@ open Utility
 open Types
 open Lens_operators
 open Lens_utility
+open Sugartypes
 
 module Alias = Lens_alias
 
@@ -24,19 +25,19 @@ let tuple v = TupleLit v
 let tuple_singleton v = tuple [v]
 
 let name_of_var expr =
-  match expr.Sugartypes.node with
-  | Sugartypes.Var n -> n
+  match expr.node with
+  | Var n -> n
   | _ -> failwith "Expected var."
 
 let of_phrase p =
   let rec f p =
-    match p.Sugartypes.node with
-    | Sugartypes.Constant c -> Constant c
-    | Sugartypes.Var v -> Var v
-    | Sugartypes.UnaryAppl ((_, op), phrase) -> UnaryAppl (Unary.from_links op, f phrase)
-    | Sugartypes.InfixAppl ((_, op), phrase1, phrase2) -> InfixAppl (Binary.of_supertype_operator op, f phrase1, f phrase2)
-    | Sugartypes.TupleLit l -> TupleLit (List.map f l)
-    | Sugartypes.FnAppl (fn, arg) ->
+    match p.node with
+    | Constant c -> Constant c
+    | Var v -> Var v
+    | UnaryAppl ((_, op), phrase) -> UnaryAppl (Unary.from_links op, f phrase)
+    | InfixAppl ((_, op), phrase1, phrase2) -> InfixAppl (Binary.of_supertype_operator op, f phrase1, f phrase2)
+    | TupleLit l -> TupleLit (List.map f l)
+    | FnAppl (fn, arg) ->
       begin
         match name_of_var fn with
         | "not" -> UnaryAppl ((Unary.Name "!"), f (List.hd arg))
@@ -63,7 +64,7 @@ let rec traverse expr ~f =
       TupleLit ([x])
     | Case (phr, cases, otherwise) ->
       let phr = OptionUtils.opt_map fn phr in
-      let cases = List.map (fun (inp, lst) -> fn inp, fn lst) cases in
+      let cases = List.map ~f:(fun (inp, lst) -> fn inp, fn lst) cases in
       let otherwise = fn otherwise in
       Case (phr, cases, otherwise)
     | _ -> failwith "Unknown operation" in
@@ -153,8 +154,8 @@ let rec eval expr get_val =
       | op -> failwith ("Unsupported unary operation " ^ Unary.to_string op)
     end
   | In (names, vals) ->
-    let find = List.map get_val names in
-    let vals = List.map (List.map Lens_constant.to_value) vals in
+    let find = List.map ~f:get_val names in
+    let vals = List.map ~f:(List.map ~f:Lens_constant.to_value) vals in
     let res = List.mem find vals in
     box_bool res
   | Case (inp, cases, otherwise) ->
@@ -189,8 +190,8 @@ module Option = struct
     else if vals = [] then
       Some (Constant.bool false)
     else
-      let val_of_rec r = List.map Lens_constant.of_value r in
-      let vals = List.map val_of_rec vals in
+      let val_of_rec r = List.map ~f:Lens_constant.of_value r in
+      let vals = List.map ~f:val_of_rec vals in
       Some (In (names, vals))
 
 end
@@ -237,4 +238,60 @@ module List = struct
 
   let fold_or_opt l =
     List.filter_opt l |> fold_or
+end
+
+module O = struct
+  let (>) a b = infix (Lens_operators.Binary.of_string ">") a b
+
+  let (<) a b = infix (Lens_operators.Binary.of_string "<") a b
+
+  let (=) a b = infix (Lens_operators.Binary.of_string "=") a b
+
+  let (&&) a b = infix (Lens_operators.Binary.Logical Lens_operators.Logical_binop.And) a b
+
+  let (||) a b = infix (Lens_operators.Binary.Logical Lens_operators.Logical_binop.Or) a b
+
+  let v a = var a
+
+  let i v = Constant.int v
+
+  let b b = Constant.bool b
+end
+
+module Grouped_variables = struct
+  module Inner = Alias.Set
+
+  include Set.Make (Inner)
+
+  let times s1 s2 =
+    fold (fun e acc -> map (Inner.union e) acc) s1 s2
+
+  let of_lists l =
+    Lens_list.map ~f:Inner.of_list l |> of_list
+
+  let rec gtv p =
+    match p with
+    | Var v -> Inner.singleton v |> singleton
+    | Constant _ -> singleton Inner.empty
+    | InfixAppl (Lens_operators.Binary.Logical Logical_binop.And, p1, p2) ->
+      let s1 = gtv p1 in
+      let s2 = gtv p2 in
+      union s1 s2
+    | InfixAppl (_, p1, p2) ->
+      let s1 = gtv p1 in
+      let s2 = gtv p2 in
+      times s1 s2
+    | _ -> failwith "Grouped type variables does not support this operator."
+
+  let has_partial_overlaps t ~cols =
+    exists (fun gr ->
+        let int_not_empty =
+          Inner.inter gr cols
+          |> Inner.is_empty
+          |> not in
+        let diff_not_empty =
+          Inner.diff gr cols
+          |> Inner.is_empty
+          |> not in
+        int_not_empty && diff_not_empty) t
 end

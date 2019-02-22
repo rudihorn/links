@@ -92,9 +92,9 @@ module Select = struct
     let predicate = Lens_sort.predicate sort in
     let cols = Lens_sort.cols sort in
     let tables =
-      List.map Lens_column.table cols
+      List.map ~f:Lens_column.table cols
       |> List.sort_uniq String.compare
-      |> List.map (fun c -> (c,c)) in
+      |> List.map ~f:(fun c -> (c,c)) in
     {
       predicate;
       cols;
