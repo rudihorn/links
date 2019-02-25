@@ -39,7 +39,7 @@ let fmt_cols ~db f cols =
 let rec fmt_phrase ~db ~map f expr =
   let pp_sep f () = Format.fprintf f ", " in
   let fmt = fmt_phrase ~db ~map in
-  match expr with
+  match Lens_phrase.node expr with
   | Constant c -> Format.fprintf f "%a" Constant.fmt c
   | Var v -> Format.fprintf f "%s" (map v)
   | InfixAppl (op, a1, a2) -> Format.fprintf f "%a %a %a" fmt a1 Binary.fmt op fmt a2

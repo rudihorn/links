@@ -1,37 +1,42 @@
 open Types
+open SourceCode
 open Sugartypes
 
 type t = lens_phrase
+type node = lens_phrasenode
+
+(** Get the underlying node without the source code position. *)
+val node : t -> node
 
 (** Create a variable phrase. *)
-val var : string -> t
+val var : ?pos:Position.t -> string -> t
 
 (** Any infix operator application. *)
-val infix : Lens_operators.Binary.t -> t -> t -> t
+val infix : ?pos:Position.t -> Lens_operators.Binary.t -> t -> t -> t
 
 (** Create a logical and between two phrases. *)
-val and' : t -> t -> t
+val and' : ?pos:Position.t -> t -> t -> t
 
 (** Create a logical or between two phrases. *)
-val or' : t -> t -> t
+val or' : ?pos:Position.t -> t -> t -> t
 
 (** Create an equality comparison of two phrases. *)
-val equal : t -> t -> t
+val equal : ?pos:Position.t -> t -> t -> t
 
 (** Logical not of a phrase. *)
-val not' : t -> t
+val not' : ?pos:Position.t -> t -> t
 
 (** Create a tuple of a list of phrases. *)
-val tuple : t list -> t
+val tuple : ?pos:Position.t -> t list -> t
 
 (** Create a tuple of a single phrase. *)
-val tuple_singleton : t -> t
+val tuple_singleton : ?pos:Position.t -> t -> t
 
 (** Convert a links syntax phrase into a lens phrase. *)
 val of_phrase : phrase -> t
 
 (** Traverse a lens phrase, applying [dosth] to each nod and then replacing the result. *)
-val traverse : t -> f:(t -> t) -> t
+val traverse : t -> f:(node -> node) -> t
 
 (** Get a list of variables in the expression. *)
 val get_vars : t -> Lens_alias.Set.t
@@ -48,13 +53,13 @@ val replace_var : t -> replace:Value.t Lens_alias.Map.t -> t
 module Constant : sig
 
   (** Create a constant bool phrase *)
-  val bool : bool -> t
+  val bool : ?pos:Position.t -> bool -> t
 
   (** Create a constant int phrase *)
-  val int : int -> t
+  val int : ?pos:Position.t -> int -> t
 
   (** Create a constant of a links value *)
-  val of_value : Value.t -> t
+  val of_value : ?pos:Position.t -> Value.t -> t
 end
 
 module Option : sig

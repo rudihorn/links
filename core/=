@@ -1,0 +1,45 @@
+
+module Lexpos : sig
+  type t = Lexing.position
+  [@@deriving show]
+end
+
+(** A module for keeping track of source code positions. *)
+module Position : sig
+  (** An unresolved source code position. Also see [Position.Resolved]. *)
+  type t [@@deriving show]
+
+  val dummy : t
+
+  (** Get start position of the source code position. *)
+  val start : t -> Lexpos.t
+
+  (** Get the end position of the source code position. *)
+  val end' : t -> Lexpos.t
+
+  exception ASTSyntaxError of t * string
+
+  (** Resolve the source code position to the actual contents of that position. *)
+  module Resolved : sig
+    type unresolved = t
+    type t [@@deriving show]
+
+    val dummy : t
+
+    (** *)
+    val resolve : unresolved -> t
+  end
+
+  module With_pos : sig
+    type 'a with_pos [@@deriving show]
+
+    (** Construct a new with_pos given a node and an optional source code position. Use the [dummy] position if none is specified. *)
+    val make : ?pos:t -> 'a -> 'a with_pos
+
+    (** Fetch the corresponding node. *)
+    val node : 'a with_pos -> 'a
+
+    (** Fetch the corresponding source code position. *)
+    val pos : 'a with_pos -> t
+  end
+end
