@@ -150,7 +150,7 @@ and typ =
     | `Variant of row
     | `Effect of row
     | `Table of typ * typ * typ
-    | `Lens of Lens_sort.t
+    | `Lens of Lens.Type.t
     | `Alias of ((string * type_arg list) * typ)
     | `Application of (Abstype.t * type_arg list)
     | `RecursiveApplication of rec_appl
@@ -2149,7 +2149,8 @@ struct
                datatype bound_vars p r ^ "," ^
                datatype bound_vars p w ^ "," ^
                datatype bound_vars p n ^ ")"
-          | `Lens sort ->
+          | `Lens typ ->
+            let sort = Lens.Type.sort typ in
             let cols = Lens_sort.cols sort in
             let pp_col f col =
               Format.fprintf f "%s : %a"
