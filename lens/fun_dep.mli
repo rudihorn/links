@@ -1,3 +1,5 @@
+[@@@ocamlformat "doc-comments=before"]
+
 open Lens_utility
 
 type t [@@deriving show]
@@ -16,8 +18,13 @@ val of_lists : Alias.t list * Alias.t list -> t
 (** Construct a single functional dependency from a set of columns and a key *)
 val key_fd : keys:Alias.t list -> cols:Alias.t list -> t
 
+module Check_error : sig
+  type t = UnboundColumns of Alias.Set.t
+end
+
 module Compare : sig
   type elt = t [@@deriving show]
+
   type t = elt [@@deriving show]
 
   val compare : t -> t -> int
@@ -33,23 +40,34 @@ module Set : sig
   val remove_defines : t -> cols:Alias.Set.t -> t
 
   (** Generate a single functional dependency as a set from the given keys and columns *)
-  val key_fds :  keys:Alias.t list -> cols:Alias.t list -> t
+  val key_fds : keys:Alias.t list -> cols:Alias.t list -> t
 
   (** Get a root functional dependency *)
-  val root_fd : t -> elt option
+  val root_fds : t -> elt list
 
   (** Get the functional dependency that defines the columns [cols] *)
   val defining_fd : t -> cols:Alias.Set.t -> elt
 
   (** Get the transitive closure of a functional dependency *)
   val transitive_closure : t -> cols:Alias.Set.t -> Alias.Set.t
+
+  val checked_fds_of_lists :
+       (Alias.t list * Alias.t list) list
+    -> columns:Alias.Set.t
+    -> (t, Check_error.t) result
 end
 
 module Tree : sig
   type elt = Alias.Set.t [@@deriving show]
-  type t = | FDNode of elt * (t list) [@@deriving show]
+
+  type node = FDNode of elt * t
+  and t = node list [@@deriving show]
 
   val pp_pretty : Format.formatter -> t -> unit
 
-  val of_fds : Set.t -> t option
+  val show_pretty : t -> string
+
+  val of_fds : Set.t -> columns:Alias.Set.t -> t
+
+  val is_disjoint : t -> columns:Alias.Set.t -> bool
 end

@@ -198,6 +198,11 @@ module Option = struct
     if names = [] then None
     else if vals = [] then Some (Constant.bool false)
     else Some (In (names, vals))
+
+  let eval phrase f =
+    match phrase with
+    | Some phrase -> eval phrase f
+    | None -> Phrase_value.box_bool true
 end
 
 module Record = struct

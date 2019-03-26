@@ -2379,20 +2379,20 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
         | LensKeysLit (table, keys, _) ->
            let open Lens in
            let table = tc table in
-           let cols = Lens_type_conv.sort_cols_of_table ~table:"" (typ table) in
+           let columns = Lens_type_conv.sort_cols_of_table ~table:"" (typ table) in
            let keys = Lens_sugar_conv.cols_of_phrase keys in
-           let fds = Fun_dep.Set.key_fds ~keys ~cols:(Column.List.present_aliases cols) in
-           let lens_sort = Sort.make ~fds cols in
+           let fds = Fun_dep.Set.key_fds ~keys ~cols:(Column.List.present_aliases columns) in
+           let lens_sort = Sort.make ~fds columns in
            let typ = Lens.Type.Lens lens_sort in
            LensLit (erase table, Some (lens_sort)), `Lens typ, merge_usages [usages table]
         | LensFunDepsLit (table, fds, _) ->
            let open Lens in
            let table = tc table in
-           let cols = Lens_type_conv.sort_cols_of_table ~table:"" (typ table) in
-           let fds = Helpers.Incremental.get_fds fds cols in
-           let lens_sort = Sort.make ~fds cols in
-           let typ = Lens.Type.Lens lens_sort in
-           LensLit (erase table, Some (lens_sort)), `Lens typ, merge_usages [usages table]
+           let columns = Lens_type_conv.sort_cols_of_table ~table:"" (typ table) in
+           let typ =
+             Lens.Type.type_lens_fun_dep ~fds ~columns
+             |> Lens_errors.unpack_type_lens_result ~die:(Gripers.die pos) in
+           LensLit (erase table, Some (Type.sort typ)), `Lens typ, merge_usages [usages table]
         | LensDropLit (lens, drop, key, default, _) ->
            let open Lens in
            let lens = tc lens

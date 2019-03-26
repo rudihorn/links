@@ -12,6 +12,11 @@ let bind v ~f =
 let map v ~f =
   bind v ~f:(fun v -> f v |> return)
 
+let ok_exn v =
+  match v with
+  | Result.Ok v -> v
+  | _ -> failwith "Unexpected error."
+
 let of_option v ~error =
   match v with
   | Some v -> return v

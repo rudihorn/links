@@ -8,6 +8,10 @@ type t =
   | Record of (string * t) list
 [@@deriving show]
 
+module Unbox_error : sig
+  exception E of {value: t; expected: string}
+end
+
 type values = t list [@@deriving show]
 
 val equal : t -> t -> bool

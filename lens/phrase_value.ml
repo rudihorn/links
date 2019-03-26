@@ -14,31 +14,47 @@ type values = t list [@@deriving show]
 
 let equal v1 v2 = v1 = v2
 
-let unbox_error typ = Format.asprintf "Type error unboxing %s." typ |> failwith
+module Unbox_error = struct
+  exception E of {value: t; expected: string}
+
+  let pp f e =
+    match e with
+    | E {value; expected} ->
+        Format.fprintf f "Type error unboxing %a as %s." pp value expected
+    | _ -> ()
+
+  let () =
+    Printexc.register_printer (function
+      | E _ as e ->
+          Some (Format.asprintf "%a" pp e)
+      | _ -> None )
+end
+
+let unbox_error value expected = raise (Unbox_error.E {value; expected})
 
 let box_bool b = Bool b
 
-let unbox_bool v = match v with Bool b -> b | _ -> unbox_error "Bool"
+let unbox_bool v = match v with Bool b -> b | _ -> unbox_error v "Bool"
 
 let box_int i = Int i
 
-let unbox_int v = match v with Int b -> b | _ -> unbox_error "Int"
+let unbox_int v = match v with Int b -> b | _ -> unbox_error v "Int"
 
 let box_float f = Float f
 
-let unbox_float v = match v with Float f -> f | _ -> unbox_error "Float"
+let unbox_float v = match v with Float f -> f | _ -> unbox_error v "Float"
 
 let box_string s = String s
 
-let unbox_string v = match v with String s -> s | _ -> unbox_error "String"
+let unbox_string v = match v with String s -> s | _ -> unbox_error v "String"
 
 let box_tuple t = Tuple t
 
-let unbox_tuple v = match v with Tuple t -> t | _ -> unbox_error "Tuple"
+let unbox_tuple v = match v with Tuple t -> t | _ -> unbox_error v "Tuple"
 
 let box_record t = Record t
 
-let unbox_record v = match v with Record v -> v | _ -> unbox_error "Record"
+let unbox_record v = match v with Record v -> v | _ -> unbox_error v "Record"
 
 module Record = struct
   let get t ~key =
