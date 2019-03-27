@@ -618,9 +618,12 @@ struct
         let sort =
           Lens.Sort.drop_lens_sort
             (Lens.Value.sort lens)
-            ~drop:(Alias.Set.singleton drop)
+            ~drop:[drop]
+            ~default:[default]
             ~key:(Alias.Set.singleton key)
+          |> Lens_errors.unpack_type_drop_lens_result ~die:(eval_error "%s")
         in
+
         apply_cont cont env (`Lens (Value.LensDrop { lens; drop; key; default; sort }))
     | LensSelect (lens, predicate, _sort) ->
         let open Lens in

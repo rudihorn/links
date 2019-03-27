@@ -8,6 +8,10 @@ let rec mem t v ~equal =
 
 let map t ~f = map f t
 
+let map_if t ~b ~f =
+  let f x = if b x then f x else x in
+  map ~f t
+
 let rec find t ~f =
   match t with [] -> None | x :: xs -> if f x then Some x else find xs ~f
 

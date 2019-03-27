@@ -40,6 +40,12 @@ val box_record : (string * t) list -> t
 
 val unbox_record : t -> (string * t) list
 
+(** Determine the type of a value. *)
+val type_of : t -> Phrase_type.t
+
+(** Get a default value of a type. *)
+val default_value : Phrase_type.t -> t
+
 module Record : sig
   val get : t -> key:string -> t option
   (** Get a record values field [key]. Returns [None] if the field is not found. *)

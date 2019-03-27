@@ -14,20 +14,21 @@ let equal t1 t2 =
 module Lens_error = struct
   type t =
     | UnboundColumns of Alias.Set.t
-        (** Error thrown when there are references to columns
-            in functional dependencies which don't exist. *)
-    | FunDepNotTreeForm
-        (** Error thrown when a tree form of the functional
-            dependencies cannot be constructed or when it is invalid. *)
+    | ProbablyCycle of Alias.Set.t
+    | FunDepNotTreeForm of Alias.Set.t
 
   let of_fun_dep_check_error e =
-    match e with Fun_dep.Check_error.UnboundColumns c -> UnboundColumns c
+    match e with
+    | Fun_dep.Check_error.UnboundColumns c -> UnboundColumns c
+    | Fun_dep.Check_error.ProbablyCycle c -> ProbablyCycle c
+    | Fun_dep.Check_error.FunDepNotTreeForm c -> FunDepNotTreeForm c
 end
 
 let check_tree_form fds ~columns =
-  let tree = Fun_dep.Tree.of_fds fds ~columns in
-  if Fun_dep.Tree.is_disjoint tree ~columns then Result.return ()
-  else Result.error Lens_error.FunDepNotTreeForm
+  let open Result.O in
+  Fun_dep.Tree.of_fds fds ~columns
+  |> Result.map_error ~f:(Lens_error.of_fun_dep_check_error)
+  >>| fun _ -> ()
 
 let type_lens_fun_dep ~fds ~columns =
   let cols = columns in
@@ -39,4 +40,16 @@ let type_lens_fun_dep ~fds ~columns =
   check_tree_form fds ~columns
   >>| fun () ->
   let sort = Sort.make ~fds cols in
+  Lens sort
+
+module Drop_lens_error = struct
+  type t = Sort.Drop_sort_error.t
+end
+
+let type_drop_lens t ~drop ~default ~key =
+  let open Result.O in
+  let sort = sort t in
+  let default = List.map ~f:(Phrase_value.default_value) default in
+  Sort.drop_lens_sort sort ~drop ~default ~key
+  >>| fun sort ->
   Lens sort

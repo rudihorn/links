@@ -19,7 +19,23 @@ val of_lists : Alias.t list * Alias.t list -> t
 val key_fd : keys:Alias.t list -> cols:Alias.t list -> t
 
 module Check_error : sig
-  type t = UnboundColumns of Alias.Set.t
+  type t =
+    | UnboundColumns of Alias.Set.t
+        (** Error thrown when there are references to columns
+            in functional dependencies which don't exist. *)
+    | ProbablyCycle of Alias.Set.t
+        (** Error thrown when the algorithm assumes that some
+            columns have not been included because there is
+            some cycle with them. *)
+    | FunDepNotTreeForm of Alias.Set.t
+        (** Error thrown when *)
+  [@@deriving show]
+end
+
+module Remove_defines_error : sig
+  type t =
+    | DefiningFDNotFound of Alias.Set.t
+  [@@deriving show]
 end
 
 module Compare : sig
@@ -33,11 +49,15 @@ end
 module Set : sig
   include Set.S with type elt = t
 
+  val pp_pretty : t Format.fmt_fn
+
+  val show_pretty : t -> string
+
   (** Construct a set of functional dependencies of lists of lists of functional dependencies *)
   val of_lists : (Alias.t list * Alias.t list) list -> t
 
   (** Remove all functional dependencies where the left side is contained by [cols] *)
-  val remove_defines : t -> cols:Alias.Set.t -> t
+  val remove_defines : t -> cols:Alias.Set.t -> (t, Remove_defines_error.t) result
 
   (** Generate a single functional dependency as a set from the given keys and columns *)
   val key_fds : keys:Alias.t list -> cols:Alias.t list -> t
@@ -67,7 +87,5 @@ module Tree : sig
 
   val show_pretty : t -> string
 
-  val of_fds : Set.t -> columns:Alias.Set.t -> t
-
-  val is_disjoint : t -> columns:Alias.Set.t -> bool
+  val of_fds : Set.t -> columns:Alias.Set.t -> (t, Check_error.t) result
 end

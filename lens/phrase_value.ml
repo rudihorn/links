@@ -56,6 +56,26 @@ let box_record t = Record t
 
 let unbox_record v = match v with Record v -> v | _ -> unbox_error v "Record"
 
+let rec type_of v =
+  match v with
+  | Bool _ -> Phrase_type.Bool
+  | Int _ -> Phrase_type.Int
+  | Char _ -> Phrase_type.Char
+  | Float _ -> Phrase_type.Float
+  | String _ -> Phrase_type.String
+  | Tuple t -> Phrase_type.Tuple (List.map ~f:type_of t)
+  | Record r -> Phrase_type.Record (List.map ~f:(fun (k,v) -> k, type_of v) r |> String.Map.from_alist)
+
+let rec default_value t =
+  match t with
+  | Phrase_type.Bool -> Bool false
+  | Phrase_type.Int -> Int 0
+  | Phrase_type.Char -> Char 'a'
+  | Phrase_type.Float -> Float 0.0
+  | Phrase_type.String -> String ""
+  | Phrase_type.Tuple t -> Tuple (List.map ~f:default_value t)
+  | Phrase_type.Record r -> Record (String.Map.to_list (fun k t -> k, default_value t) r)
+
 module Record = struct
   let get t ~key =
     unbox_record t

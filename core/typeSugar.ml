@@ -2395,15 +2395,16 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            LensLit (erase table, Some (Type.sort typ)), `Lens typ, merge_usages [usages table]
         | LensDropLit (lens, drop, key, default, _) ->
            let open Lens in
-           let lens = tc lens
-           and default = tc default in
-           let sort =
-             Lens.Sort.drop_lens_sort
-               (Lens.Type.sort (typ lens |> Lens_type_conv.lens_type_of_type))
-               ~drop:(Alias.Set.singleton drop)
-               ~key:(Alias.Set.singleton key)
-           in
-           let typ = Lens.Type.Lens sort in
+           let lens = tc lens in
+           let default = tc default in
+           let typ =
+             let lens = typ lens |> Lens_type_conv.lens_type_of_type in
+             let default = typ default |> Lens_type_conv.lens_phrase_type_of_type |> fun a -> [a] in
+             let drop = [drop] in
+             let key = Alias.Set.singleton key in
+             Type.type_drop_lens lens ~default ~drop ~key
+             |> Lens_errors.unpack_type_drop_lens_result ~die:(Gripers.die pos) in
+           let sort = Type.sort typ in
            LensDropLit (erase lens, drop, key, erase default, Some (sort)), `Lens typ, merge_usages [usages lens; usages default]
         | LensSelectLit (lens, predicate, _) ->
            let lens = tc lens in

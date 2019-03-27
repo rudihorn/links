@@ -16,6 +16,8 @@ val for_all_or_error : 'a list -> f:('a -> bool) -> error:('a -> 'b) -> (unit, '
 
 val map : 'a list -> f:('a -> 'b) -> 'b list
 
+val map_if : 'a list -> b:('a -> bool) -> f:('a -> 'a) -> 'a list
+
 val filter_opt : 'a option list -> 'a list
 
 val filter_map : 'a list -> f:('a -> 'b option) -> 'b list
