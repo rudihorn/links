@@ -172,7 +172,7 @@ let lens_get lens =
 
 let lens_select lens ~predicate =
   let sort = sort lens in
-  let sort = Sort.select_lens_sort sort ~predicate in
+  let sort = Sort.select_lens_sort sort ~predicate |> Result.ok_exn in
   LensSelect { lens; predicate; sort }
 
 let lens_get_select lens ~predicate = lens_get (lens_select lens ~predicate)
@@ -184,7 +184,7 @@ let lens_get_select_opt lens ~predicate =
 
 let query_exists lens predicate =
   let sort = sort lens in
-  let sort = Sort.select_lens_sort sort ~predicate in
+  let sort = Sort.select_lens_sort sort ~predicate |> Result.ok_exn in
   if is_memory_lens lens then
     let res = lens_get (LensSelect { lens; predicate; sort}) in
     res <> []

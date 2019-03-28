@@ -1,7 +1,12 @@
 open Lens_utility
+open Lens_utility.O
+open Result.O
 
-type t = Alias.Set.t * Alias.Set.t
-  [@@deriving show]
+type t = Alias.Set.t * Alias.Set.t [@@deriving show]
+
+let left (l, _) = l
+
+let right (_, r) = r
 
 let left (l,_) = l
 let right (_,r) = r
