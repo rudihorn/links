@@ -189,7 +189,11 @@ let test_select_lens_3 n test_ctx =
   let changed () =
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     let del = Lens.Helpers.Incremental.lens_get_delta l4 !res in
+=======
+    let del = Lens.Eval.Incremental.lens_get_delta l4 !res in
+>>>>>>> rel_lenses_tc
 =======
     let del = Lens.Eval.Incremental.lens_get_delta l4 !res in
 >>>>>>> rel_lenses_tc
