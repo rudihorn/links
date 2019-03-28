@@ -75,7 +75,7 @@ let lens_put_set_step lens delt (fn : Value.t -> Sorted.t -> unit) =
     fn left delta_m;
     fn right delta_n
   | LensSelect {lens; predicate; _ } ->
-    let delta_m1 = Sorted.merge (delta_merge_affected (Value.lens_select lens ~predicate:(Phrase.not' predicate)) delt)
+    let delta_m1 = Sorted.merge (delta_merge_affected (Value.lens_select_internal lens ~predicate:(Phrase.not' predicate)) delt)
         (Sorted.negative delt) in
     let m1_cap_P = Sorted.filter delta_m1 ~predicate in
     let delta_nhash = Sorted.merge (m1_cap_P) (Sorted.negate delt) in
