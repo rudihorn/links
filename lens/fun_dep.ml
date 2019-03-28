@@ -148,6 +148,9 @@ module Set = struct
   let all_cols fds =
     let cols fd = Alias.Set.union (left fd) (right fd) in
     elements fds |> List.map ~f:cols |> Alias.Set.union_all
+
+  let outputs fds =
+    fold (fun elt v -> right elt |> Alias.Set.union v) fds Alias.Set.empty
 end
 
 module Tree = struct

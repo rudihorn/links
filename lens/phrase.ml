@@ -203,6 +203,9 @@ module Option = struct
     match phrase with
     | Some phrase -> eval phrase f
     | None -> Phrase_value.box_bool true
+
+  let get_vars phrase =
+    Option.map ~f:(get_vars) phrase |> Option.value ~default:Alias.Set.empty
 end
 
 module Record = struct

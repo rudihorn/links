@@ -19,6 +19,16 @@ val type_lens_fun_dep :
   -> columns:Column.List.t
   -> (t, Lens_error.t) result
 
+module Select_lens_error : sig
+  type 'a t =
+    | SortError of Sort.Select_sort_error.t
+    | PredicateTypeError of 'a Phrase_typesugar.error
+    | PredicateNotBoolean of Phrase_type.t
+end
+
+val type_select_lens :
+  t -> predicate:'a Phrase_sugar.phrase -> (t, 'a Select_lens_error.t) result
+
 module Drop_lens_error : sig
   type t = Sort.Drop_sort_error.t
 end

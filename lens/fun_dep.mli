@@ -75,6 +75,9 @@ module Set : sig
        (Alias.t list * Alias.t list) list
     -> columns:Alias.Set.t
     -> (t, Check_error.t) result
+
+  (** Get all columns which are defined by other columns. *)
+  val outputs : t -> Alias.Set.t
 end
 
 module Tree : sig

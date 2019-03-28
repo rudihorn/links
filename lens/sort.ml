@@ -34,7 +34,7 @@ let update_table_name t ~table =
   let cols = t.cols |> List.map ~f:(Column.set_table ~table) in
   {t with cols}
 
-let update_predicate t ~predicate = {t with predicate}
+let update_predicate t ~query ~predicate = {t with predicate; query}
 
 let equal sort1 sort2 =
   let fd_equal = Fun_dep.Set.equal (fds sort1) (fds sort2) in
@@ -57,10 +57,44 @@ let join_lens_should_swap sort1 sort2 ~on:on_columns =
   else if covers fds1 sort1 then true
   else failwith "One of the tables needs to be defined by the join column set."
 
+module Select_sort_error = struct
+  type t =
+    | PredicateDoesntIgnoreOutputs of {fds: Fun_dep.Set.t; columns: Alias.Set.t}
+    | UnboundColumns of Alias.Set.t
+  [@@deriving show]
+
+  let equal v1 v2 =
+    match (v1, v2) with
+    | ( PredicateDoesntIgnoreOutputs {columns; fds}
+      , PredicateDoesntIgnoreOutputs {columns= c'; fds= f'} ) ->
+        Alias.Set.equal columns c' && Fun_dep.Set.equal fds f'
+    | UnboundColumns c, UnboundColumns c' -> Alias.Set.equal c c'
+    | _ -> false
+end
+
 let select_lens_sort sort ~predicate:pred =
+  let open Result.O in
   let oldPred = predicate sort in
+  let outputs = fds sort |> Fun_dep.Set.outputs in
+  let predVars = Phrase.get_vars pred in
+  let unbound_columns =
+    cols_present_aliases_set sort |> Alias.Set.diff predVars
+  in
+  Alias.Set.is_empty unbound_columns
+  |> Result.of_bool ~error:(Select_sort_error.UnboundColumns unbound_columns)
+  >>= fun () ->
+  let fds = fds sort in
+  let violating_outputs =
+    Alias.Set.inter outputs (Phrase.Option.get_vars oldPred)
+  in
+  violating_outputs |> Alias.Set.is_empty
+  |> Result.of_bool
+       ~error:
+         (Select_sort_error.PredicateDoesntIgnoreOutputs { fds; columns = violating_outputs })
+  >>| fun () ->
   let predicate = Phrase.Option.combine_and oldPred (Some pred) in
-  update_predicate sort ~predicate
+  let query = Phrase.Option.combine_and (query sort) (Some pred) in
+  update_predicate sort ~query ~predicate
 
 module Drop_sort_error = struct
   type t =
@@ -75,14 +109,16 @@ module Drop_sort_error = struct
   [@@deriving show]
 
   let equal v1 v2 =
-    match v1, v2 with
+    match (v1, v2) with
     | UnboundColumns c, UnboundColumns c' -> Alias.Set.equal c c'
     | DefiningFDNotFound c, DefiningFDNotFound c' -> Alias.Set.equal c c'
     | DropNotDefinedByKey, DropNotDefinedByKey -> true
     | DefaultDropMismatch, DefaultDropMismatch -> true
-    | DropTypeError { column; default_type; column_type},
-      DropTypeError { column=c; default_type=dt; column_type=ct} ->
-      column = c && Phrase_type.equal default_type dt && Phrase_type.equal column_type ct
+    | ( DropTypeError {column; default_type; column_type}
+      , DropTypeError {column= c; default_type= dt; column_type= ct} ) ->
+        column = c
+        && Phrase_type.equal default_type dt
+        && Phrase_type.equal column_type ct
     | _ -> false
 end
 

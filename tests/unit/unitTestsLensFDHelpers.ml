@@ -126,6 +126,9 @@ let test_calculate_fd_changelist test_ctx =
      H.print_verbose test_ctx str; *)
   ()
 
+let assert_equal_cols ~ctxt v1 v2 =
+  assert_equal ~ctxt ~cmp:Alias.Set.equal ~printer:Alias.Set.show v1 v2
+
 let assert_equal_fds ~ctxt v1 v2 =
   assert_equal ~ctxt ~cmp:Fun_dep.Set.equal ~printer:Fun_dep.Set.show_pretty v1
     v2
@@ -228,6 +231,16 @@ module Remove_fd = struct
     ; "split_multikey" >:: split_multikey ]
 end
 
+module Outputs = struct
+  let simple ctxt =
+    let open Fun_dep.Set in
+    let fds' = fds "A -> B; B -> C; B -> D" in
+    let os = outputs fds' in
+    assert_equal_cols ~ctxt (cols "B C D") os
+
+  let suite = ["simple" >:: simple]
+end
+
 let suite =
   "lens_fd_helpers"
   >::: [ "show_fd_set" >:: test_show_fd_set
@@ -236,4 +249,5 @@ let suite =
          >::: ["calculate_fd_changelist" >:: test_calculate_fd_changelist]
        ; "phrase_gen" >::: []
        ; "tree_form" >::: Tree_form.suite
-       ; "remove_fd" >::: Remove_fd.suite ]
+       ; "remove_fd" >::: Remove_fd.suite
+       ; "outputs" >::: Outputs.suite ]

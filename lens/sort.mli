@@ -38,7 +38,8 @@ val make :
 val find_col_alias : t -> alias:string -> Column.t option
 
 (** Replace the predicate *)
-val update_predicate : t -> predicate:Phrase.t option -> t
+val update_predicate :
+  t -> query:Phrase.t option -> predicate:Phrase.t option -> t
 
 (** Update all columns with a table name *)
 val update_table_name : t -> table:string -> t
@@ -46,8 +47,20 @@ val update_table_name : t -> table:string -> t
 (** Determines if the lenses should be swapped, because the right lens defines the left lens. *)
 val join_lens_should_swap : t -> t -> on:string list -> bool
 
+module Select_sort_error : sig
+  type t =
+    | PredicateDoesntIgnoreOutputs of {fds: Fun_dep.Set.t; columns: Alias.Set.t}
+        (** The underlying lens predicate doesn't ignore the outputs of the functional dependencies. *)
+    | UnboundColumns of Alias.Set.t
+        (** The specified columns are not bound by the lens. *)
+  [@@deriving show]
+
+  val equal : t -> t -> bool
+end
+
 (** Create a selection lens using the specified predicate to filter records. *)
-val select_lens_sort : t -> predicate:Phrase.t -> t
+val select_lens_sort :
+  t -> predicate:Phrase.t -> (t, Select_sort_error.t) result
 
 module Drop_sort_error : sig
   type t =
