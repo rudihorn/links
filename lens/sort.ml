@@ -226,18 +226,9 @@ let join_lens_sort sort1 sort2 ~on =
   (* combine the predicates *)
   let join_renames_m = Alias.Map.from_alist join_renames in
   let pred =
-    match (predicate sort1, predicate sort2) with
-    | None, None -> None
-    | Some p1, None -> Some p1
-    | None, Some p2 -> Some (Phrase.rename_var p2 ~replace:join_renames_m)
-    | Some p1, Some p2 ->
-        Some
-          (Phrase.and'
-             (Phrase.tuple_singleton p1)
-             (Phrase.tuple_singleton
-                (Phrase.rename_var p2 ~replace:join_renames_m)))
-  in
-  let predicate =
+    let predicate2 = Option.map ~f:(Phrase.rename_var ~replace:join_renames_m) (predicate sort2) in
+    Phrase.Option.combine_and (predicate sort1) predicate2 in
+  let query =
     List.fold_left
       (fun pred (alias, newalias) ->
         let jn = Phrase.equal (Phrase.var alias) (Phrase.var newalias) in
@@ -254,4 +245,4 @@ let join_lens_sort sort1 sort2 ~on =
         (on, left, right) )
       on
   in
-  (make ~fds ~predicate union, jrs)
+  (make ~fds ~query ~predicate:pred union, jrs)

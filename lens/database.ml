@@ -118,7 +118,7 @@ module Select = struct
     ; db: db }
 
   let of_sort t ~sort =
-    let predicate = Sort.predicate sort in
+    let predicate = Sort.query sort in
     let cols = Sort.cols sort in
     let tables =
       List.map ~f:Column.table cols
