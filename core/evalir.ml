@@ -632,6 +632,7 @@ struct
           Lens.Sort.select_lens_sort
             (Lens.Value.sort lens)
             ~predicate
+          |> Lens_errors.unpack_sort_select_result ~die:(eval_error "%s")
         in
         apply_cont cont env (`Lens (Value.LensSelect {lens; predicate; sort}))
     | LensJoin (lens1, lens2, on, del_left, del_right, _sort) ->

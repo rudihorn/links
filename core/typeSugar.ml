@@ -2408,15 +2408,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
            LensDropLit (erase lens, drop, key, erase default, Some (sort)), `Lens typ, merge_usages [usages lens; usages default]
         | LensSelectLit (lens, predicate, _) ->
            let lens = tc lens in
-           let sort = Lens.Type.sort (typ lens |> Lens_type_conv.lens_type_of_type) in
-           let lpredicate = Lens_sugar_conv.lens_sugar_phrase_of_sugar predicate in
-           (match Lens.Phrase.Typesugar.tc_sort ~sort lpredicate with
-           | Result.Ok Lens.Phrase.Type.Bool -> ()
-           | Result.Ok _ ->
-             Gripers.die pos "Lens select predicate does not evaluate to a boolean value."
-           | Result.Error { Lens.Phrase.Typesugar. msg; data } -> Gripers.die data msg);
-           let typ = Lens.Type.Lens sort in
-               LensSelectLit(erase lens, predicate, Some (sort)), `Lens typ, merge_usages [usages lens]
+           let typ =
+             let lens = typ lens |> Lens_type_conv.lens_type_of_type in
+             let predicate = Lens_sugar_conv.lens_sugar_phrase_of_sugar predicate in
+             Lens.Type.type_select_lens lens ~predicate
+             |> Lens_errors.unpack_type_select_lens_result ~die:(Gripers.die pos) in
+           let sort = Lens.Type.sort typ in
+           LensSelectLit(erase lens, predicate, Some (sort)), `Lens typ, merge_usages [usages lens]
         | LensJoinLit (lens1, lens2, on, left, right, _) ->
            let lens1 = tc lens1
            and lens2 = tc lens2 in
