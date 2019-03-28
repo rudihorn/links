@@ -198,6 +198,10 @@ module Option = struct
     if names = [] then None
     else if vals = [] then Some (Constant.bool false)
     else Some (In (names, vals))
+<<<<<<< HEAD
+=======
+
+>>>>>>> rel_lenses_tc
   let eval phrase f =
     match phrase with
     | Some phrase -> eval phrase f
