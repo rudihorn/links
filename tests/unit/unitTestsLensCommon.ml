@@ -105,7 +105,7 @@ module LensTestHelpers = struct
 
   let select_lens lens predicate =
     let sort = Lens.Value.sort lens in
-    let sort = Lens.Sort.select_lens_sort sort ~predicate in
+    let sort = Lens.Sort.select_lens_sort sort ~predicate |> Result.ok_exn in
     Lens.Value.LensSelect {lens; predicate; sort}
 
   let drop_lens lens drop key default =

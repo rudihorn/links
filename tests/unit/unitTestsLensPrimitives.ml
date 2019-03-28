@@ -187,19 +187,7 @@ let test_select_lens_3 n test_ctx =
   let res = ref (Lens.Value.lens_get l4) in
   let n = ref 0 in
   let changed () =
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-    let del = Lens.Helpers.Incremental.lens_get_delta l4 !res in
-=======
     let del = Lens.Eval.Incremental.lens_get_delta l4 !res in
->>>>>>> rel_lenses_tc
-=======
-    let del = Lens.Eval.Incremental.lens_get_delta l4 !res in
->>>>>>> rel_lenses_tc
-=======
-    let del = Lens.Eval.Incremental.lens_get_delta l4 !res in
->>>>>>> rel_lenses_tc
     Sorted.total_size del in
   while changed () < UnitTestsLensCommon.set_upto_opt test_ctx && !n < upto do
     n := !n + 100;
