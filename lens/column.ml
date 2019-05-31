@@ -54,9 +54,9 @@ module Set = struct
 end
 
 module List = struct
-  type elt = t
+  type elt = t [@@deriving eq]
 
-  type t = elt list
+  type t = elt list [@@deriving eq]
 
   let present t = List.filter present t
 

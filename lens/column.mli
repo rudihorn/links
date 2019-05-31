@@ -51,9 +51,9 @@ module Set : sig
 end
 
 module List : sig
-  type elt = t
+  type elt = t [@@deriving eq]
 
-  type t = elt list
+  type t = elt list [@@deriving eq]
 
   (** Filter out all non present columns. *)
   val present : t -> t

@@ -159,13 +159,13 @@ sig
 
   val table_handle : value sem * value sem * value sem * (datatype * datatype * datatype) -> tail_computation sem
 
-  val lens_handle : value sem * Lens.Sort.t -> tail_computation sem
+  val lens_handle : value sem * Lens.Type.t -> tail_computation sem
 
-  val lens_drop_handle : value sem * string * string * value sem * Lens.Sort.t -> tail_computation sem
+  val lens_drop_handle : value sem * string * string * value sem * Lens.Type.t -> tail_computation sem
 
-  val lens_select_handle : value sem * Lens.Phrase.t * Lens.Sort.t -> tail_computation sem
+  val lens_select_handle : value sem * Lens.Phrase.t * Lens.Type.t -> tail_computation sem
 
-  val lens_join_handle : value sem * value sem * string list * Lens.Phrase.t * Lens.Phrase.t * Lens.Sort.t -> tail_computation sem
+  val lens_join_handle : value sem * value sem * string list * Lens.Phrase.t * Lens.Phrase.t * Lens.Type.t -> tail_computation sem
 
   val lens_get : value sem * datatype -> tail_computation sem
 
@@ -478,29 +478,29 @@ struct
         (fun keys ->  lift (Special (Table (database, table, keys, (r, w, n))),
                                `Table (r, w, n)))))
 
-  let lens_handle (table, sort) =
+  let lens_handle (table, t) =
       bind table
         (fun table ->
-            lift (Special (Lens (table, sort)), `Lens (Lens.Type.Lens sort)))
+            lift (Special (Lens (table, t)), `Lens t))
 
-  let lens_drop_handle (lens, drop, key, default, sort) =
+  let lens_drop_handle (lens, drop, key, default, t) =
       bind lens
         (fun lens ->
             bind default
             (fun default ->
-               lift (Special (LensDrop (lens, drop, key, default, sort)), `Lens (Lens.Type.Lens sort))))
+               lift (Special (LensDrop (lens, drop, key, default, t)), `Lens t)))
 
-  let lens_select_handle (lens, pred, sort) =
+  let lens_select_handle (lens, pred, t) =
       bind lens
         (fun lens ->
-           lift (Special (LensSelect (lens, pred, sort)), `Lens (Lens.Type.Lens sort)))
+           lift (Special (LensSelect (lens, pred, t)), `Lens t))
 
-  let lens_join_handle (lens1, lens2, on, left, right, sort) =
+  let lens_join_handle (lens1, lens2, on, left, right, t) =
       bind lens1
         (fun lens1 ->
           bind lens2
           (fun lens2 ->
-            lift (Special (LensJoin (lens1, lens2, on, left, right, sort)), `Lens (Lens.Type.Lens sort))))
+            lift (Special (LensJoin (lens1, lens2, on, left, right, t)), `Lens t)))
 
   let lens_get (lens, rtype) =
       bind lens

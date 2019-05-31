@@ -229,18 +229,19 @@ and phrasenode =
   | DBInsert         of phrase * name list * phrase * phrase option
   | DBUpdate         of Pattern.with_pos * phrase * phrase option *
                           (name * phrase) list
-  | LensLit          of phrase * Lens.Sort.t option
+  | LensLit          of phrase * Lens.Type.t option
   (* the lens keys lit is a literal that takes an expression and is converted
      into a LensLit with the corresponding table keys marked in the lens_sort *)
-  | LensKeysLit      of phrase * phrase * Lens.Sort.t option
+  | LensKeysLit      of phrase * phrase * Lens.Type.t option
   | LensFunDepsLit   of phrase * (string list * string list) list *
-                          Lens.Sort.t option
+                          Lens.Type.t option
   | LensDropLit      of phrase * string * string * phrase *
-                          Lens.Sort.t option
-  | LensSelectLit    of phrase * phrase * Lens.Sort.t option
+                          Lens.Type.t option
+  | LensSelectLit    of phrase * phrase * Lens.Type.t option
   | LensJoinLit      of phrase * phrase * phrase * phrase * phrase *
-                          Lens.Sort.t option
+                          Lens.Type.t option
   | LensGetLit       of phrase * Types.datatype option
+  | LensCheckLit     of phrase * Lens.Type.t option
   | LensPutLit       of phrase * phrase * Types.datatype option
   | Xml              of name * (name * (phrase list)) list * phrase option *
                           phrase list

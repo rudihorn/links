@@ -155,3 +155,11 @@ let format_eval_error f e =
         Fun_dep.pp_pretty fd
 
 let unpack_eval_error ~die res = unpack ~die ~fmt:format_eval_error res
+
+let format_lens_unchecked_error f e =
+  let open Type.Unchecked_lens_error in
+  match e with
+  | UncheckedLens -> Format.fprintf f "This lens has some checks which can only be performed at runtime. To ignore this use `lenscheck`."
+
+let unpack_lens_checked_result ~die res =
+  unpack ~die ~fmt:format_lens_unchecked_error res

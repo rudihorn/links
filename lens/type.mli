@@ -1,5 +1,11 @@
-type t = Lens of Sort.t [@@deriving show]
+type t =
+  | ConcreteLens of Sort.t  (** A statically fully checked lens. *)
+  | AbstractLens of {checked: bool; sort: Sort.t}
+      (** The type of a lens where not all checks have been performed.
+          The predicate value is a dummy value (None) and not the actual predicate. *)
+[@@deriving show]
 
+(** Get the sort of the lens. *)
 val sort : t -> Sort.t
 
 val equal : t -> t -> bool
@@ -46,3 +52,15 @@ val type_join_lens :
   -> del_left:'a Phrase_sugar.phrase
   -> del_right:'a Phrase_sugar.phrase
   -> (t, 'a Join_lens_error.t) result
+
+val record_type : t -> Phrase_type.t
+
+module Unchecked_lens_error : sig
+  type t = UncheckedLens
+end
+
+(** Ensures that an abstract lens type has explicitly been checked. *)
+val ensure_checked : t -> (unit, Unchecked_lens_error.t) result
+
+(** Set an abstract lens as explicitly checked.*)
+val make_checked : t -> t

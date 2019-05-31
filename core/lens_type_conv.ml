@@ -3,6 +3,8 @@ module T = Types
 module PT = CommonTypes.Primitive
 module LPT = Lens.Phrase.Type
 
+type 'a die = string -> 'a
+
 let primitive t = `Primitive t
 
 let to_links_map m =
@@ -56,10 +58,14 @@ let rec lens_phrase_type_of_type t =
       @@ Format.asprintf "Unsupported type %a in lens_phrase_type_of_type."
            Types.pp_typ t
 
-let lens_type_of_type t =
+let unify_record_with_predicate ~die ~tpred ~trow =
+  Format.eprintf "predicate type %a\n" Types.pp_typ tpred;
+  failwith "WIP"
+
+let lens_type_of_type ~die t =
   match t with
   | `Lens l -> l
-  | _ -> failwith "Expected a lens type."
+  | _ -> die "Expected a lens type."
 
 let sort_cols_of_table t ~table =
   let record_fields rt =

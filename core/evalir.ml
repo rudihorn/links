@@ -601,10 +601,11 @@ struct
     function
     | Wrong _                    -> raise Exceptions.Wrong
     | Database v                 -> apply_cont cont env (`Database (db_connect (value env v)))
-    | Lens (table, sort) ->
+    | Lens (table, t) ->
       let open Lens in
       begin
-          let typ = Sort.record_type sort |> Lens_type_conv.type_of_lens_phrase_type in
+          let sort = Type.sort t in
+          let typ = Type.record_type t |> Lens_type_conv.type_of_lens_phrase_type in
           match value env table, (TypeUtils.concrete_type typ) with
             | `Table (((db,_), table, _, _) as tinfo), `Record _row ->
               let database = Lens_database_conv.lens_db_of_db db in

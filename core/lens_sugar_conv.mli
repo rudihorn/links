@@ -16,5 +16,9 @@ val binary_of_sugartype_op :
     (a, b, c), which is parsed to a [TupleLit] of [Var] elements. *)
 val cols_of_phrase : Sugartypes.phrase -> string list
 
+(** Determine if the predicate should dynamically be checked or not. *)
+val is_dynamic :
+  Sugartypes.phrase -> bool
+
 val lens_sugar_phrase_of_sugar :
   Sugartypes.phrase -> Position.t Lens.Phrase.Sugar.phrase
