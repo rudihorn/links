@@ -10,6 +10,8 @@ type t =
 
 module Table : sig
   type t = {name: string; keys: string list list}
+
+  val name : t -> string
 end
 
 val fmt_col : db:t -> Format.formatter -> Column.t -> unit

@@ -61,6 +61,12 @@ module Unchecked_lens_error : sig
   type t = UncheckedLens
 end
 
+(** Returns true if the lens is an abstract lens. *)
+val is_abstract : t -> bool
+
+(** Returns true if an abstract lens has been checked or the lens is a concrete lens. *)
+val is_checked : t -> bool
+
 (** Ensures that an abstract lens type has explicitly been checked. *)
 val ensure_checked : t -> (unit, Unchecked_lens_error.t) result
 

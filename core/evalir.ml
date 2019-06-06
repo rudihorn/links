@@ -633,7 +633,13 @@ struct
         apply_cont cont env (`Lens (Value.LensDrop { lens; drop; key; default; sort }))
     | LensSelect (lens, predicate, _sort) ->
         let open Lens in
-        let lens = value env lens |> get_lens in
+        let lens = value env lens |> get_lens in        let predicate =
+          match predicate with
+          | `Static predicate -> predicate
+          | `Dynamic predicate ->
+            let p = Lens_ir_conv.lens_sugar_phrase_of_ir predicate env
+                    |> Lens_ir_conv.Of_ir_error.unpack_exn ~die:(eval_error "%s") in
+            p in
         let sort =
           Lens.Sort.select_lens_sort
             (Lens.Value.sort lens)

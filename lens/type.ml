@@ -45,8 +45,11 @@ module Select_lens_error = struct
 end
 
 let type_select_lens_dynamic t =
-  update t Sort.select_lens_sort_dynamic Sort.select_lens_sort_dynamic
+  let open Result.O in
+  sort t
+  |> Sort.select_lens_sort_dynamic
   |> Result.map_error ~f:(fun v -> Select_lens_error.SortError v)
+  >>| fun sort -> AbstractLens {checked= false; sort}
 
 let type_select_lens t ~predicate =
   let open Result.O in
@@ -123,11 +126,19 @@ module Unchecked_lens_error = struct
   type t = UncheckedLens
 end
 
-let ensure_checked s =
+let is_abstract s =
   match s with
-  | AbstractLens {checked= false; _} ->
-      Result.error Unchecked_lens_error.UncheckedLens
-  | _ -> Result.return ()
+  | AbstractLens _ -> true
+  | ConcreteLens _ -> false
+
+let is_checked s =
+  match s with
+  | AbstractLens {checked; _} -> checked
+  | ConcreteLens _ -> true
+
+let ensure_checked s =
+  if is_checked s then Result.return ()
+  else Result.error Unchecked_lens_error.UncheckedLens
 
 let make_checked s =
   match s with

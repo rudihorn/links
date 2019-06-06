@@ -163,7 +163,7 @@ sig
 
   val lens_drop_handle : value sem * string * string * value sem * Lens.Type.t -> tail_computation sem
 
-  val lens_select_handle : value sem * Lens.Phrase.t * Lens.Type.t -> tail_computation sem
+  val lens_select_handle : value sem * [`Static of Lens.Phrase.t | `Dynamic of value sem] * Lens.Type.t -> tail_computation sem
 
   val lens_join_handle : value sem * value sem * string list * Lens.Phrase.t * Lens.Phrase.t * Lens.Type.t -> tail_computation sem
 
@@ -493,7 +493,13 @@ struct
   let lens_select_handle (lens, pred, t) =
       bind lens
         (fun lens ->
-           lift (Special (LensSelect (lens, pred, t)), `Lens t))
+           match pred with
+           | `Dynamic pred ->
+             bind pred
+               (fun pred ->
+                  lift (Special (LensSelect (lens, `Dynamic pred, t)), `Lens t))
+           | `Static pred ->
+             lift (Special (LensSelect (lens, `Static pred, t)), `Lens t))
 
   let lens_join_handle (lens1, lens2, on, left, right, t) =
       bind lens1
@@ -942,8 +948,12 @@ struct
                 I.lens_drop_handle (lens, drop, key, default, t)
           | LensSelectLit (lens, pred, Some t) ->
               let lens = ev lens in
-              let pred = Lens_sugar_conv.lens_sugar_phrase_of_sugar pred |> Lens.Phrase.of_sugar in
-                I.lens_select_handle (lens, pred, t)
+              if Lens_sugar_conv.is_dynamic pred then
+                let pred = ev pred in
+                I.lens_select_handle (lens, `Dynamic pred, t)
+              else
+                let pred = Lens_sugar_conv.lens_sugar_phrase_of_sugar pred |> Lens.Phrase.of_sugar in
+                I.lens_select_handle (lens, `Static pred, t)
           | LensJoinLit (lens1, lens2, on, left, right, Some t) ->
               let lens1 = ev lens1 in
               let lens2 = ev lens2 in

@@ -14,6 +14,8 @@ type t =
 
 module Table = struct
   type t = {name: string; keys: string list list}
+
+  let name t = t.name
 end
 
 let dummy_database =

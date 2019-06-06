@@ -26,7 +26,15 @@ let show v =
   | LensJoin _ -> "LensJoin"
   | LensDrop _ -> "LensDrop"
 
-let pp f v = Format.fprintf f "%s" @@ show v
+let rec pp f v =
+  match v with
+  | LensSelect {lens; predicate; _} ->
+      Format.fprintf f "lensselect from (%a) by (%a)" pp lens
+        Database.fmt_phrase_dummy predicate
+  | Lens {table; _} -> Format.fprintf f "table %s" @@ Database.Table.name table
+  | LensMem _ -> Format.fprintf f "memory table"
+  | LensJoin _ -> Format.fprintf f "LensJoin"
+  | LensDrop _ -> Format.fprintf f "lensdrop"
 
 let string_of_value v = show v
 

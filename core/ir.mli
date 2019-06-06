@@ -74,7 +74,7 @@ and special =
   | Database   of value
   | Lens of value * Lens.Type.t
   | LensDrop of value * string * string * value* Lens.Type.t
-  | LensSelect of value * Lens.Phrase.t * Lens.Type.t
+  | LensSelect of value * [`Static of Lens.Phrase.t | `Dynamic of value] * Lens.Type.t
   | LensJoin of value * value * string list * Lens.Phrase.t * Lens.Phrase.t * Lens.Type.t
   | LensGet    of value * Types.datatype
   | LensPut    of value * value * Types.datatype

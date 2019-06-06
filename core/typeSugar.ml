@@ -2460,10 +2460,13 @@ let rec type_check : context -> phrase -> phrase * Types.datatype * usagemap =
                let trow = Lens.Type.sort tlens |> Lens.Sort.record_type |> Lens_type_conv.type_of_lens_phrase_type in
                let tmatch = Types.make_pure_function_type [trow] Types.bool_type in
                unify (pos_and_typ predicate, (exp_pos lens, tmatch)) ~handle:Gripers.lens_predicate;
+               Lens.Type.type_select_lens_dynamic tlens
+               |> Lens_errors.unpack_type_select_lens_result ~die:(Gripers.die pos)
              else
                let predicate = Lens_sugar_conv.lens_sugar_phrase_of_sugar predicate in
-               Lens.Type.type_select_lens lens ~predicate
-               |> Lens_errors.unpack_type_select_lens_result ~die:(Gripers.die pos) in
+               Lens.Type.type_select_lens tlens ~predicate
+               |> Lens_errors.unpack_type_select_lens_result ~die:(Gripers.die pos)
+           in
            LensSelectLit(erase lens, predicate, Some typ), `Lens typ, merge_usages [usages lens]
         | LensJoinLit (lens1, lens2, on, left, right, _) ->
            relational_lenses_guard pos;
