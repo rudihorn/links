@@ -82,18 +82,14 @@ module Select_sort_error = struct
   [@@deriving show, eq]
 end
 
-let select_lens_sort sort ~predicate:pred =
+let select_lens_sort_dynamic sort =
   let open Result.O in
+  let fds' = fds sort in
+  Fun_dep.Tree.in_tree_form fds'
+  |> Result.map_error ~f:(fun error -> Select_sort_error.TreeFormError {error})
+  >>= fun fds' ->
   let oldPred = predicate sort in
   let outputs = fds sort |> Fun_dep.Set.outputs in
-  let predVars = Phrase.get_vars pred in
-  let unbound_columns =
-    cols_present_aliases_set sort |> Alias.Set.diff predVars
-  in
-  Alias.Set.is_empty unbound_columns
-  |> Result.of_bool ~error:(Select_sort_error.UnboundColumns unbound_columns)
-  >>= fun () ->
-  let fds = fds sort in
   let violating_outputs =
     Alias.Set.inter outputs (Phrase.Option.get_vars oldPred)
   in
@@ -102,14 +98,24 @@ let select_lens_sort sort ~predicate:pred =
   |> Result.of_bool
        ~error:
          (Select_sort_error.PredicateDoesntIgnoreOutputs
-            {fds; columns= violating_outputs})
-  >>= fun () ->
-  Fun_dep.Tree.in_tree_form fds
-  |> Result.map_error ~f:(fun error -> Select_sort_error.TreeFormError {error})
-  >>| fun fds ->
+            {fds= fds'; columns= violating_outputs})
+  >>| fun () -> sort |> update_fds ~fds:fds'
+
+let select_lens_sort sort ~predicate:pred =
+  let open Result.O in
+  select_lens_sort_dynamic sort
+  >>= fun sort ->
+  let predVars = Phrase.get_vars pred in
+  let oldPred = predicate sort in
+  let unbound_columns =
+    cols_present_aliases_set sort |> Alias.Set.diff predVars
+  in
+  Alias.Set.is_empty unbound_columns
+  |> Result.of_bool ~error:(Select_sort_error.UnboundColumns unbound_columns)
+  >>| fun () ->
   let predicate = Phrase.Option.combine_and oldPred (Some pred) in
   let query = Phrase.Option.combine_and (query sort) (Some pred) in
-  update_predicate sort ~query ~predicate |> update_fds ~fds
+  update_predicate sort ~query ~predicate
 
 module Drop_sort_error = struct
   type t =

@@ -305,11 +305,11 @@ module List = struct
 end
 
 module O = struct
-  let ( > ) a b = infix (Operators.Binary.of_string ">") a b
+  let ( > ) a b = infix (Operators.Binary.of_string_exn ">") a b
 
-  let ( < ) a b = infix (Operators.Binary.of_string "<") a b
+  let ( < ) a b = infix (Operators.Binary.of_string_exn "<") a b
 
-  let ( = ) a b = infix (Operators.Binary.of_string "=") a b
+  let ( = ) a b = infix (Operators.Binary.of_string_exn "=") a b
 
   let ( && ) a b = infix Binary.LogicalAnd a b
 

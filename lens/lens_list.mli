@@ -21,6 +21,8 @@ val map : 'a list -> f:('a -> 'b) -> 'b list
 
 val map_if : 'a list -> b:('a -> bool) -> f:('a -> 'a) -> 'a list
 
+val map_result : 'a list -> f:('a -> ('b, 'c) result) -> ('b list, 'c) result
+
 val filter_opt : 'a option list -> 'a list
 
 val filter_map : 'a list -> f:('a -> 'b option) -> 'b list

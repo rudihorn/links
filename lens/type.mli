@@ -25,6 +25,8 @@ end
 val type_select_lens :
   t -> predicate:'a Phrase_sugar.phrase -> (t, 'a Select_lens_error.t) result
 
+val type_select_lens_dynamic : t -> (t, 'a Select_lens_error.t) result
+
 module Drop_lens_error : sig
   type t = Sort.Drop_sort_error.t
 end

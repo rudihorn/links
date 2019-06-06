@@ -44,6 +44,10 @@ module Select_lens_error = struct
     | PredicateNotBoolean of Phrase_type.t
 end
 
+let type_select_lens_dynamic t =
+  update t Sort.select_lens_sort_dynamic Sort.select_lens_sort_dynamic
+  |> Result.map_error ~f:(fun v -> Select_lens_error.SortError v)
+
 let type_select_lens t ~predicate =
   let open Result.O in
   let columns = cols t in

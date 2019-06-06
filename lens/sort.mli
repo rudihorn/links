@@ -67,6 +67,9 @@ module Select_sort_error : sig
   val equal : t -> t -> bool
 end
 
+(** Create a selection lens sort without checking the predicate. *)
+val select_lens_sort_dynamic : t -> (t, Select_sort_error.t) result
+
 (** Create a selection lens using the specified predicate to filter records. *)
 val select_lens_sort :
   t -> predicate:Phrase.t -> (t, Select_sort_error.t) result

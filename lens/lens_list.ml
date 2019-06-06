@@ -10,6 +10,17 @@ let iter t ~f = iter f t
 
 let map t ~f = map f t
 
+let rec map_result t ~f =
+  match t with
+  | [] -> Lens_result.return []
+  | x :: xs -> (
+    match f x with
+    | Result.Ok x -> (
+      match map_result xs ~f with
+      | Result.Ok xs -> x :: xs |> Lens_result.return
+      | Result.Error _ as err -> err )
+    | Result.Error _ as err -> err )
+
 let map_if t ~b ~f =
   let f x = if b x then f x else x in
   map ~f t
