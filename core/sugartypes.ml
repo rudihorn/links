@@ -390,6 +390,7 @@ struct
     | LensDropLit (l, _, _, _, _) -> phrase l
     | LensJoinLit (l1, l2, _, _, _, _) -> union_all [phrase l1; phrase l2]
 
+    | LensCheckLit (l, _) -> phrase l
     | LensGetLit (l, _) -> phrase l
     | LensPutLit (l, data, _) -> union_all [phrase l; phrase data]
 

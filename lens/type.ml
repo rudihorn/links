@@ -70,7 +70,6 @@ module Drop_lens_error = struct
 end
 
 let type_drop_lens t ~drop ~default ~key =
-  let open Result.O in
   let check sort =
     let default = List.map ~f:Phrase_value.default_value default in
     Sort.drop_lens_sort sort ~drop ~default ~key

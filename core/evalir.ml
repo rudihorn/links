@@ -665,6 +665,9 @@ struct
             (Lens.Value.sort lens2) ~on
           |> Lens_errors.unpack_sort_join_result ~die:(eval_error "%s") in
         apply_cont cont env (`Lens (Value.LensJoin {left; right; on; del_left; del_right; sort}))
+    | LensCheck (lens, _typ) ->
+        let lens = value env lens in
+        apply_cont cont env lens
     | LensGet (lens, _rtype) ->
         let lens = value env lens |> get_lens in
         (* let callfn = fun fnptr -> fnptr in *)

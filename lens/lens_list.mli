@@ -4,6 +4,8 @@ module Seq = Lens_seq
 
 val mem : 'a list -> 'a -> equal:('a -> 'a -> bool) -> bool
 
+val findi : 'a list -> f:('a -> bool) -> (int * 'a) option
+
 val find : 'a list -> f:('a -> bool) -> 'a option
 
 val find_exn : 'a list -> f:('a -> bool) -> 'a

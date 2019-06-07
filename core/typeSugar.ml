@@ -107,6 +107,7 @@ struct
     | LensDropLit _
     | LensSelectLit _
     | LensJoinLit _
+    | LensCheckLit _
     | LensGetLit _
     | LensPutLit _
     | DoOperation _

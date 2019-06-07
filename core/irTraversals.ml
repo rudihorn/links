@@ -323,6 +323,9 @@ struct
             let lens1, _, o = o#value lens1 in
             let lens2, _, o = o#value lens2 in
               LensJoin (lens1, lens2, on, left, right, sort), `Lens sort, o
+        | LensCheck (lens, t) ->
+            let lens, _, o = o#value lens in
+              LensCheck (lens, t), `Lens t, o
         | LensGet (lens, rtype) ->
             let lens, _, o = o#value lens in
               LensGet (lens, rtype), Types.make_list_type rtype, o

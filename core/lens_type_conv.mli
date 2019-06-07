@@ -11,5 +11,3 @@ val lens_phrase_type_of_type : Types.typ -> Lens.Phrase.Type.t
 
 (** Extract the relational lens columns of a table type. Use the specified table name. *)
 val sort_cols_of_table : Types.typ -> table:string -> Lens.Column.t list
-
-val unify_record_with_predicate : die:'a die -> tpred:Types.typ -> trow:Lens.Phrase.Type.t -> 'a

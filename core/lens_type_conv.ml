@@ -58,10 +58,6 @@ let rec lens_phrase_type_of_type t =
       @@ Format.asprintf "Unsupported type %a in lens_phrase_type_of_type."
            Types.pp_typ t
 
-let unify_record_with_predicate ~die ~tpred ~trow =
-  Format.eprintf "predicate type %a\n" Types.pp_typ tpred;
-  failwith "WIP"
-
 let lens_type_of_type ~die t =
   match t with
   | `Lens l -> l

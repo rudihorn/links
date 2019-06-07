@@ -25,10 +25,15 @@ let map_if t ~b ~f =
   let f x = if b x then f x else x in
   map ~f t
 
-let rec find t ~f =
-  match t with
-  | [] -> None
-  | x :: xs -> if f x then Some x else find xs ~f
+let findi t ~f =
+  let rec fr t ind =
+    match t with
+    | [] -> None
+    | x :: xs -> if f x then Some (ind, x) else fr xs (ind + 1)
+  in
+  fr t 0
+
+let find t ~f = findi t ~f |> Lens_option.map ~f:snd
 
 let find_exn t ~f = find t ~f |> fun v -> Lens_option.value_exn v
 

@@ -167,6 +167,8 @@ sig
 
   val lens_join_handle : value sem * value sem * string list * Lens.Phrase.t * Lens.Phrase.t * Lens.Type.t -> tail_computation sem
 
+  val lens_check : value sem * Lens.Type.t -> tail_computation sem
+
   val lens_get : value sem * datatype -> tail_computation sem
 
   val lens_put : value sem * value sem * datatype -> tail_computation sem
@@ -507,6 +509,11 @@ struct
           bind lens2
           (fun lens2 ->
             lift (Special (LensJoin (lens1, lens2, on, left, right, t)), `Lens t)))
+
+  let lens_check (lens, t) =
+      bind lens
+         (fun lens ->
+            lift (Special (LensCheck (lens, t)), `Lens t))
 
   let lens_get (lens, rtype) =
       bind lens
@@ -961,6 +968,9 @@ struct
               let left = Lens_sugar_conv.lens_sugar_phrase_of_sugar left |> Lens.Phrase.of_sugar in
               let right = Lens_sugar_conv.lens_sugar_phrase_of_sugar right |> Lens.Phrase.of_sugar in
                 I.lens_join_handle (lens1, lens2, on, left, right, t)
+          | LensCheckLit (lens, Some t) ->
+              let lens = ev lens in
+                I.lens_check (lens, t)
           | LensGetLit (lens, Some t) ->
               let lens = ev lens in
                 I.lens_get (lens, t)
@@ -1061,6 +1071,7 @@ struct
           | LensDropLit _
           | LensSelectLit _
           | LensJoinLit _
+          | LensCheckLit _
           | LensGetLit _
           | LensPutLit _
           | LensFunDepsLit _

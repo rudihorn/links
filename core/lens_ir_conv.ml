@@ -124,6 +124,10 @@ end
 module Primitives = struct
   let binary_of_string f =
     match f with
+    | "+" -> Lens.Operators.Binary.Plus |> Result.return
+    | "-" -> Lens.Operators.Binary.Minus |> Result.return
+    | "*" -> Lens.Operators.Binary.Multiply |> Result.return
+    | "/" -> Lens.Operators.Binary.Divide |> Result.return
     | "==" -> Lens.Operators.Binary.Equal |> Result.return
     | ">" -> Lens.Operators.Binary.Greater |> Result.return
     | ">=" -> Lens.Operators.Binary.GreaterEqual |> Result.return
