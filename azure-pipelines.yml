@@ -66,10 +66,11 @@ steps:
         *) exit 1 ;;
       esac
       cat >tests/database/config <<-EOF
-        database_driver=postgresql
-        database_args=postgres:5432:postgres:
-        show_pre_sugar_typing=off
+      database_driver=postgresql
+      database_args=postgres:5432:postgres:
+      show_pre_sugar_typing=off
       EOF
+      cat tests/database/config
     displayName: 'Databases'
 
   - bash: |
