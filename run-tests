@@ -71,7 +71,7 @@ run_database_testsuite () {
     host=`grep database_args $1/config \
           | sed 's/database_args=\([^:]*\):[^:]*:[^:]*:.*/\1/'`
     if [ "$host" != "" ]; then
-        host_string="-p $host"
+        host_string="-h $host"
     fi
     user_string=""
     user=`grep database_args $1/config \
