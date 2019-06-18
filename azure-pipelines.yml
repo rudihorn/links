@@ -57,7 +57,7 @@ steps:
 
   - bash: |
       case $AGENT_OS in
-        "Linux") sudo apt-get install libpq-dev sqlite3 libsqlite3-dev -y &&
+        "Linux") sudo apt-get install postgresql-client libpq-dev sqlite3 libsqlite3-dev -y &&
                  sudo psql --host=postgres --username=postgres --command="CREATE DATABASE links" ;;
         "Darwin") brew install postgresql libpq sqlite3 &&
                   pg_ctl -D /usr/local/var/postgres start &&
