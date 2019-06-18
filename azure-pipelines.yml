@@ -65,12 +65,14 @@ steps:
                   /usr/local/opt/postgres/bin/createdb -O $(whoami) links ;;
         *) exit 1 ;;
       esac
-      cat >tests/database/config <<-EOF
-      database_driver=postgresql
-      database_args=postgres:5432:postgres:
-      show_pre_sugar_typing=off
-      EOF
-      cat tests/database/config
+
+      set_config () {
+        sed -e 's/^database_args=.*$/database_args=postgres:5432:postgres:/g' $1.sample > $1
+      }
+
+      set_config tests/database/config
+      set_config tests/shredding/config
+      set_config tests/relational-lenses/config
     displayName: 'Databases'
 
   - bash: |
