@@ -1,5 +1,10 @@
 # Azure Pipelines configuration.
 
+resources:
+  containers:
+    - container: pg11
+      image: postgres:11
+
 trigger:
 - master
 
@@ -15,6 +20,8 @@ container:
   image: ocaml/opam2:4.07
   options: "-u 0"
 
+services:
+  postgres: pg11
 steps:
   - script: |
       printenv
@@ -50,17 +57,19 @@ steps:
 
   - bash: |
       case $AGENT_OS in
-        "Linux") sudo apt-get install postgresql libpq-dev sqlite3 libsqlite3-dev -y &&
-                 sudo LINKS_CI=1 tools/configure-postgresql &&
-                 sudo service postgresql start &&
-                 sudo -u postgres createuser -s $(whoami) &&
-                 sudo -u postgres createdb -O $(whoami) links ;;
+        "Linux") sudo apt-get install libpq-dev sqlite3 libsqlite3-dev -y &&
+                 sudo psql --host=postgres --username=postgres --command="CREATE DATABASE links" ;;
         "Darwin") brew install postgresql libpq sqlite3 &&
                   pg_ctl -D /usr/local/var/postgres start &&
                   sleep 5 &&
                   /usr/local/opt/postgres/bin/createdb -O $(whoami) links ;;
         *) exit 1 ;;
       esac
+      cat >tests/database/config <<-EOF
+        database_driver=postgresql
+        database_args=postgres:5432:postgres:
+        show_pre_sugar_typing=off
+      EOF
     displayName: 'Databases'
 
   - bash: |
