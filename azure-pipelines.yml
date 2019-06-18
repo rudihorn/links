@@ -64,6 +64,7 @@ steps:
     displayName: 'Databases'
 
   - bash: |
+      sudo apt install pkg-config -y
       eval $(opam env)
       opam pin add links . -y
       opam pin add links-postgresql . -y
