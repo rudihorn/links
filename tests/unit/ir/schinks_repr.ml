@@ -97,3 +97,8 @@ let add_name ~name = State.map_state (ReprState.add_name ~name)
 let add_tid ~tid = State.map_state (ReprState.add_tid ~tid)
 
 let add_id ~id = State.map_state (ReprState.add_id ~id)
+
+let ( let** ) v f =
+  let+ v = v in
+  let+ v = v in
+  f v

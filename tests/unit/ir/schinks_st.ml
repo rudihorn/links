@@ -14,6 +14,23 @@ open Repr
 
 type 'a t = 'a maker
 
+let ( let** ) v f =
+  let+ v = v in
+  let* v = v in
+  f v
+
+let ( and** ) v1 v2 =
+  let* v1 = v1 in
+  let+ v2 = v2 in
+  let stage2 =
+    let* v1 = v1 in
+    let+ v2 = v2 in
+    (v1, v2)
+  in
+  stage2
+
+let lift_list l = State.List.lift l |> State.map State.List.lift
+
 let reify x = make x
 
 (* helpers *)
@@ -182,14 +199,8 @@ let if_ cond then_ else_ =
   stage2
 
 let apply f args =
-  let* f = f in
-  let+ args = State.List.map ~f:id args in
-  let stage2 =
-    let* f = f in
-    let+ args = State.List.map ~f:id args in
-    Ir.Apply (f, args)
-  in
-  stage2
+  let** f = f and** args = lift_list args in
+  Ir.Apply (f, args) |> State.return
 
 (*
  *
@@ -243,16 +254,8 @@ let computation bindings tail_comp =
  *)
 
 let wi_let_ binder ?(tparams = []) body =
-  let* bin = binder in
-  let* tparams = State.List.map ~f:id tparams in
-  let+ body = body in
-  let stage2 =
-    let* bin = bin in
-    let* tparams = State.List.map ~f:id tparams in
-    let+ body = body in
-    Ir.Let (bin, (tparams, body))
-  in
-  stage2
+  let** bin = binder and** body = body and** tparams = lift_list tparams in
+  Ir.Let (bin, (tparams, body)) |> State.return
 
 let let_ name ty ?(tparams = []) ?scope body =
   let bin = binder ?scope name ty in
