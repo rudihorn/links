@@ -43,13 +43,14 @@ let prog_rec_is_recursive =
     [
       def "f" ([int] |~~> int)
         [("x", int)]
-        (let++ _z = param "z" string (apply (var "g") [s "bla"]) in
-         return (i 3));
+        Comp2.( (let+ _z = param "z" string (apply (var "g") [s "bla"]) in
+                 return (i 3)) |>
+                make);
 
       def "g" ([string] |~~> string)
         [("y", string)]
-        (let++ _z = param "z" int (apply (var "f") [i 3]) in
-        return (s "bla"));
+        Comp2.((let+ _z = param "z" int (apply (var "f") [i 3]) in
+        return (s "bla")) |> make);
     ]
 
 

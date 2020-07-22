@@ -57,6 +57,10 @@ end
 module Option : sig
   val bind : f:('a -> ('b option, 'st) t) -> 'a option -> ('b option, 'st) t
 
+  val map : f:('a -> ('b, 'st) t) -> 'a option -> ('b option, 'st) t
+
+  val lift : ('a, 'st) t option -> ('a option, 'st) t
+
   val merge :
     f:('a -> 'a -> ('a option, 'st) t) ->
     'a option ->

@@ -226,10 +226,24 @@ val wi_fun_ :
 
 type 'a comp_param
 
-val param :
-  string -> Types.datatype t -> Ir.tail_computation t -> Ir.value t comp_param
+module Comp2 : sig
+  val param :
+    string ->
+    Types.datatype t ->
+    Ir.tail_computation t ->
+    Ir.value t * Ir.binding t
 
-val ( let++ ) :
-  'a t comp_param -> ('a t -> Ir.tail_computation t) -> Ir.computation t
+  val ( let* ) :
+    'a * Ir.binding t ->
+    ('a -> Ir.tail_computation t * Ir.binding t list) ->
+    Ir.tail_computation t * Ir.binding t list
 
-val ( and++ ) : 'a comp_param -> 'b comp_param -> ('a * 'b) comp_param
+  val ( let+ ) :
+    'a * Ir.binding t ->
+    ('a -> Ir.tail_computation t) ->
+    Ir.tail_computation t * Ir.binding t list
+
+  val make : Ir.tail_computation t * Ir.binding t list -> Ir.computation t
+end
+
+val unbound : string -> Ir.value t

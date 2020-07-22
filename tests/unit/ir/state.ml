@@ -116,6 +116,16 @@ module Option = struct
           let s, t = f s t in
           (s, t)
 
+  let map ~f opt =
+    match opt with
+    | None -> return None
+    | Some s ->
+        fun t ->
+          let s, t = f s t in
+          (Some s, t)
+
+  let lift opt = map ~f:(fun x -> x) opt
+
   let merge ~f opt1 opt2 =
     match (opt1, opt2) with
     | None, None -> return None

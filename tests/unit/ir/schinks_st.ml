@@ -187,16 +187,8 @@ let return value =
   stage2
 
 let if_ cond then_ else_ =
-  let* c = cond in
-  let* t = then_ in
-  let+ e = else_ in
-  let stage2 =
-    let* c = c in
-    let* t = t in
-    let+ e = e in
-    Ir.If (c, t, e)
-  in
-  stage2
+  let** c = cond and** t = then_ and** e = else_ in
+  Ir.If (c, t, e) |> State.return
 
 let apply f args =
   let** f = f and** args = lift_list args in
@@ -344,18 +336,57 @@ let param name typ tl =
   let lt = let_ name typ tl in
   (var name, { bindings = [ lt ] })
 
-let ( let++ ) (b, { bindings }) f = computation bindings (f b)
+module Computation = struct
+  let ( let++ ) (b, { bindings }) f = computation bindings (f b)
 
-let ( and++ ) (b1, p1) (b2, p2) =
-  ((b1, b2), { bindings = List.append p1.bindings p2.bindings })
+  let ( and++ ) (b1, p1) (b2, p2) =
+    ((b1, b2), { bindings = List.append p1.bindings p2.bindings })
 
-let def' _name _ty _par = def _name _ty _par
+  let def' _name _ty _par = def _name _ty _par
+end
+
+let apply1 f arg = apply f [ arg ]
 
 (* example *)
 let _foo =
   def "f"
     ([ int ] |~~> int)
     [ ("x", int) ]
-    (let++ x = param "x" string (apply (var "g") [ s "bla" ])
-     and++ _y = param "y" string (apply (var "f") [ i 3 ]) in
-     return x)
+    Computation.(
+      let++ x = param "x" string (apply (var "g") [ s "bla" ])
+      and++ _y = param "y" string (apply (var "f") [ i 3 ]) in
+      return x)
+
+module Comp2 = struct
+  let param name typ tl =
+    let lt = let_ name typ tl in
+    (var name, lt)
+
+  let make v =
+    let n, bs = v in
+    computation bs n
+
+  let ( let* ) v f =
+    let v, b = v in
+    let n, bs = f v in
+    (n, b :: bs)
+
+  let ( let+ ) v f =
+    let v, b = v in
+    let n = f v in
+    (n, [ b ])
+end
+
+let unbound name = var name
+
+let _foo =
+  let g = unbound "g" in
+  let f = unbound "f" in
+  def "f"
+    ([ int ] |~~> int)
+    [ ("x", int) ]
+    Comp2.(
+      (let* x = param "x" string (apply1 g (s "bla")) in
+       let+ _y = param "y" string (apply1 f (i 3)) in
+       return x)
+      |> make)
